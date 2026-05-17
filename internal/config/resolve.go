@@ -6,13 +6,13 @@ import (
 )
 
 const (
-	envConfigPath  = "PHORGANIZER_CONFIG"
+	envConfigPath     = "PHORGA_CONFIG"
 	defaultConfigFile = "config.yaml"
 )
 
 // ResolveConfigPath determines the config file path using this priority:
 //  1. Explicit CLI argument (if non-empty)
-//  2. PHORGANIZER_CONFIG environment variable
+//  2. PHORGA_CONFIG environment variable
 //  3. ./config.yaml in the current working directory
 func ResolveConfigPath(cliPath string) (string, error) {
 	if cliPath != "" {
@@ -34,4 +34,3 @@ func ResolveConfigPath(cliPath string) (string, error) {
 	}
 	return defaultConfigFile, nil
 }
-

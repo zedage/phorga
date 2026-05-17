@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/zedage/phorganizer/internal/config"
-	"github.com/zedage/phorganizer/internal/state"
+	"github.com/zedage/phorga/internal/config"
+	"github.com/zedage/phorga/internal/state"
 )
 
 func setupTestDirs(t *testing.T) (string, string, string) {

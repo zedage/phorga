@@ -1,4 +1,4 @@
-// Package main generates sample test images for the Phorganizer demo/test setup.
+// Package main generates sample test images for the Phorga demo/test setup.
 // Run: go run testdata/tools/generate.go
 // This creates various image types in data/source/ and data/target/ for testing.
 package main
@@ -87,7 +87,7 @@ func main() {
 		time.Date(2025, 5, 2, 19, 30, 0, 0, time.UTC))
 
 	// 7. Non-image file (should be skipped)
-	os.WriteFile(filepath.Join(sourceDir, "notes.txt"), []byte("This is not an image and should be skipped by phorganizer."), 0644)
+	os.WriteFile(filepath.Join(sourceDir, "notes.txt"), []byte("This is not an image and should be skipped by Phorga."), 0644)
 
 	// --- TARGET images (pre-existing, to test duplicate handling) ---
 
@@ -228,8 +228,8 @@ func writeMinimalJPEGWithEXIF(f *os.File, img image.Image, dt time.Time) {
 	// Build minimal EXIF IFD
 	// TIFF header (little-endian)
 	tiffHeader := []byte{
-		'I', 'I',       // little-endian
-		0x2A, 0x00,     // TIFF magic
+		'I', 'I', // little-endian
+		0x2A, 0x00, // TIFF magic
 		0x08, 0x00, 0x00, 0x00, // offset to IFD0
 	}
 
@@ -295,4 +295,3 @@ func uint32ToLE(v uint32) []byte {
 	binary.LittleEndian.PutUint32(b, v)
 	return b
 }
-

@@ -23,7 +23,7 @@ func AtomicCopy(src, dst string) error {
 	defer srcFile.Close()
 
 	// Write to temp file in the same directory as dst
-	tmpFile, err := os.CreateTemp(filepath.Dir(dst), ".phorganizer-tmp-*")
+	tmpFile, err := os.CreateTemp(filepath.Dir(dst), ".phorga-tmp-*")
 	if err != nil {
 		return fmt.Errorf("creating temp file: %w", err)
 	}
@@ -94,4 +94,3 @@ func AddSuffix(filename, suffix string) string {
 func EnsureDir(dir string) error {
 	return os.MkdirAll(dir, 0755)
 }
-

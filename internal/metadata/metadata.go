@@ -32,7 +32,7 @@ var filenameDatePatterns = []struct {
 	{regexp.MustCompile(`(?:^|[^\d])(\d{4})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])(?:[^\d]|$)`), "20060102"},
 }
 
-// supportedExtensions lists file extensions that Phorganizer will process.
+// supportedExtensions lists file extensions that Phorga will process.
 var supportedExtensions = map[string]bool{
 	".jpg":  true,
 	".jpeg": true,
@@ -245,4 +245,3 @@ func extractEXIFDate(path string) (time.Time, error) {
 
 	return t, nil
 }
-

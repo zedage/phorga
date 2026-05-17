@@ -42,7 +42,7 @@ The system SHALL accept the config file path via CLI argument or environment var
 - **THEN** the system SHALL use that file
 
 #### Scenario: Environment variable fallback
-- **WHEN** no `--config` argument is given but `PHORGANIZER_CONFIG` is set
+- **WHEN** no `--config` argument is given but `PHORGA_CONFIG` is set
 - **THEN** the system SHALL use the path from the environment variable
 
 #### Scenario: Default path

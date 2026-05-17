@@ -71,7 +71,7 @@ func (c *Client) send(title, message string) error {
 
 // FormatOrganizerSummary builds a human-readable organizer run summary.
 func FormatOrganizerSummary(source string, processed, skipped, errors int, duration time.Duration) (string, string) {
-	title := "Phorganizer: Organizer Run"
+	title := "Phorga: Organizer Run"
 	if errors > 0 {
 		title += " ⚠️"
 	} else {
@@ -86,7 +86,7 @@ func FormatOrganizerSummary(source string, processed, skipped, errors int, durat
 
 // FormatDedupSummary builds a human-readable duplicate detection run summary.
 func FormatDedupSummary(totalFiles, duplicates, actions, errors int, duration time.Duration) (string, string) {
-	title := "Phorganizer: Duplicate Detection"
+	title := "Phorga: Duplicate Detection"
 	if errors > 0 {
 		title += " ⚠️"
 	} else {
@@ -98,4 +98,3 @@ func FormatDedupSummary(totalFiles, duplicates, actions, errors int, duration ti
 
 	return title, msg
 }
-

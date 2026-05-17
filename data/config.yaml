@@ -1,16 +1,16 @@
-# Phorganizer Demo/Test Configuration
+# Phorga Demo/Test Configuration
 # Reset test data: go run testdata/tools/generate.go
-# Run phorganizer:  go run ./cmd/phorganizer --config data/config.yaml
+# Run Phorga:  go run ./cmd/Phorga --config data/config.yaml
 
-stateDir: C:\Users\meinr\github\zedage\phorganizer\data\state
+stateDir: C:\Users\meinr\github\zedage\phorga\data\state
 
 organizer:
   - dryRun: false
     target: data/target
     targetStructure: "{year}/{month}"
-    fallbackFolder: C:\Users\meinr\github\zedage\phorganizer\data\fallback
+    fallbackFolder: C:\Users\meinr\github\zedage\phorga\data\fallback
     sources:
-      - path: C:\Users\meinr\github\zedage\phorganizer\data\source
+      - path: C:\Users\meinr\github\zedage\phorga\data\source
         mode: copy
         duplicates:
           detectionMode: filename
@@ -23,9 +23,9 @@ duplicateDetection:
     dryRun: true
     schedule: "* * * * *"  # every minute for demo purposes
     sources:
-      - C:\Users\meinr\github\zedage\phorganizer\data\source
+      - C:\Users\meinr\github\zedage\phorga\data\source
     detectionMode: content
     action:
       method: moveToFolder
-      duplicateFolder: C:\Users\meinr\github\zedage\phorganizer\data\duplicates
+      duplicateFolder: C:\Users\meinr\github\zedage\phorga\data\duplicates
 

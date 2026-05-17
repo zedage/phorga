@@ -1,4 +1,4 @@
-module github.com/zedage/phorganizer
+module github.com/zedage/phorga
 
 go 1.23
 
