@@ -249,7 +249,7 @@ stop
 @startuml
 node "Host / NAS" {
   node "Docker" {
-    artifact "Phorga\ncontainer" as app
+    artifact "phorga\ncontainer" as app
     file "/config/config.yaml" as cfg
     database "/data/state/*.json" as state
   }

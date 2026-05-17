@@ -62,7 +62,7 @@ go test ./...
 
 ## Demo / Test Setup
 
-Generate sample images and run phorga locally:
+Generate sample images and run Phorga locally:
 
 ```bash
 go run testdata/tools/generate.go            # generate/reset test images
