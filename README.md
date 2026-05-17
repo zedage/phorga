@@ -2,6 +2,9 @@
 
 Headless photo/video organizer and duplicate detector. Runs as a daemon, organizes media by date metadata into a configurable folder structure, and detects duplicates across sources.
 
+check
+
+
 ## Features
 
 - **Organizer**: date-based file organization (EXIF → filename → source path → mtime fallback), move/copy, per-source cron scheduling, lightweight duplicate handling, dry-run, state/resume
