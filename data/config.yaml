@@ -1,0 +1,31 @@
+# Phorganizer Demo/Test Configuration
+# Reset test data: go run testdata/tools/generate.go
+# Run phorganizer:  go run ./cmd/phorganizer --config data/config.yaml
+
+stateDir: C:\Users\meinr\github\zedage\phorganizer\data\state
+
+organizer:
+  - dryRun: false
+    target: data/target
+    targetStructure: "{year}/{month}"
+    fallbackFolder: C:\Users\meinr\github\zedage\phorganizer\data\fallback
+    sources:
+      - path: C:\Users\meinr\github\zedage\phorganizer\data\source
+        mode: copy
+        duplicates:
+          detectionMode: filename
+          action:
+            method: addSuffix
+        schedule: "* * * * *"  # every minute for demo purposes
+
+duplicateDetection:
+  - enabled: true
+    dryRun: true
+    schedule: "* * * * *"  # every minute for demo purposes
+    sources:
+      - C:\Users\meinr\github\zedage\phorganizer\data\source
+    detectionMode: content
+    action:
+      method: moveToFolder
+      duplicateFolder: C:\Users\meinr\github\zedage\phorganizer\data\duplicates
+

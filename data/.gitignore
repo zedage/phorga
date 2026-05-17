@@ -1,0 +1,11 @@
+# Generated test data — reset with: go run testdata/tools/generate.go
+source/
+target/
+duplicates/
+fallback/
+state/
+
+# Keep config and README
+!config.yaml
+!README.md
+

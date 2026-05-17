@@ -1,0 +1,49 @@
+# Phorganizer Configuration Example
+# See https://github.com/zedage/phorganizer for documentation.
+
+# State directory for resume support (default: /data/state)
+stateDir: /data/state
+
+# --- Organizer Feature ---
+# Organizes photos/videos from source directories into a date-based target structure.
+organizer:
+  - dryRun: false
+    ntfy:
+      url: https://ntfy.sh/your-topic # optional
+    target: /path/to/organized/photos
+    targetStructure: "{year}/{month}" # {year} 4-digit, {month} 2-digit, {monthWithName} 01-january, {day} 2-digit (01-31)
+    fallbackFolder: /path/to/fallback # optional, for files without usable date metadata
+    sources:
+      - path: /path/to/photos1
+        mode: move # move or copy
+        duplicates:
+          detectionMode: filename # filename, filedate, exif; use '+' (AND) or '|' (OR), not mixed
+          action:
+            method: skip # replace, addSuffix, moveToFolder, skip
+        schedule: "0 2 * * *" # daily at 02:00
+
+      - path: /path/to/photos2
+        mode: copy
+        duplicates:
+          detectionMode: filename+filedate
+          action:
+            method: moveToFolder
+            duplicateFolder: /path/to/duplicates # required when method=moveToFolder
+        schedule: "0 3 * * *"
+
+# --- Duplicate Detection Feature ---
+# Independently scans sources for duplicates (metadata or content-based).
+duplicateDetection:
+  - enabled: true
+    dryRun: true
+    schedule: "0 4 * * *"
+    sources:
+      - /path/to/photos1
+      - /path/to/photos2
+    detectionMode: content # content | metadata
+    action:
+      method: moveToFolder # moveToFolder | skip
+      duplicateFolder: /path/to/duplicates
+    ntfy:
+      url: https://ntfy.sh/your-topic # optional
+

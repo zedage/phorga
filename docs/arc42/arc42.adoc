@@ -1,0 +1,376 @@
+= Phorganizer Architecture Documentation (arc42)
+:toc: left
+:toclevels: 2
+:sectnums:
+
+== 1. Introduction and Goals
+
+Phorganizer is a headless photo/video organizer and duplicate detector.
+It runs as a daemon inside a Docker container, organizing media files by date metadata and detecting duplicates across multiple sources.
+
+=== Requirements Overview
+
+* Automatic date-based organization of photos/videos into configurable folder structures.
+* Independent duplicate detection (metadata- and content-based).
+* No GUI — configured via YAML/JSON, runs as background daemon.
+* Docker-first deployment, multi-arch (amd64, arm64).
+* Optional push notifications via ntfy.sh.
+
+=== Quality Goals
+
+[cols="1,3"]
+|===
+| Goal | Description
+
+| Reliability
+| File operations are atomic (temp+rename). Single file failures do not abort runs.
+
+| Resumability
+| State is persisted; the daemon resumes where it left off after restarts.
+
+| Simplicity
+| No database, no web UI, no external runtime dependencies beyond Docker.
+
+| Portability
+| Runs on Linux, macOS, Windows, and Synology NAS.
+|===
+
+=== Stakeholders
+
+[cols="1,2"]
+|===
+| Role | Concern
+
+| End User
+| Reliable, unattended photo organization on a NAS.
+
+| Developer
+| Clean package structure, testable code, easy local development.
+|===
+
+== 2. Constraints
+
+* Written in Go (pure Go, no CGO for cross-compilation).
+* Configuration via YAML or JSON file only.
+* No GUI or REST API.
+* State persistence via flat JSON files (no database).
+* Docker as primary deployment mechanism.
+
+== 3. Context and Scope
+
+=== Business Context
+
+[plantuml, context-diagram, svg]
+----
+@startuml
+actor "User" as user
+node "Phorganizer\n(Docker)" as pho
+folder "Source\nDirectories" as src
+folder "Target\nDirectory" as tgt
+folder "Duplicate\nFolder" as dup
+cloud "ntfy.sh" as ntfy
+
+user --> pho : config.yaml
+src --> pho : reads media files
+pho --> tgt : organizes by date
+pho --> dup : moves duplicates
+pho --> ntfy : sends notifications
+@enduml
+----
+
+=== Technical Context
+
+[cols="1,2,2"]
+|===
+| Interface | Technology | Description
+
+| Filesystem (Source)
+| OS / NFS / SMB mount
+| Read-only access to source directories.
+
+| Filesystem (Target)
+| OS / NFS / SMB mount
+| Read-write access for organized output.
+
+| ntfy.sh
+| HTTP POST
+| Optional push notifications.
+
+| Configuration
+| YAML / JSON file
+| Mounted into container at `/config/config.yaml`.
+|===
+
+== 4. Solution Strategy
+
+* *Single binary, two feature loops*: Organizer and Duplicate Detection run as independent goroutine-based cron jobs within one process.
+* *Cron-based scheduling*: Uses `robfig/cron/v3` for in-process scheduling. No external cron dependency.
+* *Atomic file operations*: All writes use temp-file + rename to prevent partial files on crash.
+* *JSON state files*: Simple, inspectable, corruption-tolerant state persistence.
+* *Structured logging*: JSON-formatted `slog` output for observability.
+
+== 5. Building Block View
+
+=== Level 1: Package Overview
+
+[plantuml, building-blocks, svg]
+----
+@startuml
+package "cmd/phorganizer" {
+  [main]
+}
+
+package "internal" {
+  [config]
+  [scheduler]
+  [organizer]
+  [dedup]
+  [metadata]
+  [fileops]
+  [state]
+  [notify]
+}
+
+[main] --> [config]
+[main] --> [scheduler]
+[main] --> [organizer]
+[main] --> [dedup]
+[main] --> [notify]
+[organizer] --> [metadata]
+[organizer] --> [fileops]
+[organizer] --> [state]
+[dedup] --> [metadata]
+[dedup] --> [fileops]
+[scheduler] --> [organizer]
+[scheduler] --> [dedup]
+@enduml
+----
+
+[cols="1,3"]
+|===
+| Package | Responsibility
+
+| `cmd/phorganizer`
+| Entry point. Parses config, registers jobs, starts scheduler, handles signals.
+
+| `config`
+| YAML/JSON loading, defaults, fail-fast validation.
+
+| `scheduler`
+| Cron wrapper with overlap prevention (TryLock per job).
+
+| `organizer`
+| Recursive source scanning, date resolution, copy/move, lightweight duplicate handling.
+
+| `dedup`
+| Independent duplicate detection (metadata or perceptual hash), cross-source matching.
+
+| `metadata`
+| EXIF extraction (goexif), filename/path date parsing, file type detection, target path token resolution.
+
+| `fileops`
+| Atomic copy/move, directory creation, suffix generation.
+
+| `state`
+| JSON state read/write with atomic saves and corruption recovery.
+
+| `notify`
+| ntfy.sh HTTP client, fire-and-forget with timeout.
+|===
+
+== 6. Runtime View
+
+=== Organizer Run
+
+[plantuml, runtime-organizer, svg]
+----
+@startuml
+start
+:Cron triggers source run;
+:Load state from JSON;
+:Walk source directory recursively;
+repeat
+  :Next supported media file;
+  if (Already in state?) then (yes)
+    :Skip;
+  else (no)
+    :Extract date (EXIF → filename → source path → mtime);
+    if (Date found?) then (yes)
+      :Resolve target path from template;
+      if (Target exists?) then (yes)
+        :Handle duplicate (replace/suffix/move/skip);
+      else (no)
+        :Atomic copy or move;
+      endif
+    else (no)
+      if (fallbackFolder set?) then (yes)
+        :Transfer to fallbackFolder;
+      else (no)
+        :Skip and log warning;
+      endif
+    endif
+    :Update state;
+  endif
+repeat while (more files?)
+:Save state atomically;
+:Send ntfy notification;
+stop
+@enduml
+----
+
+=== Duplicate Detection Run
+
+[plantuml, runtime-dedup, svg]
+----
+@startuml
+start
+:Cron triggers dedup job;
+:Scan all sources recursively;
+:Compute metadata or pHash per file;
+:Compare all pairs (O(n²));
+:Collect duplicate pairs;
+repeat
+  :Next duplicate pair;
+  if (dryRun?) then (yes)
+    :Log planned action;
+  else (no)
+    :Apply action (moveToFolder / skip);
+  endif
+repeat while (more pairs?)
+:Send ntfy notification;
+stop
+@enduml
+----
+
+== 7. Deployment View
+
+[plantuml, deployment, svg]
+----
+@startuml
+node "Host / NAS" {
+  node "Docker" {
+    artifact "phorganizer\ncontainer" as app
+    file "/config/config.yaml" as cfg
+    database "/data/state/*.json" as state
+  }
+  folder "/mnt/photos/incoming" as src
+  folder "/mnt/photos/organized" as tgt
+  folder "/mnt/photos/duplicates" as dup
+}
+cloud "ntfy.sh" as ntfy
+
+cfg --> app
+app --> src : reads
+app --> tgt : writes
+app --> dup : writes
+app --> state : reads/writes
+app --> ntfy : HTTP POST
+@enduml
+----
+
+* Base image: `alpine:3.20`
+* State volume: `/data/state`
+* Config mount: `/config/config.yaml` (read-only)
+* Timezone via `TZ` environment variable.
+
+== 8. Crosscutting Concepts
+
+=== Atomic File Operations
+All file writes use a temp-file in the target directory followed by `os.Rename`. Move mode deletes the source only after successful rename.
+
+=== Error Resilience
+* Single file errors are logged and skipped; the run continues.
+* Single source failures do not block other sources.
+* Notification failures are logged but never block runs.
+
+=== State Management
+* JSON files, one per source/job.
+* Atomic writes (write temp → rename).
+* Corruption triggers a warning and full re-scan (no data loss).
+
+=== Structured Logging
+* JSON-formatted via `log/slog`.
+* All actions, skips, and errors are logged with context.
+
+== 9. Architectural Decisions
+
+[cols="1,2,3"]
+|===
+| ID | Decision | Rationale
+
+| D1
+| Single binary with two feature loops
+| Simplifies deployment. One container, one config file.
+
+| D2
+| `robfig/cron/v3` for scheduling
+| Mature, pure-Go, avoids external cron dependencies.
+
+| D3
+| `rwcarlsen/goexif` for EXIF
+| Lightweight, no CGO. Sufficient for DateTimeOriginal.
+
+| D4
+| Perceptual hash (`goimagehash`) for content dedup
+| Catches visually identical images across re-encodings.
+
+| D5
+| JSON flat-file state (no database)
+| No CGO, no external services, easy inspection.
+
+| D6
+| Atomic writes (temp+rename)
+| Prevents partial files on crash or power loss.
+|===
+
+== 10. Risks and Technical Debt
+
+[cols="1,3,3"]
+|===
+| Risk | Impact | Mitigation
+
+| Large libraries (O(n²) dedup)
+| Slow on very large collections
+| State-based resume reduces repeat work. V2: index-based matching.
+
+| pHash memory on NAS
+| Memory spikes when hashing many large images
+| Sequential processing, one image at a time.
+
+| goexif RAW format gaps
+| Some RAW files may lack EXIF support
+| Graceful fallback to mtime. Log unsupported formats.
+
+| No file locking
+| Concurrent external writes during scan
+| Lock-file per source prevents overlapping Phorganizer runs.
+|===
+
+== 11. Glossary
+
+[cols="1,3"]
+|===
+| Term | Definition
+
+| Organizer
+| Feature that sorts media files into date-based folder structures.
+
+| Duplicate Detection
+| Independent feature that finds and handles duplicate media files.
+
+| pHash
+| Perceptual hash — a fingerprint of visual image content.
+
+| Hamming Distance
+| Number of differing bits between two hashes. ≤ 5 = duplicate in V1.
+
+| targetStructure
+| Path template with tokens (`{year}`, `{month}`, etc.) for the output folder.
+
+| fallbackFolder
+| Destination for files where no date can be determined.
+
+| Dry Run
+| Mode that logs planned actions without modifying files.
+|===
+

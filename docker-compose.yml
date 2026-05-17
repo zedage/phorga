@@ -1,0 +1,19 @@
+version: "3.8"
+
+services:
+  phorganizer:
+    build: .
+    container_name: phorganizer
+    restart: unless-stopped
+    volumes:
+      - ./config.yaml:/config/config.yaml:ro
+      - /path/to/photos/incoming:/photos/incoming:ro
+      - /path/to/photos/organized:/photos/organized
+      - /path/to/photos/duplicates:/photos/duplicates
+      - phorganizer-state:/data/state
+    environment:
+      - TZ=Europe/Berlin
+
+volumes:
+  phorganizer-state:
+
