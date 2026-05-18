@@ -130,9 +130,8 @@ func TestAtomicCopy_NoTempLeftOnError(t *testing.T) {
 	// No temp files should be left
 	entries, _ := os.ReadDir(dstDir)
 	for _, e := range entries {
-		if strings.HasPrefix(e.Name(), ".phorganizer-tmp-") {
+		if strings.HasPrefix(e.Name(), ".phorga-tmp-") {
 			t.Errorf("temp file left behind: %s", e.Name())
 		}
 	}
 }
-

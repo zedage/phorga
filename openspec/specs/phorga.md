@@ -1,8 +1,8 @@
-# Phorganizer - The other photo organizer
-Phorganizer is a photo organizer running in the background, which automatically organizes photos in folders by year and month by their metadata.
+# Phorga - The other photo organizer
+Phorga is a photo organizer running in the background, which automatically organizes photos in folders by year and month by their metadata.
 
 ## Features
-Phorganizer runs as a daemon in the background and wakes up automatically according to the configuration.
+Phorga runs as a daemon in the background and wakes up automatically according to the configuration.
 
 ### Organization
 - Automatically organize photos in folders by year and month by their metadata.

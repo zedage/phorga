@@ -1,6 +1,6 @@
-# Phorganizer Test Data
+# Phorga Test Data
 
-This directory contains a ready-to-use test setup for Phorganizer.
+This directory contains a ready-to-use test setup for Phorga.
 
 ## Structure
 
@@ -30,10 +30,10 @@ This creates ~12 sample images in `data/source/` including:
 - A `.txt` file (should be skipped)
 - One pre-existing file in `data/target/` (to test duplicate handling)
 
-## Run Phorganizer
+## Run Phorga
 
 ```bash
-go run ./cmd/phorganizer --config data/config.yaml
+go run ./cmd/phorga --config data/config.yaml
 ```
 
 The demo config runs every minute. Press `Ctrl+C` to stop.

@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zedage/phorganizer/internal/config"
-	"github.com/zedage/phorganizer/internal/fileops"
-	"github.com/zedage/phorganizer/internal/metadata"
-	"github.com/zedage/phorganizer/internal/state"
+	"github.com/zedage/phorga/internal/config"
+	"github.com/zedage/phorga/internal/fileops"
+	"github.com/zedage/phorga/internal/metadata"
+	"github.com/zedage/phorga/internal/state"
 )
 
 // RunResult holds statistics for an organizer run.
@@ -275,4 +275,3 @@ func RunWithTime(profile config.OrganizerProfile, source config.OrganizerSource,
 	result := Run(profile, source, st, statePath)
 	return result, time.Since(start)
 }
-

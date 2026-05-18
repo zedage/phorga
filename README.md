@@ -1,4 +1,4 @@
-# Phorganizer
+# Phorga
 
 Headless photo/video organizer and duplicate detector. Runs as a daemon, organizes media by date metadata into a configurable folder structure, and detects duplicates across sources.
 
@@ -16,8 +16,8 @@ cp config.example.yaml config.yaml
 # edit config.yaml with your paths and schedules
 
 # Run directly
-go build -o phorganizer ./cmd/phorganizer
-./phorganizer --config config.yaml
+go build -o phorga ./cmd/phorga
+./phorga --config config.yaml
 
 # Or with Docker
 docker compose up -d
@@ -51,7 +51,7 @@ duplicateDetection:
       duplicateFolder: /photos/duplicates
 ```
 
-Config resolution: `--config` flag → `PHORGANIZER_CONFIG` env → `./config.yaml`
+Config resolution: `--config` flag → `PHORGA_CONFIG` env → `./config.yaml`
 
 ## Build & Test
 
@@ -62,11 +62,11 @@ go test ./...
 
 ## Demo / Test Setup
 
-Generate sample images and run Phorganizer locally:
+Generate sample images and run Phorga locally:
 
 ```bash
 go run testdata/tools/generate.go            # generate/reset test images
-go run ./cmd/phorganizer --config data/config.yaml  # run with test config
+go run ./cmd/phorga --config data/config.yaml  # run with test config
 ```
 
 Reset to original state at any time by re-running the generate command. See [`data/README.md`](data/README.md) for details.
@@ -74,7 +74,7 @@ Reset to original state at any time by re-running the generate command. See [`da
 ## Project Structure
 
 ```
-cmd/phorganizer/         Main entry point
+cmd/phorga/         Main entry point
 internal/
   config/                YAML/JSON parsing, validation
   organizer/             Date-based organization engine
@@ -89,7 +89,7 @@ internal/
 ## Docker
 
 ```bash
-docker build -t phorganizer .
+docker build -t phorga .
 docker compose up -d
 ```
 

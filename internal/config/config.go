@@ -1,6 +1,6 @@
 package config
 
-// Config is the root configuration structure for Phorganizer.
+// Config is the root configuration structure for Phorga.
 type Config struct {
 	StateDir           string               `yaml:"stateDir,omitempty" json:"stateDir,omitempty"`
 	Organizer          []OrganizerProfile   `yaml:"organizer" json:"organizer"`
@@ -9,11 +9,11 @@ type Config struct {
 
 // OrganizerProfile defines a single organizer target with its sources.
 type OrganizerProfile struct {
-	DryRun          bool             `yaml:"dryRun" json:"dryRun"`
-	Ntfy            *NtfyConfig      `yaml:"ntfy,omitempty" json:"ntfy,omitempty"`
-	Target          string           `yaml:"target" json:"target"`
-	TargetStructure string           `yaml:"targetStructure" json:"targetStructure"`
-	FallbackFolder  string           `yaml:"fallbackFolder,omitempty" json:"fallbackFolder,omitempty"`
+	DryRun          bool              `yaml:"dryRun" json:"dryRun"`
+	Ntfy            *NtfyConfig       `yaml:"ntfy,omitempty" json:"ntfy,omitempty"`
+	Target          string            `yaml:"target" json:"target"`
+	TargetStructure string            `yaml:"targetStructure" json:"targetStructure"`
+	FallbackFolder  string            `yaml:"fallbackFolder,omitempty" json:"fallbackFolder,omitempty"`
 	Sources         []OrganizerSource `yaml:"sources" json:"sources"`
 }
 
@@ -27,13 +27,13 @@ type OrganizerSource struct {
 
 // OrganizerDuplicate configures lightweight duplicate handling during organization.
 type OrganizerDuplicate struct {
-	DetectionMode string           `yaml:"detectionMode" json:"detectionMode"` // filename, filedate, exif (with + or |)
-	Action        DuplicateAction  `yaml:"action" json:"action"`
+	DetectionMode string          `yaml:"detectionMode" json:"detectionMode"` // filename, filedate, exif (with + or |)
+	Action        DuplicateAction `yaml:"action" json:"action"`
 }
 
 // DuplicateAction defines what to do when a duplicate is detected.
 type DuplicateAction struct {
-	Method          string `yaml:"method" json:"method"`                                    // replace, addSuffix, moveToFolder, skip
+	Method          string `yaml:"method" json:"method"`                                       // replace, addSuffix, moveToFolder, skip
 	DuplicateFolder string `yaml:"duplicateFolder,omitempty" json:"duplicateFolder,omitempty"` // required if method=moveToFolder
 }
 
@@ -52,4 +52,3 @@ type DuplicateDetection struct {
 type NtfyConfig struct {
 	URL string `yaml:"url" json:"url"`
 }
-

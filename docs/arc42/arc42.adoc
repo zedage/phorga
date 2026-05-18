@@ -1,11 +1,11 @@
-= Phorganizer Architecture Documentation (arc42)
+= Phorga Architecture Documentation (arc42)
 :toc: left
 :toclevels: 2
 :sectnums:
 
 == 1. Introduction and Goals
 
-Phorganizer is a headless photo/video organizer and duplicate detector.
+Phorga is a headless photo/video organizer and duplicate detector.
 It runs as a daemon inside a Docker container, organizing media files by date metadata and detecting duplicates across multiple sources.
 
 === Requirements Overview
@@ -64,7 +64,7 @@ It runs as a daemon inside a Docker container, organizing media files by date me
 ----
 @startuml
 actor "User" as user
-node "Phorganizer\n(Docker)" as pho
+node "Phorga\n(Docker)" as pho
 folder "Source\nDirectories" as src
 folder "Target\nDirectory" as tgt
 folder "Duplicate\nFolder" as dup
@@ -116,7 +116,7 @@ pho --> ntfy : sends notifications
 [plantuml, building-blocks, svg]
 ----
 @startuml
-package "cmd/phorganizer" {
+package "cmd/phorga" {
   [main]
 }
 
@@ -150,7 +150,7 @@ package "internal" {
 |===
 | Package | Responsibility
 
-| `cmd/phorganizer`
+| `cmd/phorga`
 | Entry point. Parses config, registers jobs, starts scheduler, handles signals.
 
 | `config`
@@ -249,7 +249,7 @@ stop
 @startuml
 node "Host / NAS" {
   node "Docker" {
-    artifact "phorganizer\ncontainer" as app
+    artifact "phorga\ncontainer" as app
     file "/config/config.yaml" as cfg
     database "/data/state/*.json" as state
   }
@@ -343,7 +343,7 @@ All file writes use a temp-file in the target directory followed by `os.Rename`.
 
 | No file locking
 | Concurrent external writes during scan
-| Lock-file per source prevents overlapping Phorganizer runs.
+| Lock-file per source prevents overlapping Phorga runs.
 |===
 
 == 11. Glossary

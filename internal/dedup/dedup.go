@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/corona10/goimagehash"
-	"github.com/zedage/phorganizer/internal/config"
-	"github.com/zedage/phorganizer/internal/fileops"
-	"github.com/zedage/phorganizer/internal/metadata"
+	"github.com/zedage/phorga/internal/config"
+	"github.com/zedage/phorga/internal/fileops"
+	"github.com/zedage/phorga/internal/metadata"
 )
 
 const maxHammingDistance = 5
@@ -242,4 +242,3 @@ func applyAction(job config.DuplicateDetection, pair duplicatePair, result *RunR
 
 	return nil
 }
-

@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/zedage/phorganizer/internal/config"
+	"github.com/zedage/phorga/internal/config"
 )
 
 func createTestImage(t *testing.T, dir, name string, r, g, b uint8) string {
@@ -236,4 +236,3 @@ func TestDedup_CrossSource(t *testing.T) {
 		t.Error("expected cross-source duplicate detection")
 	}
 }
-
