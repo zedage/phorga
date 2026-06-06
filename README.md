@@ -6,6 +6,7 @@ Headless photo/video organizer and duplicate detector. Runs as a daemon, organiz
 
 - **Organizer**: date-based file organization (EXIF → filename → source path → mtime fallback), move/copy, per-source cron scheduling, lightweight duplicate handling, dry-run, state/resume
 - **Duplicate Detection**: independent metadata- or content-based (perceptual hash) dedup across sources, moveToFolder/skip actions, dry-run
+- **Web UI**: optional built-in server-rendered configuration UI with HTMX-friendly endpoints and UI localization (DE/EN/IT/FR)
 - **Notifications**: optional ntfy.sh push notifications on run completion
 - **Docker-first**: single container, multi-arch (amd64/arm64), works on Synology NAS
 
@@ -30,7 +31,7 @@ YAML or JSON. See [`config.example.yaml`](config.example.yaml) for a complete ex
 ```yaml
 organizer:
   - target: /photos/organized
-    targetStructure: "{year}/{month}"   # tokens: {year}, {month}, {monthWithName}, {day}
+    targetStructure: "{year}/{month}"   # tokens explained below
     fallbackFolder: /photos/unknown     # files without date metadata
     sources:
       - path: /photos/incoming
@@ -49,9 +50,99 @@ duplicateDetection:
     action:
       method: moveToFolder
       duplicateFolder: /photos/duplicates
+
+webUI:
+  enabled: true
+  address: 127.0.0.1:8080
 ```
 
-Config resolution: `--config` flag → `PHORGA_CONFIG` env → `./config.yaml`
+`webUI` is optional. The UI is intended for **local/private deployments**. Do not expose it publicly without additional protection.
+
+### Web UI
+
+Phorga can expose a small built-in configuration UI from the same process that runs the scheduler.
+
+- Server-rendered HTML with HTMX-compatible validation/save endpoints
+- UI localization: German, English, Italian, French
+- Displays the currently loaded effective configuration values
+- Saves either back to the active config file or to a separate config file
+
+Enable it in config:
+
+```yaml
+webUI:
+  enabled: true
+  address: 127.0.0.1:8080
+```
+
+Or override at startup:
+
+```bash
+go run ./cmd/phorga --config config.yaml --web-ui
+go run ./cmd/phorga --config config.yaml --web-ui --web-ui-addr 127.0.0.1:9090
+```
+
+The UI shows the values currently loaded at startup. Saving to a separate file writes a new config file but does not automatically reload the running scheduler.
+
+### TargetStructure Tokens
+
+Phorga supports **multilingual month and day names** in `targetStructure`. Tokens are **case-sensitive** for output formatting.
+
+#### Supported Tokens
+
+| Token | Format | Language | Example |
+|-------|--------|----------|---------|
+| `{year}`, `{jahr}`, `{année}`, `{anno}` | 4-digit numeric | EN/DE/FR/IT | 2024 |
+| `{month}` | 2-digit numeric | English context | 03 |
+| `{monat}` | month name | Deutsch | **märz** (case: `{märz}`, `{März}`, `{MÄRZ}`) |
+| `{mois}` | month name | Français | **mars** (case: `{mars}`, `{Mars}`, `{MARS}`) |
+| `{mese}` | month name | Italiano | **marzo** (case: `{marzo}`, `{Marzo}`, `{MARZO}`) |
+| `{monthWithName}` | numeric + English name | English | 03-march |
+| `{monthNumber}` | 2-digit zero-padded | all | 03 |
+| `{day}`, `{tag}`, `{jour}`, `{giorno}` | 2-digit numeric | EN/DE/FR/IT | 15 |
+| `{dayNumber}` | 2-digit zero-padded | all | 15 |
+
+#### Case Sensitivity
+
+Month names respect the case of the placeholder token:
+
+```yaml
+# Examples with date 2024-03-15:
+
+targetStructure: "{year}/{monat}"      # → 2024/märz
+targetStructure: "{year}/{Monat}"      # → 2024/März
+targetStructure: "{year}/{MONAT}"      # → 2024/MÄRZ
+
+targetStructure: "{year}/{mois}/{jour}"           # → 2024/mars/15
+targetStructure: "{year}/{Mois}/{Jour}"           # → 2024/Mars/15
+targetStructure: "{year}/{monthNumber}-{Monat}"   # → 2024/03-März
+```
+
+#### Examples for Different Users
+
+**German user:**
+```yaml
+targetStructure: "{year}/{Monat}"              # 2024/März
+targetStructure: "{year}/{Monat}/{Tag}"        # (Tag=numeric 15)
+```
+
+**French user:**
+```yaml
+targetStructure: "{year}/{Mois}"               # 2024/Mars
+targetStructure: "{year}/{mois}/{jour}"        # 2024/mars/15
+```
+
+**Italian user:**
+```yaml
+targetStructure: "{year}/{Mese}"               # 2024/Marzo
+targetStructure: "{anno}/{mese}/{giorno}"      # 2024/marzo/15
+```
+
+**Mixed format user:**
+```yaml
+targetStructure: "{year}/{monthNumber}-{Monat}/{dayNumber}"  # 2024/03-März/15
+targetStructure: "{year}/{monthNumber}_{Monat}"              # 2024/03_März
+```
 
 ## Build & Test
 
@@ -84,6 +175,7 @@ internal/
   state/                 JSON state persistence (resume support)
   scheduler/             Cron wrapper with overlap prevention
   notify/                ntfy.sh client
+  webui/                 Optional built-in configuration UI (HTTP, templates, i18n)
 ```
 
 ## Docker

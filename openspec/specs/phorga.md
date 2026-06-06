@@ -2,7 +2,7 @@
 Phorga is a photo organizer running in the background, which automatically organizes photos in folders by year and month by their metadata.
 
 ## Features
-Phorga runs as a daemon in the background and wakes up automatically according to the configuration.
+Phorga runs as a daemon in the background and wakes up automatically according to the configuration. It can also expose an optional built-in configuration web UI for local/private administration.
 
 ### Organization
 - Automatically organize photos in folders by year and month by their metadata.
@@ -12,7 +12,7 @@ Phorga runs as a daemon in the background and wakes up automatically according t
 - Several source directories per target are supported.
 - Several target directories are supported, so that photos can be organized into different locations based on their source.
 - Support for multiple platforms, including Windows, macOS, Linux, and Synology NAS.
-- The tool has no user interface, it runs in the background and can be configured through a yaml or json configuration file.
+- The tool can be configured through a yaml or json configuration file and may optionally expose a small built-in web UI for configuration management.
 - The tool runs as a docker container, making it easy to deploy and run on various platforms.
 - The tool can be scheduled to run at specific intervals per source, such as daily or weekly, to ensure that photos are organized regularly.
 - The tool can be configured to move or copy photos, depending on the user's preference.
@@ -33,6 +33,10 @@ Phorga runs as a daemon in the background and wakes up automatically according t
 #### Configuration
 - The configuration file can be in yaml or json format, and it allows users to specify various settings for organizing photos, such as the target directory, source directories, and lightweight duplicate handling.
 ```yaml
+webUI:
+  enabled: true
+  address: 127.0.0.1:8080
+
 organizer:
   - dryRun: true # if true, the tool will only print the actions it would take without actually moving or copying any files
     ntfy:
@@ -72,6 +76,14 @@ organizer:
 - Duplicate Detection MUST support `action.method: skip` (log only, no file changes).
 - Duplicate Detection SHOULD send a summary notification via ntfy when configured.
 - A failure on one file MUST NOT abort the entire detection run.
+
+### Web UI
+- The optional Web UI is served by the same Phorga process.
+- It renders HTML on the server and exposes HTMX-compatible endpoints for validation and save actions.
+- It shows the currently loaded effective configuration values.
+- It supports German, English, Italian, and French UI localization.
+- It allows saving configuration back to the active file or to a separate file.
+- It is intended for local/private deployment unless protected externally.
 
 #### Configuration
 ```yaml

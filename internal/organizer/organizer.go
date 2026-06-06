@@ -102,7 +102,12 @@ func processFile(profile config.OrganizerProfile, source config.OrganizerSource,
 	slog.Debug("date resolved", "path", path, "date", date, "method", method)
 
 	// Build target path
-	subDir := metadata.ResolveTargetPath(profile.TargetStructure, date)
+	subDir, err := metadata.ResolveTargetPath(profile.TargetStructure, date)
+	if err != nil {
+		slog.Error("failed to resolve target path", "source", path, "error", err)
+		result.Errors++
+		return err
+	}
 	targetDir := filepath.Join(profile.Target, subDir)
 	targetPath := filepath.Join(targetDir, filepath.Base(path))
 

@@ -1,6 +1,6 @@
 module github.com/zedage/phorga
 
-go 1.23
+go 1.26
 
 require (
 	github.com/corona10/goimagehash v1.1.0

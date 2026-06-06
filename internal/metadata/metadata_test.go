@@ -33,22 +33,106 @@ func TestIsSupported(t *testing.T) {
 
 func TestResolveTargetPath(t *testing.T) {
 	date := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
+	febDate := time.Date(2024, 2, 5, 0, 0, 0, 0, time.UTC)
 
 	tests := []struct {
 		structure string
+		date      time.Time
 		want      string
 	}{
-		{"{year}/{month}", "2024/01"},
-		{"{year}/{monthWithName}", "2024/01-january"},
-		{"{year}/{month}/{day}", "2024/01/15"},
-		{"{year}", "2024"},
-		{"photos/{year}/{monthWithName}/{day}", "photos/2024/01-january/15"},
+		// English
+		{"{year}/{month}", date, "2024/01"},
+		{"{year}/{monthWithName}", date, "2024/01-january"},
+		{"{year}/{month}/{day}", date, "2024/01/15"},
+		{"{year}", date, "2024"},
+		{"photos/{year}/{monthWithName}/{day}", date, "photos/2024/01-january/15"},
+		{"{monthNumber}/{dayNumber}", febDate, "02/05"},
+
+		// German
+		{"{jahr}/{monat}", date, "2024/januar"},
+		{"{jahr}/{Monat}", date, "2024/Januar"},
+		{"{jahr}/{tag}", date, "2024/15"},
+		{"{year}/{monthNumber}-{Monat}/{dayNumber}", febDate, "2024/02-Februar/05"},
+
+		// French
+		{"{année}/{mois}", date, "2024/janvier"},
+		{"{année}/{Mois}", date, "2024/Janvier"},
+		{"{année}/{jour}", date, "2024/15"},
+
+		// Italian
+		{"{anno}/{mese}", date, "2024/gennaio"},
+		{"{anno}/{Mese}", date, "2024/Gennaio"},
+		{"{anno}/{giorno}", date, "2024/15"},
+
+		// Case sensitivity for month names
+		{"{year}/{monat}", febDate, "2024/februar"},
+		{"{year}/{Monat}", febDate, "2024/Februar"},
+		{"{year}/{MONAT}", febDate, "2024/FEBRUAR"},
 	}
 	for _, tt := range tests {
-		got := ResolveTargetPath(tt.structure, date)
-		if got != tt.want {
-			t.Errorf("ResolveTargetPath(%q, %v) = %q, want %q", tt.structure, date, got, tt.want)
+		got, err := ResolveTargetPath(tt.structure, tt.date)
+		if err != nil {
+			t.Errorf("ResolveTargetPath(%q, %v) returned error: %v", tt.structure, tt.date, err)
+			continue
 		}
+		if got != tt.want {
+			t.Errorf("ResolveTargetPath(%q, %v) = %q, want %q", tt.structure, tt.date, got, tt.want)
+		}
+	}
+}
+
+func TestResolveTargetPath_InvalidToken(t *testing.T) {
+	date := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		structure string
+		wantError bool
+	}{
+		{"{invalidToken}", true},
+		{"{year}/{invalid}", true},
+		{"{year}/{monthh}", true},
+		{"{year}/{monat}", false}, // valid
+		{"{year}/{moisx}", true},  // invalid French
+		{"{year}/{year}", false},  // valid - same token twice is ok
+	}
+
+	for _, tt := range tests {
+		_, err := ResolveTargetPath(tt.structure, date)
+		if tt.wantError && err == nil {
+			t.Errorf("ResolveTargetPath(%q) expected error, but got none", tt.structure)
+		}
+		if !tt.wantError && err != nil {
+			t.Errorf("ResolveTargetPath(%q) expected no error, got: %v", tt.structure, err)
+		}
+	}
+}
+
+// TestResolveTargetPath_EdgeDates tests edge cases like Feb 29, Dec 31, etc.
+func TestResolveTargetPath_EdgeDates(t *testing.T) {
+	tests := []struct {
+		name      string
+		date      time.Time
+		structure string
+		want      string
+	}{
+		{"Feb 5", time.Date(2024, 2, 5, 0, 0, 0, 0, time.UTC), "{year}/{monthNumber}/{dayNumber}", "2024/02/05"},
+		{"Feb 29 leap", time.Date(2024, 2, 29, 0, 0, 0, 0, time.UTC), "{year}/{monthNumber}/{dayNumber}", "2024/02/29"},
+		{"Dec 31", time.Date(2024, 12, 31, 0, 0, 0, 0, time.UTC), "{year}/{monthNumber}/{dayNumber}", "2024/12/31"},
+		{"Jan 1", time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC), "{year}/{monthNumber}/{dayNumber}", "2024/01/01"},
+		{"German March", time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC), "{Monat}", "März"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ResolveTargetPath(tt.structure, tt.date)
+			if err != nil {
+				t.Errorf("ResolveTargetPath(%q, %v) returned error: %v", tt.structure, tt.date, err)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("ResolveTargetPath(%q, %v) = %q, want %q", tt.structure, tt.date, got, tt.want)
+			}
+		})
 	}
 }
 
@@ -158,12 +242,12 @@ func TestExtractDate_FilenameBeforeMtime(t *testing.T) {
 
 func TestExtractPathDate(t *testing.T) {
 	tests := []struct {
-		name     string
-		path     string
-		wantYear int
+		name      string
+		path      string
+		wantYear  int
 		wantMonth time.Month
-		wantDay  int
-		wantOk   bool
+		wantDay   int
+		wantOk    bool
 	}{
 		// Year + month as separate folders
 		{"year/month forward slash", "/photos/2019/07/video.mp4", 2019, 7, 1, true},
@@ -268,5 +352,3 @@ func TestExtractDate_FileNotFound(t *testing.T) {
 		t.Fatal("expected error for non-existent file")
 	}
 }
-
-

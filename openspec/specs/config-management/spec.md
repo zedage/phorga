@@ -49,3 +49,32 @@ The system SHALL accept the config file path via CLI argument or environment var
 - **WHEN** neither CLI argument nor environment variable is set
 - **THEN** the system SHALL look for `config.yaml` in the current working directory
 
+### Requirement: Effective configuration can be displayed in the UI
+The system SHALL expose the currently effective configuration values to the web UI for read-only display before changes are saved.
+
+#### Scenario: Current config values are shown in UI
+- **WHEN** the web UI loads after a valid configuration has been read at startup
+- **THEN** the system SHALL display the effective current values from the loaded configuration model
+
+### Requirement: UI-submitted configuration is validated before save
+The system SHALL validate configuration changes submitted through the web UI before writing them to disk.
+
+#### Scenario: Invalid UI update is rejected
+- **WHEN** a user submits configuration changes that violate existing config rules
+- **THEN** the system SHALL reject the save and return validation feedback without writing a configuration file
+
+#### Scenario: Valid UI update passes validation
+- **WHEN** a user submits configuration changes that satisfy existing config rules
+- **THEN** the system SHALL accept the configuration for persistence
+
+### Requirement: Configuration can be saved to an alternate file
+The system SHALL support saving validated configuration to either the active config file or a separate file selected by the user.
+
+#### Scenario: Save to primary config file
+- **WHEN** the user selects the primary loaded config file as the save target
+- **THEN** the system SHALL overwrite that file with the validated configuration using the supported config format
+
+#### Scenario: Save to separate config file
+- **WHEN** the user selects a separate config file path as the save target
+- **THEN** the system SHALL write the validated configuration to the separate file without requiring the active config path to change immediately
+

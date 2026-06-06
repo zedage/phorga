@@ -1,0 +1,151 @@
+{{define "page"}}
+<!doctype html>
+<html lang="{{.Data.Lang}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{call .T "page_title"}}</title>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #f5f7fa; color: #20262e; }
+    header, main { max-width: 1100px; margin: 0 auto; padding: 1rem 1.25rem; }
+    header { padding-top: 2rem; }
+    h1, h2, h3 { margin-bottom: 0.5rem; }
+    .notice { color: #54606c; }
+    .card { background: white; border-radius: 10px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+    .grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    label { display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.2rem; }
+    input[type=text], select { width: 100%; padding: 0.55rem 0.65rem; border: 1px solid #ccd5df; border-radius: 6px; box-sizing: border-box; }
+    .checkbox { display: flex; align-items: center; gap: 0.4rem; font-weight: 600; }
+    .actions { display: flex; gap: 0.75rem; margin-top: 1rem; }
+    button { padding: 0.7rem 1rem; border: none; border-radius: 6px; background: #0b62d6; color: white; cursor: pointer; }
+    button.secondary { background: #64748b; }
+    .flash { border-radius: 8px; padding: 0.8rem 1rem; margin-bottom: 1rem; }
+    .flash.success { background: #e7f7ed; color: #14532d; }
+    .flash.error { background: #fdecec; color: #991b1b; }
+    .muted { color: #5c6773; font-size: 0.9rem; }
+    .inline-options { display: flex; gap: 1rem; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>{{call .T "heading"}}</h1>
+    <p class="notice">{{call .T "intro"}}</p>
+    <p class="muted">{{call .T "private_notice"}}</p>
+  </header>
+  <main>
+    <div class="card">
+      <strong>{{call .T "loaded_config"}}:</strong> <code>{{.Data.ConfigPath}}</code>
+    </div>
+    <div id="feedback">{{template "flash" .}}</div>
+    <form method="post" action="/ui/save" class="card">
+      <input type="hidden" name="lang" value="{{.Data.Lang}}">
+      <div class="grid">
+        <div>
+          <label>{{call .T "language"}}</label>
+          <select name="languageSelect" onchange="window.location='?lang='+this.value">
+            <option value="de" {{if eq .Data.Lang "de"}}selected{{end}}>Deutsch</option>
+            <option value="en" {{if eq .Data.Lang "en"}}selected{{end}}>English</option>
+            <option value="it" {{if eq .Data.Lang "it"}}selected{{end}}>Italiano</option>
+            <option value="fr" {{if eq .Data.Lang "fr"}}selected{{end}}>Français</option>
+          </select>
+        </div>
+        <div>
+          <label>{{call .T "state_dir"}}</label>
+          <input type="text" name="stateDir" value="{{.Data.Form.StateDir}}">
+        </div>
+      </div>
+
+      <section class="card">
+        <h2>{{call .T "webui_section"}}</h2>
+        <div class="grid">
+          <label class="checkbox"><input type="checkbox" name="webUI.enabled" {{if .Data.Form.WebUI.Enabled}}checked{{end}}> {{call .T "webui_enabled"}}</label>
+          <div>
+            <label>{{call .T "webui_address"}}</label>
+            <input type="text" name="webUI.address" value="{{.Data.Form.WebUI.Address}}">
+          </div>
+        </div>
+      </section>
+
+      <input type="hidden" name="organizerCount" value="{{len .Data.Form.Organizer}}">
+      <section class="card">
+        <h2>{{call .T "organizer_section"}}</h2>
+        {{range $i, $org := .Data.Form.Organizer}}
+        <div class="card">
+          <h3>{{call $.T "organizer_profile"}} {{$i}}</h3>
+          <div class="grid">
+            <label class="checkbox"><input type="checkbox" name="organizer.{{$i}}.dryRun" {{if $org.DryRun}}checked{{end}}> {{call $.T "dry_run"}}</label>
+            <div><label>{{call $.T "ntfy_url"}}</label><input type="text" name="organizer.{{$i}}.ntfyURL" value="{{$org.NtfyURL}}"></div>
+            <div><label>{{call $.T "target"}}</label><input type="text" name="organizer.{{$i}}.target" value="{{$org.Target}}"></div>
+            <div><label>{{call $.T "target_structure"}}</label><input type="text" name="organizer.{{$i}}.targetStructure" value="{{$org.TargetStructure}}"></div>
+            <div><label>{{call $.T "fallback_folder"}}</label><input type="text" name="organizer.{{$i}}.fallbackFolder" value="{{$org.FallbackFolder}}"></div>
+          </div>
+          <input type="hidden" name="organizer.{{$i}}.sourceCount" value="{{len $org.Sources}}">
+          {{range $j, $src := $org.Sources}}
+          <div class="card">
+            <h4>{{call $.T "source"}} {{$j}}</h4>
+            <div class="grid">
+              <div><label>{{call $.T "path"}}</label><input type="text" name="organizer.{{$i}}.sources.{{$j}}.path" value="{{$src.Path}}"></div>
+              <div><label>{{call $.T "mode"}}</label><input type="text" name="organizer.{{$i}}.sources.{{$j}}.mode" value="{{$src.Mode}}"></div>
+              <div><label>{{call $.T "schedule"}}</label><input type="text" name="organizer.{{$i}}.sources.{{$j}}.schedule" value="{{$src.Schedule}}"></div>
+              <label class="checkbox"><input type="checkbox" name="organizer.{{$i}}.sources.{{$j}}.duplicatesEnabled" {{if $src.DuplicatesEnabled}}checked{{end}}> {{call $.T "duplicates_enabled"}}</label>
+              <div><label>{{call $.T "detection_mode"}}</label><input type="text" name="organizer.{{$i}}.sources.{{$j}}.detectionMode" value="{{$src.DetectionMode}}"></div>
+              <div><label>{{call $.T "action_method"}}</label><input type="text" name="organizer.{{$i}}.sources.{{$j}}.actionMethod" value="{{$src.ActionMethod}}"></div>
+              <div><label>{{call $.T "duplicate_folder"}}</label><input type="text" name="organizer.{{$i}}.sources.{{$j}}.duplicateFolder" value="{{$src.DuplicateFolder}}"></div>
+            </div>
+          </div>
+          {{end}}
+        </div>
+        {{end}}
+      </section>
+
+      <input type="hidden" name="duplicateDetectionCount" value="{{len .Data.Form.DuplicateDetection}}">
+      <section class="card">
+        <h2>{{call .T "duplicate_section"}}</h2>
+        {{range $i, $dd := .Data.Form.DuplicateDetection}}
+        <div class="card">
+          <h3>{{call $.T "duplicate_job"}} {{$i}}</h3>
+          <div class="grid">
+            <label class="checkbox"><input type="checkbox" name="duplicateDetection.{{$i}}.enabled" {{if $dd.Enabled}}checked{{end}}> {{call $.T "enabled"}}</label>
+            <label class="checkbox"><input type="checkbox" name="duplicateDetection.{{$i}}.dryRun" {{if $dd.DryRun}}checked{{end}}> {{call $.T "dry_run"}}</label>
+            <div><label>{{call $.T "schedule"}}</label><input type="text" name="duplicateDetection.{{$i}}.schedule" value="{{$dd.Schedule}}"></div>
+            <div><label>{{call $.T "detection_mode"}}</label><input type="text" name="duplicateDetection.{{$i}}.detectionMode" value="{{$dd.DetectionMode}}"></div>
+            <div><label>{{call $.T "action_method"}}</label><input type="text" name="duplicateDetection.{{$i}}.actionMethod" value="{{$dd.ActionMethod}}"></div>
+            <div><label>{{call $.T "duplicate_folder"}}</label><input type="text" name="duplicateDetection.{{$i}}.duplicateFolder" value="{{$dd.DuplicateFolder}}"></div>
+            <div><label>{{call $.T "ntfy_url"}}</label><input type="text" name="duplicateDetection.{{$i}}.ntfyURL" value="{{$dd.NtfyURL}}"></div>
+          </div>
+          <input type="hidden" name="duplicateDetection.{{$i}}.sourceCount" value="{{len $dd.Sources}}">
+          <div class="grid">
+            {{range $j, $source := $dd.Sources}}
+            <div>
+              <label>{{call $.T "source"}} {{$j}}</label>
+              <input type="text" name="duplicateDetection.{{$i}}.sources.{{$j}}" value="{{$source}}">
+            </div>
+            {{end}}
+          </div>
+        </div>
+        {{end}}
+      </section>
+
+      <section class="card">
+        <h2>{{call .T "save_target"}}</h2>
+        <div class="inline-options">
+          <label class="checkbox"><input type="radio" name="saveTarget" value="active" {{if ne .Data.Form.SaveTarget "separate"}}checked{{end}}> {{call .T "save_target_active"}}</label>
+          <label class="checkbox"><input type="radio" name="saveTarget" value="separate" {{if eq .Data.Form.SaveTarget "separate"}}checked{{end}}> {{call .T "save_target_separate"}}</label>
+        </div>
+        <div style="margin-top: .75rem;">
+          <label>{{call .T "separate_path"}}</label>
+          <input type="text" name="separatePath" value="{{.Data.Form.SeparatePath}}">
+        </div>
+      </section>
+
+      <div class="actions">
+        <button type="submit" formaction="/ui/validate" hx-post="/ui/validate" hx-target="#feedback" hx-swap="innerHTML" class="secondary">{{call .T "validate"}}</button>
+        <button type="submit" formaction="/ui/save" hx-post="/ui/save" hx-target="#feedback" hx-swap="innerHTML">{{call .T "save"}}</button>
+      </div>
+    </form>
+  </main>
+</body>
+</html>
+{{end}}
+

@@ -4,6 +4,12 @@
 # State directory for resume support (default: /data/state)
 stateDir: /data/state
 
+# --- Optional Web UI ---
+# Small server-rendered configuration UI for local/private use.
+webUI:
+  enabled: false
+  address: 127.0.0.1:8080
+
 # --- Organizer Feature ---
 # Organizes photos/videos from source directories into a date-based target structure.
 organizer:
