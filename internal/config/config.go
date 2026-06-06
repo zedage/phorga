@@ -3,8 +3,15 @@ package config
 // Config is the root configuration structure for Phorga.
 type Config struct {
 	StateDir           string               `yaml:"stateDir,omitempty" json:"stateDir,omitempty"`
+	WebUI              *WebUIConfig         `yaml:"webUI,omitempty" json:"webUI,omitempty"`
 	Organizer          []OrganizerProfile   `yaml:"organizer" json:"organizer"`
 	DuplicateDetection []DuplicateDetection `yaml:"duplicateDetection" json:"duplicateDetection"`
+}
+
+// WebUIConfig configures the optional built-in configuration web UI.
+type WebUIConfig struct {
+	Enabled bool   `yaml:"enabled" json:"enabled"`
+	Address string `yaml:"address,omitempty" json:"address,omitempty"`
 }
 
 // OrganizerProfile defines a single organizer target with its sources.

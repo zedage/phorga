@@ -6,6 +6,7 @@ Headless photo/video organizer and duplicate detector. Runs as a daemon, organiz
 
 - **Organizer**: date-based file organization (EXIF → filename → source path → mtime fallback), move/copy, per-source cron scheduling, lightweight duplicate handling, dry-run, state/resume
 - **Duplicate Detection**: independent metadata- or content-based (perceptual hash) dedup across sources, moveToFolder/skip actions, dry-run
+- **Web UI**: optional built-in server-rendered configuration UI with HTMX-friendly endpoints and UI localization (DE/EN/IT/FR)
 - **Notifications**: optional ntfy.sh push notifications on run completion
 - **Docker-first**: single container, multi-arch (amd64/arm64), works on Synology NAS
 
@@ -49,7 +50,39 @@ duplicateDetection:
     action:
       method: moveToFolder
       duplicateFolder: /photos/duplicates
+
+webUI:
+  enabled: true
+  address: 127.0.0.1:8080
 ```
+
+`webUI` is optional. The UI is intended for **local/private deployments**. Do not expose it publicly without additional protection.
+
+### Web UI
+
+Phorga can expose a small built-in configuration UI from the same process that runs the scheduler.
+
+- Server-rendered HTML with HTMX-compatible validation/save endpoints
+- UI localization: German, English, Italian, French
+- Displays the currently loaded effective configuration values
+- Saves either back to the active config file or to a separate config file
+
+Enable it in config:
+
+```yaml
+webUI:
+  enabled: true
+  address: 127.0.0.1:8080
+```
+
+Or override at startup:
+
+```bash
+go run ./cmd/phorga --config config.yaml --web-ui
+go run ./cmd/phorga --config config.yaml --web-ui --web-ui-addr 127.0.0.1:9090
+```
+
+The UI shows the values currently loaded at startup. Saving to a separate file writes a new config file but does not automatically reload the running scheduler.
 
 ### TargetStructure Tokens
 
@@ -142,6 +175,7 @@ internal/
   state/                 JSON state persistence (resume support)
   scheduler/             Cron wrapper with overlap prevention
   notify/                ntfy.sh client
+  webui/                 Optional built-in configuration UI (HTTP, templates, i18n)
 ```
 
 ## Docker

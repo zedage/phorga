@@ -3,11 +3,14 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
 func TestLoadYAML(t *testing.T) {
 	content := `
+webUI:
+  enabled: true
 organizer:
   - target: /photos/organized
     sources:
@@ -21,6 +24,9 @@ organizer:
 	}
 	if cfg.Organizer[0].Target != "/photos/organized" {
 		t.Errorf("unexpected target: %s", cfg.Organizer[0].Target)
+	}
+	if cfg.WebUI == nil || cfg.WebUI.Address != DefaultWebUIAddress {
+		t.Fatalf("expected default web UI address %q, got %#v", DefaultWebUIAddress, cfg.WebUI)
 	}
 	if cfg.Organizer[0].TargetStructure != "{year}/{month}" {
 		t.Errorf("expected default targetStructure, got: %s", cfg.Organizer[0].TargetStructure)
@@ -200,6 +206,36 @@ func TestValidateEmptyConfig(t *testing.T) {
 	}
 }
 
+func TestValidateWebUIRequiresAddressWhenEnabled(t *testing.T) {
+	cfg := &Config{
+		WebUI: &WebUIConfig{Enabled: true, Address: "invalid"},
+		Organizer: []OrganizerProfile{{
+			Target:  "/target",
+			Sources: []OrganizerSource{{Path: "/src", Mode: "copy", Schedule: "0 2 * * *"}},
+		}},
+	}
+	if err := Validate(cfg); err == nil {
+		t.Fatal("expected validation error for invalid web UI address")
+	}
+}
+
+func TestValidateProblemsReturnsIndividualMessages(t *testing.T) {
+	cfg := &Config{
+		WebUI: &WebUIConfig{Enabled: true, Address: "invalid"},
+		Organizer: []OrganizerProfile{{
+			Target:  "/target",
+			Sources: []OrganizerSource{{Path: "/src", Mode: "copy", Schedule: "0 2 * * *"}},
+		}},
+	}
+	problems := ValidateProblems(cfg)
+	if len(problems) == 0 {
+		t.Fatal("expected at least one validation problem")
+	}
+	if !strings.Contains(problems[0], "webUI.address") {
+		t.Fatalf("expected problem to reference webUI.address, got %q", problems[0])
+	}
+}
+
 func TestResolveConfigPath_CLI(t *testing.T) {
 	tmp := writeTemp(t, "config.yaml", "organizer: []")
 	path, err := ResolveConfigPath(tmp)
@@ -229,11 +265,74 @@ func TestResolveConfigPath_NotFound(t *testing.T) {
 	dir := t.TempDir()
 	oldWd, _ := os.Getwd()
 	_ = os.Chdir(dir)
-	defer os.Chdir(oldWd)
+	defer func() { _ = os.Chdir(oldWd) }()
 
 	_, err := ResolveConfigPath("")
 	if err == nil {
 		t.Fatal("expected error when no config file found")
+	}
+}
+
+func TestSaveAndLoadYAMLRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	original := &Config{
+		StateDir: "/tmp/state",
+		WebUI:    &WebUIConfig{Enabled: true, Address: "127.0.0.1:9090"},
+		Organizer: []OrganizerProfile{{
+			DryRun:          true,
+			Target:          "/target",
+			TargetStructure: "{year}/{Monat}",
+			FallbackFolder:  "/fallback",
+			Sources: []OrganizerSource{{
+				Path:     "/src",
+				Mode:     "copy",
+				Schedule: "0 2 * * *",
+			}},
+		}},
+	}
+
+	if err := Save(path, original); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	if loaded.WebUI == nil || !loaded.WebUI.Enabled || loaded.WebUI.Address != "127.0.0.1:9090" {
+		t.Fatalf("unexpected web UI config after roundtrip: %#v", loaded.WebUI)
+	}
+	if loaded.Organizer[0].Target != "/target" {
+		t.Fatalf("unexpected organizer target after roundtrip: %s", loaded.Organizer[0].Target)
+	}
+}
+
+func TestSaveAndLoadJSONRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	original := &Config{
+		Organizer: []OrganizerProfile{{
+			Target:  "/target",
+			Sources: []OrganizerSource{{Path: "/src", Mode: "move", Schedule: "0 3 * * *"}},
+		}},
+		DuplicateDetection: []DuplicateDetection{{
+			Enabled:       true,
+			Schedule:      "0 4 * * *",
+			Sources:       []string{"/photos1"},
+			DetectionMode: "content",
+			Action:        DuplicateAction{Method: "skip"},
+		}},
+	}
+
+	if err := Save(path, original); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	if len(loaded.DuplicateDetection) != 1 || loaded.DuplicateDetection[0].DetectionMode != "content" {
+		t.Fatalf("unexpected duplicate detection after roundtrip: %#v", loaded.DuplicateDetection)
 	}
 }
 
@@ -257,4 +356,3 @@ func writeTemp(t *testing.T, name string, content string) string {
 	}
 	return path
 }
-

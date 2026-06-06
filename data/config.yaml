@@ -4,6 +4,11 @@
 
 stateDir: C:\Users\meinr\github\zedage\phorganizer\data\state
 
+# Optional built-in web UI (recommended only on local/private networks)
+# webUI:
+#   enabled: true
+#   address: 127.0.0.1:8080
+
 organizer:
   - dryRun: false
     target: data/target
@@ -28,6 +33,9 @@ duplicateDetection:
     action:
       method: moveToFolder
       duplicateFolder: C:\Users\meinr\github\zedage\phorganizer\data\duplicates
+webUI:
+  enabled: true
+  address: 127.0.0.1:8080
 
 # ===== MULTILINGUAL EXAMPLES =====
 # Uncomment one of these as alternative organizer configs:

@@ -12,7 +12,7 @@ It runs as a daemon inside a Docker container, organizing media files by date me
 
 * Automatic date-based organization of photos/videos into configurable folder structures.
 * Independent duplicate detection (metadata- and content-based).
-* No GUI — configured via YAML/JSON, runs as background daemon.
+* Primarily file-configured via YAML/JSON, with an optional built-in local/private web UI for configuration management.
 * Docker-first deployment, multi-arch (amd64, arm64).
 * Optional push notifications via ntfy.sh.
 
@@ -51,7 +51,8 @@ It runs as a daemon inside a Docker container, organizing media files by date me
 == 2. Constraints
 
 * Written in Go (pure Go, no CGO for cross-compilation).
-* Configuration via YAML or JSON file only.
+* Configuration via YAML or JSON file remains the source of truth.
+* Optional built-in web UI is intended for local/private deployment, not public exposure without additional protection.
 * No GUI or REST API.
 * State persistence via flat JSON files (no database).
 * Docker as primary deployment mechanism.
@@ -64,6 +65,7 @@ It runs as a daemon inside a Docker container, organizing media files by date me
 ----
 @startuml
 actor "User" as user
+actor "Browser User" as browser
 node "Phorga\n(Docker)" as pho
 folder "Source\nDirectories" as src
 folder "Target\nDirectory" as tgt
@@ -71,6 +73,7 @@ folder "Duplicate\nFolder" as dup
 cloud "ntfy.sh" as ntfy
 
 user --> pho : config.yaml
+browser --> pho : HTTP / Web UI
 src --> pho : reads media files
 pho --> tgt : organizes by date
 pho --> dup : moves duplicates
@@ -99,11 +102,15 @@ pho --> ntfy : sends notifications
 | Configuration
 | YAML / JSON file
 | Mounted into container at `/config/config.yaml`.
+
+| Web UI
+| HTTP + server-rendered HTML / HTMX
+| Optional local/private configuration interface served by the same process.
 |===
 
 == 4. Solution Strategy
 
-* *Single binary, two feature loops*: Organizer and Duplicate Detection run as independent goroutine-based cron jobs within one process.
+* *Single binary, optional local web UI*: Organizer and Duplicate Detection run as independent goroutine-based cron jobs within one process; the same process can optionally expose a configuration web UI.
 * *Cron-based scheduling*: Uses `robfig/cron/v3` for in-process scheduling. No external cron dependency.
 * *Atomic file operations*: All writes use temp-file + rename to prevent partial files on crash.
 * *JSON state files*: Simple, inspectable, corruption-tolerant state persistence.
@@ -129,6 +136,7 @@ package "internal" {
   [fileops]
   [state]
   [notify]
+  [webui]
 }
 
 [main] --> [config]
@@ -136,6 +144,7 @@ package "internal" {
 [main] --> [organizer]
 [main] --> [dedup]
 [main] --> [notify]
+[main] --> [webui]
 [organizer] --> [metadata]
 [organizer] --> [fileops]
 [organizer] --> [state]
@@ -176,6 +185,9 @@ package "internal" {
 
 | `notify`
 | ntfy.sh HTTP client, fire-and-forget with timeout.
+
+| `webui`
+| Optional HTTP handlers, templates, localization, and config save/validate flow.
 |===
 
 == 6. Runtime View
@@ -222,6 +234,23 @@ stop
 
 [plantuml, runtime-dedup, svg]
 ----
+
+=== Web UI Request
+
+[plantuml, runtime-webui, svg]
+----
+@startuml
+actor Browser
+Browser -> main : GET /ui
+main -> webui : render page
+webui -> config : map loaded config to form/view model
+webui --> Browser : HTML page
+Browser -> main : POST /ui/validate or /ui/save
+main -> webui : parse form
+webui -> config : validate / save
+webui --> Browser : HTML fragment or full HTML response
+@enduml
+----
 @startuml
 start
 :Cron triggers dedup job;
@@ -248,6 +277,7 @@ stop
 ----
 @startuml
 node "Host / NAS" {
+  actor "Browser" as browser
   node "Docker" {
     artifact "phorga\ncontainer" as app
     file "/config/config.yaml" as cfg
@@ -260,6 +290,7 @@ node "Host / NAS" {
 cloud "ntfy.sh" as ntfy
 
 cfg --> app
+browser --> app : HTTP 127.0.0.1:8080
 app --> src : reads
 app --> tgt : writes
 app --> dup : writes
@@ -292,6 +323,12 @@ All file writes use a temp-file in the target directory followed by `os.Rename`.
 * JSON-formatted via `log/slog`.
 * All actions, skips, and errors are logged with context.
 
+=== Configuration UI
+* Optional HTTP server in the main process.
+* Server-rendered templates with HTMX-compatible validation and save endpoints.
+* Displays the currently loaded config and can save to the active file or a separate file.
+* Intended for local/private use unless protected externally.
+
 == 9. Architectural Decisions
 
 [cols="1,2,3"]
@@ -321,6 +358,10 @@ All file writes use a temp-file in the target directory followed by `os.Rename`.
 | D6
 | Atomic writes (temp+rename)
 | Prevents partial files on crash or power loss.
+
+| D7
+| Optional built-in HTMX-style web UI
+| Keeps deployment to one binary while avoiding a SPA frontend stack.
 |===
 
 == 10. Risks and Technical Debt
@@ -344,6 +385,10 @@ All file writes use a temp-file in the target directory followed by `os.Rename`.
 | No file locking
 | Concurrent external writes during scan
 | Lock-file per source prevents overlapping Phorga runs.
+
+| Local/private web UI only
+| Public exposure would be unsafe without additional controls
+| Document local/private deployment scope and rely on external protection if exposed.
 |===
 
 == 11. Glossary

@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"strings"
 
 	"github.com/robfig/cron/v3"
@@ -59,10 +60,23 @@ var validTargetTokens = map[string]bool{
 
 // Validate checks the entire configuration and returns all errors found.
 func Validate(cfg *Config) error {
+	errs := ValidateProblems(cfg)
+	if len(errs) > 0 {
+		return fmt.Errorf("configuration validation failed:\n  - %s", strings.Join(errs, "\n  - "))
+	}
+	return nil
+}
+
+// ValidateProblems checks the entire configuration and returns individual problems.
+func ValidateProblems(cfg *Config) []string {
 	var errs []string
 
 	if len(cfg.Organizer) == 0 && len(cfg.DuplicateDetection) == 0 {
-		return fmt.Errorf("config must define at least one organizer profile or duplicateDetection job")
+		return []string{"config must define at least one organizer profile or duplicateDetection job"}
+	}
+
+	if cfg.WebUI != nil {
+		errs = append(errs, validateWebUIConfig("webUI", *cfg.WebUI)...)
 	}
 
 	for i, profile := range cfg.Organizer {
@@ -75,10 +89,26 @@ func Validate(cfg *Config) error {
 		errs = append(errs, validateDuplicateDetection(prefix, dd)...)
 	}
 
-	if len(errs) > 0 {
-		return fmt.Errorf("configuration validation failed:\n  - %s", strings.Join(errs, "\n  - "))
+	return errs
+}
+
+func validateWebUIConfig(prefix string, webUI WebUIConfig) []string {
+	var errs []string
+
+	if !webUI.Enabled {
+		return errs
 	}
-	return nil
+
+	if webUI.Address == "" {
+		errs = append(errs, fmt.Sprintf("%s.address is required when web UI is enabled", prefix))
+		return errs
+	}
+
+	if _, _, splitErr := net.SplitHostPort(webUI.Address); splitErr != nil {
+		errs = append(errs, fmt.Sprintf("%s.address must be in host:port form, got '%s'", prefix, webUI.Address))
+	}
+
+	return errs
 }
 
 func validateOrganizerProfile(prefix string, p OrganizerProfile) []string {

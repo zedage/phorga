@@ -10,6 +10,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const DefaultWebUIAddress = "127.0.0.1:8080"
+
 // Load reads and parses a configuration file. Supports YAML (.yaml, .yml) and JSON (.json).
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
@@ -44,10 +46,12 @@ func applyDefaults(cfg *Config) {
 	if cfg.StateDir == "" {
 		cfg.StateDir = "/data/state"
 	}
+	if cfg.WebUI != nil && cfg.WebUI.Address == "" {
+		cfg.WebUI.Address = DefaultWebUIAddress
+	}
 	for i := range cfg.Organizer {
 		if cfg.Organizer[i].TargetStructure == "" {
 			cfg.Organizer[i].TargetStructure = "{year}/{month}"
 		}
 	}
 }
-

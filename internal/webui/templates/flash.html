@@ -1,0 +1,14 @@
+{{define "flash"}}
+{{with .Data.Flash}}
+<div class="flash {{.Level}}">
+  <strong>{{.Title}}</strong>
+  {{if .Message}}<div>{{.Message}}</div>{{end}}
+  {{if .Errors}}
+  <ul>
+    {{range .Errors}}<li>{{.}}</li>{{end}}
+  </ul>
+  {{end}}
+</div>
+{{end}}
+{{end}}
+
