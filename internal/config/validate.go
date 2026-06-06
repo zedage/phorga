@@ -31,11 +31,30 @@ var validDedupModes = map[string]bool{
 }
 
 // validTargetTokens lists the allowed tokens in targetStructure.
+// These are case-insensitive - {year}, {Year}, {YEAR} are all valid.
 var validTargetTokens = map[string]bool{
+	// English
 	"year":          true,
 	"month":         true,
-	"monthWithName": true,
+	"monthwithname": true,
 	"day":           true,
+	"monthnumber":   true,
+	"daynumber":     true,
+
+	// German
+	"jahr":  true,
+	"monat": true,
+	"tag":   true,
+
+	// French
+	"année": true,
+	"mois":  true,
+	"jour":  true,
+
+	// Italian
+	"anno":   true,
+	"mese":   true,
+	"giorno": true,
 }
 
 // Validate checks the entire configuration and returns all errors found.
@@ -167,6 +186,7 @@ func validateCron(expr string) error {
 }
 
 // validateTargetStructure checks that all tokens in the structure are valid.
+// Tokens are case-insensitive: {year}, {Year}, {YEAR} are all valid.
 func validateTargetStructure(structure string) error {
 	if structure == "" {
 		return nil // will be defaulted
@@ -184,8 +204,9 @@ func validateTargetStructure(structure string) error {
 			return fmt.Errorf("unclosed token at position %d", start)
 		}
 		token := rest[start+1 : start+end]
-		if !validTargetTokens[token] {
-			return fmt.Errorf("unknown token '{%s}'; valid tokens: year, month, monthWithName, day", token)
+		lowerToken := strings.ToLower(token)
+		if !validTargetTokens[lowerToken] {
+			return fmt.Errorf("unknown token '{%s}'; valid tokens: year/jahr/année/anno, month/monat/mois/mese, monthWithName, day/tag/jour/giorno, monthNumber, dayNumber", token)
 		}
 		rest = rest[start+end+1:]
 	}
@@ -224,4 +245,3 @@ func validateDetectionMode(mode string, validFields []string) error {
 	}
 	return nil
 }
-

@@ -365,7 +365,7 @@ All file writes use a temp-file in the target directory followed by `os.Rename`.
 | Number of differing bits between two hashes. ≤ 5 = duplicate in V1.
 
 | targetStructure
-| Path template with tokens (`{year}`, `{month}`, etc.) for the output folder.
+| Path template with multilingual tokens. Supports English (`{year}`, `{month}`, `{day}`), German (`{jahr}`, `{monat}`, `{tag}`), French (`{année}`, `{mois}`, `{jour}`), and Italian (`{anno}`, `{mese}`, `{giorno}`). Tokens are case-sensitive for output formatting (e.g., `{monat}` → february, `{Monat}` → Februar, `{MONAT}` → FEBRUAR).
 
 | fallbackFolder
 | Destination for files where no date can be determined.

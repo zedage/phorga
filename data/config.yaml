@@ -1,16 +1,16 @@
 # Phorga Demo/Test Configuration
 # Reset test data: go run testdata/tools/generate.go
-# Run Phorga:  go run ./cmd/Phorga --config data/config.yaml
+# Run Phorga:  go run ./cmd/phorga --config data/config.yaml
 
-stateDir: C:\Users\meinr\github\zedage\phorga\data\state
+stateDir: C:\Users\meinr\github\zedage\phorganizer\data\state
 
 organizer:
   - dryRun: false
     target: data/target
     targetStructure: "{year}/{month}"
-    fallbackFolder: C:\Users\meinr\github\zedage\phorga\data\fallback
+    fallbackFolder: C:\Users\meinr\github\zedage\phorganizer\data\fallback
     sources:
-      - path: C:\Users\meinr\github\zedage\phorga\data\source
+      - path: C:\Users\meinr\github\zedage\phorganizer\data\source
         mode: copy
         duplicates:
           detectionMode: filename
@@ -23,9 +23,52 @@ duplicateDetection:
     dryRun: true
     schedule: "* * * * *"  # every minute for demo purposes
     sources:
-      - C:\Users\meinr\github\zedage\phorga\data\source
+      - C:\Users\meinr\github\zedage\phorganizer\data\source
     detectionMode: content
     action:
       method: moveToFolder
-      duplicateFolder: C:\Users\meinr\github\zedage\phorga\data\duplicates
+      duplicateFolder: C:\Users\meinr\github\zedage\phorganizer\data\duplicates
+
+# ===== MULTILINGUAL EXAMPLES =====
+# Uncomment one of these as alternative organizer configs:
+
+# German: organized by year/month name (with title case, e.g., 2024/März)
+# organizer:
+#   - target: data/target-de
+#     targetStructure: "{year}/{Monat}"
+#     fallbackFolder: data/fallback
+#     sources:
+#       - path: data/source
+#         mode: copy
+#         schedule: "0 2 * * *"
+
+# French: organized by year/month name (lowercase, e.g., 2024/mars)
+# organizer:
+#   - target: data/target-fr
+#     targetStructure: "{year}/{mois}/{jour}"
+#     fallbackFolder: data/fallback
+#     sources:
+#       - path: data/source
+#         mode: copy
+#         schedule: "0 2 * * *"
+
+# Italian: organized by year/month name/day
+# organizer:
+#   - target: data/target-it
+#     targetStructure: "{anno}/{mese}/{giorno}"
+#     fallbackFolder: data/fallback
+#     sources:
+#       - path: data/source
+#         mode: copy
+#         schedule: "0 2 * * *"
+
+# Mixed format: numeric month and day with German month name
+# organizer:
+#   - target: data/target-mixed
+#     targetStructure: "{year}/{monthNumber}-{Monat}/{dayNumber}"
+#     fallbackFolder: data/fallback
+#     sources:
+#       - path: data/source
+#         mode: copy
+#         schedule: "0 2 * * *"
 

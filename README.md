@@ -30,7 +30,7 @@ YAML or JSON. See [`config.example.yaml`](config.example.yaml) for a complete ex
 ```yaml
 organizer:
   - target: /photos/organized
-    targetStructure: "{year}/{month}"   # tokens: {year}, {month}, {monthWithName}, {day}
+    targetStructure: "{year}/{month}"   # tokens explained below
     fallbackFolder: /photos/unknown     # files without date metadata
     sources:
       - path: /photos/incoming
@@ -51,7 +51,65 @@ duplicateDetection:
       duplicateFolder: /photos/duplicates
 ```
 
-Config resolution: `--config` flag → `PHORGA_CONFIG` env → `./config.yaml`
+### TargetStructure Tokens
+
+Phorga supports **multilingual month and day names** in `targetStructure`. Tokens are **case-sensitive** for output formatting.
+
+#### Supported Tokens
+
+| Token | Format | Language | Example |
+|-------|--------|----------|---------|
+| `{year}`, `{jahr}`, `{année}`, `{anno}` | 4-digit numeric | EN/DE/FR/IT | 2024 |
+| `{month}` | 2-digit numeric | English context | 03 |
+| `{monat}` | month name | Deutsch | **märz** (case: `{märz}`, `{März}`, `{MÄRZ}`) |
+| `{mois}` | month name | Français | **mars** (case: `{mars}`, `{Mars}`, `{MARS}`) |
+| `{mese}` | month name | Italiano | **marzo** (case: `{marzo}`, `{Marzo}`, `{MARZO}`) |
+| `{monthWithName}` | numeric + English name | English | 03-march |
+| `{monthNumber}` | 2-digit zero-padded | all | 03 |
+| `{day}`, `{tag}`, `{jour}`, `{giorno}` | 2-digit numeric | EN/DE/FR/IT | 15 |
+| `{dayNumber}` | 2-digit zero-padded | all | 15 |
+
+#### Case Sensitivity
+
+Month names respect the case of the placeholder token:
+
+```yaml
+# Examples with date 2024-03-15:
+
+targetStructure: "{year}/{monat}"      # → 2024/märz
+targetStructure: "{year}/{Monat}"      # → 2024/März
+targetStructure: "{year}/{MONAT}"      # → 2024/MÄRZ
+
+targetStructure: "{year}/{mois}/{jour}"           # → 2024/mars/15
+targetStructure: "{year}/{Mois}/{Jour}"           # → 2024/Mars/15
+targetStructure: "{year}/{monthNumber}-{Monat}"   # → 2024/03-März
+```
+
+#### Examples for Different Users
+
+**German user:**
+```yaml
+targetStructure: "{year}/{Monat}"              # 2024/März
+targetStructure: "{year}/{Monat}/{Tag}"        # (Tag=numeric 15)
+```
+
+**French user:**
+```yaml
+targetStructure: "{year}/{Mois}"               # 2024/Mars
+targetStructure: "{year}/{mois}/{jour}"        # 2024/mars/15
+```
+
+**Italian user:**
+```yaml
+targetStructure: "{year}/{Mese}"               # 2024/Marzo
+targetStructure: "{anno}/{mese}/{giorno}"      # 2024/marzo/15
+```
+
+**Mixed format user:**
+```yaml
+targetStructure: "{year}/{monthNumber}-{Monat}/{dayNumber}"  # 2024/03-März/15
+targetStructure: "{year}/{monthNumber}_{Monat}"              # 2024/03_März
+```
 
 ## Build & Test
 

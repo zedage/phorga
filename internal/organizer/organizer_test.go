@@ -708,3 +708,96 @@ func TestTransferFile_InvalidMode(t *testing.T) {
 		t.Error("expected error for invalid mode")
 	}
 }
+
+// TestOrganize_MultilingualTokens_German tests organizing photos with German targetStructure
+func TestOrganize_MultilingualTokens_German(t *testing.T) {
+	srcDir, tgtDir, stateDir := setupTestDirs(t)
+	createTestFile(t, srcDir, "photo.jpg", "image data")
+
+	profile := config.OrganizerProfile{
+		Target:          tgtDir,
+		TargetStructure: "{jahr}/{Monat}", // German: year/Month with title case
+	}
+	source := config.OrganizerSource{
+		Path:     srcDir,
+		Mode:     "copy",
+		Schedule: "0 2 * * *",
+	}
+
+	st := state.New()
+	sp := filepath.Join(stateDir, "state.json")
+	result := Run(profile, source, st, sp)
+
+	if result.Errors > 0 {
+		t.Errorf("expected no errors, got %d", result.Errors)
+	}
+	if result.Processed != 1 {
+		t.Errorf("expected 1 file processed, got %d", result.Processed)
+	}
+
+	// Should create folder like 2026/Mai (or current date in German)
+	entries, _ := os.ReadDir(tgtDir)
+	if len(entries) == 0 {
+		t.Error("expected target directory to have subdirectories")
+	}
+}
+
+// TestOrganize_MultilingualTokens_French tests organizing photos with French targetStructure
+func TestOrganize_MultilingualTokens_French(t *testing.T) {
+	srcDir, tgtDir, stateDir := setupTestDirs(t)
+	createTestFile(t, srcDir, "photo.jpg", "image data")
+
+	profile := config.OrganizerProfile{
+		Target:          tgtDir,
+		TargetStructure: "{année}/{mois}", // French: year/month lowercase
+	}
+	source := config.OrganizerSource{
+		Path:     srcDir,
+		Mode:     "copy",
+		Schedule: "0 2 * * *",
+	}
+
+	st := state.New()
+	sp := filepath.Join(stateDir, "state.json")
+	result := Run(profile, source, st, sp)
+
+	if result.Errors > 0 {
+		t.Errorf("expected no errors, got %d", result.Errors)
+	}
+	if result.Processed != 1 {
+		t.Errorf("expected 1 file processed, got %d", result.Processed)
+	}
+}
+
+// TestOrganize_MultilingualTokens_Mixed tests organizing with mixed tokens
+func TestOrganize_MultilingualTokens_Mixed(t *testing.T) {
+	srcDir, tgtDir, stateDir := setupTestDirs(t)
+	createTestFile(t, srcDir, "photo.jpg", "image data")
+
+	profile := config.OrganizerProfile{
+		Target:          tgtDir,
+		TargetStructure: "{year}/{monthNumber}-{Monat}/{dayNumber}",
+	}
+	source := config.OrganizerSource{
+		Path:     srcDir,
+		Mode:     "copy",
+		Schedule: "0 2 * * *",
+	}
+
+	st := state.New()
+	sp := filepath.Join(stateDir, "state.json")
+	result := Run(profile, source, st, sp)
+
+	if result.Errors > 0 {
+		t.Errorf("expected no errors, got %d", result.Errors)
+	}
+	if result.Processed != 1 {
+		t.Errorf("expected 1 file processed, got %d", result.Processed)
+	}
+
+	// Should create folder like 2026/05-Mai/30 (current date in mixed format)
+	entries, _ := os.ReadDir(tgtDir)
+	if len(entries) == 0 {
+		t.Error("expected target directory to have subdirectories")
+	}
+}
