@@ -1,12 +1,13 @@
 # Binaries
-phorga
-phorga.exe
+/phorga
+/phorga.exe
 *.exe
 *.dll
 *.so
 *.dylib
 
 # Test / coverage
+/coverage
 coverage/
 coverage.out
 *.test
