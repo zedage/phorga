@@ -78,4 +78,4 @@ The UI has no authentication. Its documentation MUST state that it is meant for 
 
 **Code:** `internal/config/loader.go`
 **Tests:** `internal/config/defaults_test.go#TestLoadAppliesDefaults`, `internal/webui/address_test.go#TestNewAddressPrecedence`
-**Notes:** The page loads HTMX from `unpkg.com`. Without internet access, the forms still work as plain POSTs and return full pages.
+**Notes:** In Docker, the in-container address must be `0.0.0.0:8080`, and the loopback restriction moves to the host port mapping (`127.0.0.1:8080:8080`). README, `docker-compose.yml` and `config.example.yaml` document this. The page loads HTMX from `unpkg.com`. Without internet access, the forms still work as plain POSTs and return full pages.

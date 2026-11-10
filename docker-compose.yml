@@ -1,10 +1,13 @@
-version: "3.8"
-
 services:
   phorga:
     build: .
     container_name: phorga
     restart: unless-stopped
+    # Optional web UI: set webUI.enabled: true and webUI.address: 0.0.0.0:8080
+    # in config.yaml, then uncomment. Binding to 127.0.0.1 keeps the UI
+    # reachable from this host only (it has no authentication).
+    # ports:
+    #   - "127.0.0.1:8080:8080"
     volumes:
       - ./config.yaml:/config/config.yaml:ro
       - /path/to/photos/incoming:/photos/incoming:ro

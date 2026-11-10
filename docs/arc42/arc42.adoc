@@ -292,7 +292,7 @@ node "Host / NAS" {
 cloud "ntfy.sh" as ntfy
 
 cfg --> app
-browser --> app : HTTP 127.0.0.1:8080
+browser --> app : HTTP 127.0.0.1:8080\n(host loopback → container 0.0.0.0:8080)
 app --> src : reads
 app --> tgt : writes
 app --> dup : writes
@@ -305,6 +305,7 @@ app --> ntfy : HTTP POST
 * State volume: `/data/state`
 * Config mount: `/config/config.yaml` (read-only)
 * Timezone via `TZ` environment variable.
+* Web UI (optional): listens on `0.0.0.0:8080` inside the container; the port is published on the host loopback only (`127.0.0.1:8080:8080`).
 
 == 8. Crosscutting Concepts
 

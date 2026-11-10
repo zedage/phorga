@@ -187,6 +187,8 @@ docker compose up -d
 
 Mount your source/target directories and `config.yaml` as volumes. State is persisted in `/data/state`.
 
+**Web UI in Docker:** inside the container, `127.0.0.1` is not reachable from the host. Set `webUI.address: 0.0.0.0:8080` in `config.yaml` and publish the port on the host's loopback only, e.g. `-p 127.0.0.1:8080:8080` (see the commented `ports` entry in [`docker-compose.yml`](docker-compose.yml)). The UI has no authentication, so do not publish it on all interfaces.
+
 ## Documentation
 
 - [`docs/product.md`](docs/product.md): what Phorga does and why
