@@ -71,6 +71,7 @@ func createTestFile(t *testing.T, dir, name, content string) string {
 	return path
 }
 
+// Spec: DUP-002
 func TestDedup_MetadataMode_SameSize(t *testing.T) {
 	src1 := t.TempDir()
 	src2 := t.TempDir()
@@ -97,6 +98,7 @@ func TestDedup_MetadataMode_SameSize(t *testing.T) {
 	t.Logf("duplicates found: %d (expected 0 for files without EXIF)", result.DuplicatesPair)
 }
 
+// Spec: DUP-003
 func TestDedup_ContentMode_IdenticalImages(t *testing.T) {
 	src1 := t.TempDir()
 	src2 := t.TempDir()
@@ -123,6 +125,7 @@ func TestDedup_ContentMode_IdenticalImages(t *testing.T) {
 	}
 }
 
+// Spec: DUP-003
 func TestDedup_ContentMode_DifferentImages(t *testing.T) {
 	src1 := t.TempDir()
 	src2 := t.TempDir()
@@ -146,6 +149,7 @@ func TestDedup_ContentMode_DifferentImages(t *testing.T) {
 	}
 }
 
+// Spec: DUP-005
 func TestDedup_MoveToFolder(t *testing.T) {
 	src1 := t.TempDir()
 	src2 := t.TempDir()
@@ -178,6 +182,7 @@ func TestDedup_MoveToFolder(t *testing.T) {
 	}
 }
 
+// Spec: DUP-007
 func TestDedup_DryRunNoChanges(t *testing.T) {
 	src1 := t.TempDir()
 	src2 := t.TempDir()
@@ -215,6 +220,7 @@ func TestDedup_DryRunNoChanges(t *testing.T) {
 	}
 }
 
+// Spec: DUP-004
 func TestDedup_CrossSource(t *testing.T) {
 	src1 := t.TempDir()
 	src2 := t.TempDir()

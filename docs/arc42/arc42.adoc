@@ -16,6 +16,8 @@ It runs as a daemon inside a Docker container, organizing media files by date me
 * Docker-first deployment, multi-arch (amd64, arm64).
 * Optional push notifications via ntfy.sh.
 
+The product view is in link:../product.md[product.md]. The exact, testable requirements are in link:../specs/README.md[docs/specs] (IDs `ORG-*`, `DUP-*`, `CFG-*`, `NTF-*`, `WEB-*`). This document does not repeat them.
+
 === Quality Goals
 
 [cols="1,3"]
@@ -29,7 +31,7 @@ It runs as a daemon inside a Docker container, organizing media files by date me
 | State is persisted; the daemon resumes where it left off after restarts.
 
 | Simplicity
-| No database, no web UI, no external runtime dependencies beyond Docker.
+| No database, no frontend build chain, no external runtime dependencies beyond Docker. The optional web UI is part of the same binary.
 
 | Portability
 | Runs on Linux, macOS, Windows, and Synology NAS.
@@ -331,37 +333,44 @@ All file writes use a temp-file in the target directory followed by `os.Rename`.
 
 == 9. Architectural Decisions
 
-[cols="1,2,3"]
+Decisions are recorded as ADRs in link:../decisions/README.md[docs/decisions]. This section only indexes them.
+
+[cols="1,4"]
 |===
-| ID | Decision | Rationale
+| ADR | Decision
 
-| D1
-| Single binary with two feature loops
-| Simplifies deployment. One container, one config file.
+| link:../decisions/0001-single-binary-independent-features.md[0001]
+| One binary; organizer and duplicate detection independent
 
-| D2
-| `robfig/cron/v3` for scheduling
-| Mature, pure-Go, avoids external cron dependencies.
+| link:../decisions/0002-in-process-cron-scheduling.md[0002]
+| In-process cron scheduling with `robfig/cron/v3`
 
-| D3
-| `rwcarlsen/goexif` for EXIF
-| Lightweight, no CGO. Sufficient for DateTimeOriginal.
+| link:../decisions/0003-date-resolution-order.md[0003]
+| Date resolution EXIF → filename → path → mtime (`rwcarlsen/goexif`)
 
-| D4
-| Perceptual hash (`goimagehash`) for content dedup
-| Catches visually identical images across re-encodings.
+| link:../decisions/0004-perceptual-hash-for-content-dedup.md[0004]
+| Perceptual hash (`goimagehash`), fixed threshold ≤ 5
 
-| D5
-| JSON flat-file state (no database)
-| No CGO, no external services, easy inspection.
+| link:../decisions/0005-json-state-files.md[0005]
+| JSON flat-file state, no database
 
-| D6
-| Atomic writes (temp+rename)
-| Prevents partial files on crash or power loss.
+| link:../decisions/0006-atomic-file-operations.md[0006]
+| Atomic writes (temp file + rename)
 
-| D7
-| Optional built-in HTMX-style web UI
-| Keeps deployment to one binary while avoiding a SPA frontend stack.
+| link:../decisions/0007-rename-to-phorga.md[0007]
+| Project name Phorga
+
+| link:../decisions/0008-built-in-server-rendered-web-ui.md[0008]
+| Optional built-in, server-rendered web UI with HTMX
+
+| link:../decisions/0009-ui-save-destination-and-no-hot-reload.md[0009]
+| UI saves to active or separate file; no hot reload
+
+| link:../decisions/0010-multilingual-tokens-by-name.md[0010]
+| Multilingual tokens chosen by name; case controls rendering
+
+| link:../decisions/0011-specs-and-agents-md-instead-of-openspec.md[0011]
+| Specs in `docs/specs` + `AGENTS.md` instead of openspec
 |===
 
 == 10. Risks and Technical Debt
@@ -389,6 +398,18 @@ All file writes use a temp-file in the target directory followed by `os.Rename`.
 | Local/private web UI only
 | Public exposure would be unsafe without additional controls
 | Document local/private deployment scope and rely on external protection if exposed.
+
+| "EXIF" comparisons use the resolved date
+| Organizer `exif` mode and dedup `metadata` mode also match on filename/path/mtime dates, which may produce false positives
+| Open question, tracked in specs ORG-011 / DUP-002.
+
+| Groups of 3+ duplicates in dedup
+| Pairwise matching acts on an already-moved file and counts an error
+| Tracked in spec DUP-004. Fix by grouping matches before acting.
+
+| Duplicated token list
+| `targetStructure` tokens are defined in both `config` and `metadata`, so they can diverge
+| Noted in ORG-009 and AGENTS.md. Candidate for refactoring into one list.
 |===
 
 == 11. Glossary

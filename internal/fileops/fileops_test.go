@@ -7,6 +7,7 @@ import (
 	"testing"
 )
 
+// Spec: ORG-004
 func TestAtomicCopy(t *testing.T) {
 	srcDir := t.TempDir()
 	dstDir := t.TempDir()
@@ -36,6 +37,7 @@ func TestAtomicCopy(t *testing.T) {
 	}
 }
 
+// Spec: ORG-004
 func TestAtomicMove(t *testing.T) {
 	srcDir := t.TempDir()
 	dstDir := t.TempDir()
@@ -65,6 +67,7 @@ func TestAtomicMove(t *testing.T) {
 	}
 }
 
+// Spec: ORG-012
 func TestGenerateSuffix(t *testing.T) {
 	s := GenerateSuffix()
 	if len(s) != 4 {
@@ -84,6 +87,7 @@ func TestGenerateSuffix(t *testing.T) {
 	}
 }
 
+// Spec: ORG-012
 func TestAddSuffix(t *testing.T) {
 	tests := []struct {
 		filename, suffix, want string
@@ -117,6 +121,7 @@ func TestEnsureDir(t *testing.T) {
 	}
 }
 
+// Spec: ORG-004
 func TestAtomicCopy_NoTempLeftOnError(t *testing.T) {
 	dstDir := t.TempDir()
 	dstPath := filepath.Join(dstDir, "fail.jpg")

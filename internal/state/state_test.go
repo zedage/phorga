@@ -17,6 +17,7 @@ func TestNewState(t *testing.T) {
 	}
 }
 
+// Spec: ORG-015
 func TestMarkAndCheck(t *testing.T) {
 	s := New()
 	mtime := time.Date(2024, 3, 15, 10, 0, 0, 0, time.UTC)
@@ -43,6 +44,7 @@ func TestMarkAndCheck(t *testing.T) {
 	}
 }
 
+// Spec: ORG-015
 func TestSaveAndLoad(t *testing.T) {
 	s := New()
 	mtime := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
@@ -63,6 +65,7 @@ func TestSaveAndLoad(t *testing.T) {
 	}
 }
 
+// Spec: ORG-015
 func TestLoadMissing(t *testing.T) {
 	s := Load("/nonexistent/state.json")
 	if len(s.ProcessedFiles) != 0 {
@@ -70,6 +73,7 @@ func TestLoadMissing(t *testing.T) {
 	}
 }
 
+// Spec: ORG-015
 func TestLoadCorrupt(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.json")
 	os.WriteFile(path, []byte("not json{{{"), 0644)
@@ -80,6 +84,7 @@ func TestLoadCorrupt(t *testing.T) {
 	}
 }
 
+// Spec: ORG-015
 func TestSaveAtomicity(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "sub", "state.json")

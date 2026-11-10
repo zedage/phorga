@@ -26,6 +26,7 @@ func createTestFile(t *testing.T, dir, name, content string) string {
 	return path
 }
 
+// Spec: ORG-001, ORG-004
 func TestOrganize_CopyMode(t *testing.T) {
 	srcDir, tgtDir, stateDir := setupTestDirs(t)
 	createTestFile(t, srcDir, "photo.jpg", "image data")
@@ -57,6 +58,7 @@ func TestOrganize_CopyMode(t *testing.T) {
 	}
 }
 
+// Spec: ORG-001, ORG-004
 func TestOrganize_MoveMode(t *testing.T) {
 	srcDir, tgtDir, stateDir := setupTestDirs(t)
 	createTestFile(t, srcDir, "photo.jpg", "image data")
@@ -85,6 +87,7 @@ func TestOrganize_MoveMode(t *testing.T) {
 	}
 }
 
+// Spec: ORG-014
 func TestOrganize_DryRun(t *testing.T) {
 	srcDir, tgtDir, stateDir := setupTestDirs(t)
 	createTestFile(t, srcDir, "photo.jpg", "image data")
@@ -120,6 +123,7 @@ func TestOrganize_DryRun(t *testing.T) {
 	}
 }
 
+// Spec: ORG-016
 func TestOrganize_SkipUnsupported(t *testing.T) {
 	srcDir, tgtDir, stateDir := setupTestDirs(t)
 	createTestFile(t, srcDir, "readme.txt", "not a photo")
@@ -143,6 +147,7 @@ func TestOrganize_SkipUnsupported(t *testing.T) {
 	}
 }
 
+// Spec: ORG-015
 func TestOrganize_Resume(t *testing.T) {
 	srcDir, tgtDir, stateDir := setupTestDirs(t)
 	filePath := createTestFile(t, srcDir, "photo.jpg", "image data")
@@ -179,6 +184,7 @@ func TestOrganize_Resume(t *testing.T) {
 	}
 }
 
+// Spec: ORG-012
 func TestOrganize_DuplicateSkip(t *testing.T) {
 	srcDir, tgtDir, stateDir := setupTestDirs(t)
 	createTestFile(t, srcDir, "photo.jpg", "image data")
@@ -215,6 +221,7 @@ func TestOrganize_DuplicateSkip(t *testing.T) {
 	}
 }
 
+// Spec: ORG-003
 func TestOrganize_FallbackFolder(t *testing.T) {
 	srcDir, tgtDir, stateDir := setupTestDirs(t)
 	fallbackDir := t.TempDir()
@@ -243,6 +250,7 @@ func TestOrganize_FallbackFolder(t *testing.T) {
 	}
 }
 
+// Spec: ORG-015
 func TestStatePath(t *testing.T) {
 	p := StatePath("/data/state", "/photos/organized", "/mnt/incoming")
 	if p == "" {
@@ -277,6 +285,7 @@ func TestRunWithTime(t *testing.T) {
 	}
 }
 
+// Spec: ORG-012
 func TestOrganize_DuplicateReplace(t *testing.T) {
 	srcDir, tgtDir, stateDir := setupTestDirs(t)
 
@@ -310,6 +319,7 @@ func TestOrganize_DuplicateReplace(t *testing.T) {
 	}
 }
 
+// Spec: ORG-012
 func TestOrganize_DuplicateAddSuffix(t *testing.T) {
 	srcDir, tgtDir, stateDir := setupTestDirs(t)
 
@@ -343,6 +353,7 @@ func TestOrganize_DuplicateAddSuffix(t *testing.T) {
 	}
 }
 
+// Spec: ORG-012
 func TestOrganize_DuplicateMoveToFolder(t *testing.T) {
 	srcDir, tgtDir, stateDir := setupTestDirs(t)
 	dupDir := t.TempDir()
@@ -385,6 +396,7 @@ func TestOrganize_DuplicateMoveToFolder(t *testing.T) {
 	}
 }
 
+// Spec: ORG-014
 func TestOrganize_DuplicateDryRun(t *testing.T) {
 	srcDir, tgtDir, stateDir := setupTestDirs(t)
 
@@ -424,6 +436,7 @@ func TestOrganize_DuplicateDryRun(t *testing.T) {
 	}
 }
 
+// Spec: ORG-013
 func TestOrganize_NoDuplicateConfig_ExistingTarget(t *testing.T) {
 	srcDir, tgtDir, stateDir := setupTestDirs(t)
 
@@ -454,6 +467,7 @@ func TestOrganize_NoDuplicateConfig_ExistingTarget(t *testing.T) {
 	}
 }
 
+// Spec: ORG-011
 func TestOrganize_FiledateDetection(t *testing.T) {
 	srcDir, tgtDir, stateDir := setupTestDirs(t)
 
@@ -485,6 +499,7 @@ func TestOrganize_FiledateDetection(t *testing.T) {
 	_ = result
 }
 
+// Spec: ORG-011
 func TestOrganize_ExifDetection(t *testing.T) {
 	srcDir, tgtDir, stateDir := setupTestDirs(t)
 
@@ -513,6 +528,7 @@ func TestOrganize_ExifDetection(t *testing.T) {
 	_ = result
 }
 
+// Spec: ORG-011
 func TestOrganize_OrDetection(t *testing.T) {
 	srcDir, tgtDir, stateDir := setupTestDirs(t)
 
@@ -541,6 +557,7 @@ func TestOrganize_OrDetection(t *testing.T) {
 	_ = result
 }
 
+// Spec: ORG-011, ORG-013
 func TestOrganize_AndDetection_NotMatching(t *testing.T) {
 	srcDir, tgtDir, stateDir := setupTestDirs(t)
 
@@ -573,6 +590,7 @@ func TestOrganize_AndDetection_NotMatching(t *testing.T) {
 	}
 }
 
+// Spec: ORG-003
 func TestHandleNoDate_WithFallback_Copy(t *testing.T) {
 	fallbackDir := t.TempDir()
 	srcDir := t.TempDir()
@@ -600,6 +618,7 @@ func TestHandleNoDate_WithFallback_Copy(t *testing.T) {
 	}
 }
 
+// Spec: ORG-003, ORG-014
 func TestHandleNoDate_WithFallback_DryRun(t *testing.T) {
 	fallbackDir := t.TempDir()
 	srcDir := t.TempDir()
@@ -629,6 +648,7 @@ func TestHandleNoDate_WithFallback_DryRun(t *testing.T) {
 	}
 }
 
+// Spec: ORG-003
 func TestHandleNoDate_WithoutFallback(t *testing.T) {
 	srcDir := t.TempDir()
 	srcFile := createTestFile(t, srcDir, "nodate.jpg", "no exif data")
@@ -648,6 +668,7 @@ func TestHandleNoDate_WithoutFallback(t *testing.T) {
 	}
 }
 
+// Spec: ORG-003
 func TestHandleNoDate_WithFallback_Move(t *testing.T) {
 	fallbackDir := t.TempDir()
 	srcDir := t.TempDir()
@@ -672,6 +693,7 @@ func TestHandleNoDate_WithFallback_Move(t *testing.T) {
 	}
 }
 
+// Spec: ORG-011
 func TestIsDuplicate_Filename(t *testing.T) {
 	dir := t.TempDir()
 	a := createTestFile(t, dir, "photo.jpg", "data1")
@@ -687,6 +709,7 @@ func TestIsDuplicate_Filename(t *testing.T) {
 	}
 }
 
+// Spec: ORG-011
 func TestIsDuplicate_UnknownField(t *testing.T) {
 	dir1 := t.TempDir()
 	dir2 := t.TempDir()
@@ -699,6 +722,7 @@ func TestIsDuplicate_UnknownField(t *testing.T) {
 	}
 }
 
+// Spec: ORG-004
 func TestTransferFile_InvalidMode(t *testing.T) {
 	src := createTestFile(t, t.TempDir(), "f.jpg", "data")
 	dst := filepath.Join(t.TempDir(), "f.jpg")
@@ -710,6 +734,7 @@ func TestTransferFile_InvalidMode(t *testing.T) {
 }
 
 // TestOrganize_MultilingualTokens_German tests organizing photos with German targetStructure
+// Spec: ORG-006
 func TestOrganize_MultilingualTokens_German(t *testing.T) {
 	srcDir, tgtDir, stateDir := setupTestDirs(t)
 	createTestFile(t, srcDir, "photo.jpg", "image data")
@@ -743,6 +768,7 @@ func TestOrganize_MultilingualTokens_German(t *testing.T) {
 }
 
 // TestOrganize_MultilingualTokens_French tests organizing photos with French targetStructure
+// Spec: ORG-006
 func TestOrganize_MultilingualTokens_French(t *testing.T) {
 	srcDir, tgtDir, stateDir := setupTestDirs(t)
 	createTestFile(t, srcDir, "photo.jpg", "image data")
@@ -770,6 +796,7 @@ func TestOrganize_MultilingualTokens_French(t *testing.T) {
 }
 
 // TestOrganize_MultilingualTokens_Mixed tests organizing with mixed tokens
+// Spec: ORG-006
 func TestOrganize_MultilingualTokens_Mixed(t *testing.T) {
 	srcDir, tgtDir, stateDir := setupTestDirs(t)
 	createTestFile(t, srcDir, "photo.jpg", "image data")

@@ -13,6 +13,7 @@ import (
 	"github.com/zedage/phorga/internal/config"
 )
 
+// Spec: WEB-002
 func TestMainPageRendersCurrentConfiguration(t *testing.T) {
 	server := newTestServer(t)
 	resp := httptest.NewRecorder()
@@ -35,6 +36,7 @@ func TestMainPageRendersCurrentConfiguration(t *testing.T) {
 	}
 }
 
+// Spec: WEB-005
 func TestLocalizationUsesRequestedLanguageAndFallback(t *testing.T) {
 	server := newTestServer(t)
 
@@ -65,6 +67,7 @@ func TestLocalizationUsesRequestedLanguageAndFallback(t *testing.T) {
 	}
 }
 
+// Spec: WEB-003
 func TestValidateReturnsHTMXErrorFragment(t *testing.T) {
 	server := newTestServer(t)
 	values := validFormValues(sampleConfig(), "active", "")
@@ -89,6 +92,7 @@ func TestValidateReturnsHTMXErrorFragment(t *testing.T) {
 	}
 }
 
+// Spec: WEB-004
 func TestSaveWritesSeparateFile(t *testing.T) {
 	server := newTestServer(t)
 	target := filepath.Join(t.TempDir(), "saved-config.yaml")
@@ -113,6 +117,7 @@ func TestSaveWritesSeparateFile(t *testing.T) {
 	}
 }
 
+// Spec: WEB-004
 func TestSaveWritesActiveConfigFile(t *testing.T) {
 	activePath := filepath.Join(t.TempDir(), "active-config.yaml")
 	cfg := sampleConfig()

@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// Spec: ORG-016
 func TestIsSupported(t *testing.T) {
 	tests := []struct {
 		path string
@@ -31,6 +32,7 @@ func TestIsSupported(t *testing.T) {
 	}
 }
 
+// Spec: ORG-005, ORG-006, ORG-007, ORG-008
 func TestResolveTargetPath(t *testing.T) {
 	date := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
 	febDate := time.Date(2024, 2, 5, 0, 0, 0, 0, time.UTC)
@@ -81,6 +83,7 @@ func TestResolveTargetPath(t *testing.T) {
 	}
 }
 
+// Spec: ORG-009
 func TestResolveTargetPath_InvalidToken(t *testing.T) {
 	date := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
 
@@ -108,6 +111,7 @@ func TestResolveTargetPath_InvalidToken(t *testing.T) {
 }
 
 // TestResolveTargetPath_EdgeDates tests edge cases like Feb 29, Dec 31, etc.
+// Spec: ORG-008
 func TestResolveTargetPath_EdgeDates(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -136,6 +140,7 @@ func TestResolveTargetPath_EdgeDates(t *testing.T) {
 	}
 }
 
+// Spec: ORG-002
 func TestExtractDate_FallbackToMtime(t *testing.T) {
 	// Create a temp file (no EXIF, no date in filename) — should fall back to mtime
 	dir := t.TempDir()
@@ -156,6 +161,7 @@ func TestExtractDate_FallbackToMtime(t *testing.T) {
 	}
 }
 
+// Spec: ORG-002
 func TestExtractFilenameDate(t *testing.T) {
 	tests := []struct {
 		filename string
@@ -222,6 +228,7 @@ func TestExtractFilenameDate(t *testing.T) {
 	}
 }
 
+// Spec: ORG-002
 func TestExtractDate_FilenameBeforeMtime(t *testing.T) {
 	// File with date in filename but no EXIF → should use "filename" method
 	dir := t.TempDir()
@@ -240,6 +247,7 @@ func TestExtractDate_FilenameBeforeMtime(t *testing.T) {
 	}
 }
 
+// Spec: ORG-002
 func TestExtractPathDate(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -327,6 +335,7 @@ func TestExtractPathDate(t *testing.T) {
 	}
 }
 
+// Spec: ORG-002
 func TestExtractDate_PathBeforeMtime(t *testing.T) {
 	// File with date in path but no EXIF and no date in filename → should use "path" method
 	dir := filepath.Join(t.TempDir(), "photos", "2019", "07")

@@ -7,6 +7,7 @@ import (
 	"testing"
 )
 
+// Spec: CFG-001
 func TestLoadYAML(t *testing.T) {
 	content := `
 webUI:
@@ -33,6 +34,7 @@ organizer:
 	}
 }
 
+// Spec: CFG-001
 func TestLoadJSON(t *testing.T) {
 	content := `{
 		"organizer": [{
@@ -53,6 +55,7 @@ func TestLoadJSON(t *testing.T) {
 	}
 }
 
+// Spec: CFG-001
 func TestLoadUnsupportedExtension(t *testing.T) {
 	tmp := writeTemp(t, "config.txt", "foo")
 	_, err := Load(tmp)
@@ -61,6 +64,7 @@ func TestLoadUnsupportedExtension(t *testing.T) {
 	}
 }
 
+// Spec: CFG-002
 func TestValidateValid(t *testing.T) {
 	cfg := &Config{
 		Organizer: []OrganizerProfile{
@@ -78,6 +82,7 @@ func TestValidateValid(t *testing.T) {
 	}
 }
 
+// Spec: CFG-002
 func TestValidateMissingTarget(t *testing.T) {
 	cfg := &Config{
 		Organizer: []OrganizerProfile{
@@ -89,6 +94,7 @@ func TestValidateMissingTarget(t *testing.T) {
 	}
 }
 
+// Spec: CFG-002
 func TestValidateInvalidMode(t *testing.T) {
 	cfg := &Config{
 		Organizer: []OrganizerProfile{
@@ -105,6 +111,7 @@ func TestValidateInvalidMode(t *testing.T) {
 	}
 }
 
+// Spec: CFG-002
 func TestValidateInvalidCron(t *testing.T) {
 	cfg := &Config{
 		Organizer: []OrganizerProfile{
@@ -121,6 +128,7 @@ func TestValidateInvalidCron(t *testing.T) {
 	}
 }
 
+// Spec: CFG-002, ORG-009
 func TestValidateInvalidTargetToken(t *testing.T) {
 	cfg := &Config{
 		Organizer: []OrganizerProfile{
@@ -138,6 +146,7 @@ func TestValidateInvalidTargetToken(t *testing.T) {
 	}
 }
 
+// Spec: CFG-002, DUP-005
 func TestValidateMoveToFolderRequiresDuplicateFolder(t *testing.T) {
 	cfg := &Config{
 		Organizer: []OrganizerProfile{
@@ -160,6 +169,7 @@ func TestValidateMoveToFolderRequiresDuplicateFolder(t *testing.T) {
 	}
 }
 
+// Spec: CFG-002, ORG-011
 func TestValidateMixedOperators(t *testing.T) {
 	cfg := &Config{
 		Organizer: []OrganizerProfile{
@@ -182,6 +192,7 @@ func TestValidateMixedOperators(t *testing.T) {
 	}
 }
 
+// Spec: CFG-002, DUP-001
 func TestValidateDuplicateDetection(t *testing.T) {
 	cfg := &Config{
 		DuplicateDetection: []DuplicateDetection{
@@ -199,6 +210,7 @@ func TestValidateDuplicateDetection(t *testing.T) {
 	}
 }
 
+// Spec: CFG-002
 func TestValidateEmptyConfig(t *testing.T) {
 	cfg := &Config{}
 	if err := Validate(cfg); err == nil {
@@ -206,6 +218,7 @@ func TestValidateEmptyConfig(t *testing.T) {
 	}
 }
 
+// Spec: CFG-002
 func TestValidateWebUIRequiresAddressWhenEnabled(t *testing.T) {
 	cfg := &Config{
 		WebUI: &WebUIConfig{Enabled: true, Address: "invalid"},
@@ -219,6 +232,7 @@ func TestValidateWebUIRequiresAddressWhenEnabled(t *testing.T) {
 	}
 }
 
+// Spec: CFG-002
 func TestValidateProblemsReturnsIndividualMessages(t *testing.T) {
 	cfg := &Config{
 		WebUI: &WebUIConfig{Enabled: true, Address: "invalid"},
@@ -236,6 +250,7 @@ func TestValidateProblemsReturnsIndividualMessages(t *testing.T) {
 	}
 }
 
+// Spec: CFG-003
 func TestResolveConfigPath_CLI(t *testing.T) {
 	tmp := writeTemp(t, "config.yaml", "organizer: []")
 	path, err := ResolveConfigPath(tmp)
@@ -247,6 +262,7 @@ func TestResolveConfigPath_CLI(t *testing.T) {
 	}
 }
 
+// Spec: CFG-003
 func TestResolveConfigPath_Env(t *testing.T) {
 	tmp := writeTemp(t, "config.yaml", "organizer: []")
 	t.Setenv(envConfigPath, tmp)
@@ -259,6 +275,7 @@ func TestResolveConfigPath_Env(t *testing.T) {
 	}
 }
 
+// Spec: CFG-003
 func TestResolveConfigPath_NotFound(t *testing.T) {
 	t.Setenv(envConfigPath, "")
 	// Change to a temp dir without config.yaml
@@ -273,6 +290,7 @@ func TestResolveConfigPath_NotFound(t *testing.T) {
 	}
 }
 
+// Spec: CFG-004
 func TestSaveAndLoadYAMLRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	original := &Config{
@@ -307,6 +325,7 @@ func TestSaveAndLoadYAMLRoundTrip(t *testing.T) {
 	}
 }
 
+// Spec: CFG-004
 func TestSaveAndLoadJSONRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	original := &Config{
