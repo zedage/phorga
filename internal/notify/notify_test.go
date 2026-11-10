@@ -8,6 +8,7 @@ import (
 	"time"
 )
 
+// Spec: NTF-001
 func TestNewNil(t *testing.T) {
 	c := New("")
 	if c != nil {
@@ -15,6 +16,7 @@ func TestNewNil(t *testing.T) {
 	}
 }
 
+// Spec: NTF-001
 func TestNewWithURL(t *testing.T) {
 	c := New("https://ntfy.sh/test")
 	if c == nil {
@@ -25,6 +27,7 @@ func TestNewWithURL(t *testing.T) {
 	}
 }
 
+// Spec: NTF-001
 func TestSendSummary_Success(t *testing.T) {
 	var called int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -46,6 +49,7 @@ func TestSendSummary_Success(t *testing.T) {
 	}
 }
 
+// Spec: NTF-002
 func TestSendSummary_ServerError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -59,12 +63,14 @@ func TestSendSummary_ServerError(t *testing.T) {
 	}
 }
 
+// Spec: NTF-001
 func TestSendSummary_NilClient(t *testing.T) {
 	var c *Client
 	// Should not panic
 	c.SendSummary("title", "message")
 }
 
+// Spec: NTF-001
 func TestFormatOrganizerSummary(t *testing.T) {
 	title, msg := FormatOrganizerSummary("/photos", 10, 2, 0, 5*time.Second)
 	if title == "" || msg == "" {
@@ -75,6 +81,7 @@ func TestFormatOrganizerSummary(t *testing.T) {
 	}
 }
 
+// Spec: NTF-001
 func TestFormatOrganizerSummary_WithErrors(t *testing.T) {
 	title, _ := FormatOrganizerSummary("/photos", 10, 2, 3, 5*time.Second)
 	if title == "" {
@@ -82,6 +89,7 @@ func TestFormatOrganizerSummary_WithErrors(t *testing.T) {
 	}
 }
 
+// Spec: NTF-001
 func TestFormatDedupSummary(t *testing.T) {
 	title, msg := FormatDedupSummary(100, 5, 5, 0, 30*time.Second)
 	if title == "" || msg == "" {

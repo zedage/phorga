@@ -189,7 +189,14 @@ Mount your source/target directories and `config.yaml` as volumes. State is pers
 
 ## Documentation
 
-Architecture documentation (arc42): [`docs/arc42/arc42.adoc`](docs/arc42/arc42.adoc)
+- [`docs/product.md`](docs/product.md): what Phorga does and why
+- [`docs/specs/`](docs/specs/README.md): exact, testable requirements per feature
+- [`docs/arc42/arc42.adoc`](docs/arc42/arc42.adoc): architecture
+- [`docs/decisions/`](docs/decisions/README.md): architecture decision records
+
+## Contributing
+
+Start with [`AGENTS.md`](AGENTS.md). It covers the repo layout, commands, conventions, and the change workflow (spec → code + tests → docs) for people and AI agents.
 
 ## License
 

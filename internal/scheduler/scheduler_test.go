@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+// Spec: DUP-008, ORG-010
 func TestRegisterAndRun(t *testing.T) {
 	s := New()
 
@@ -35,6 +36,7 @@ func TestRegisterInvalidCron(t *testing.T) {
 	}
 }
 
+// Spec: DUP-008, ORG-010
 func TestOverlapPrevention(t *testing.T) {
 	s := New()
 
