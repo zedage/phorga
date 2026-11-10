@@ -207,8 +207,9 @@ func isDuplicate(detectionMode, srcPath, targetPath string) bool {
 			tgtInfo, err2 := os.Stat(targetPath)
 			results[i] = err1 == nil && err2 == nil && srcInfo.ModTime().Equal(tgtInfo.ModTime())
 		case "exif":
-			srcDate, _, err1 := metadata.ExtractDate(srcPath)
-			tgtDate, _, err2 := metadata.ExtractDate(targetPath)
+			// Only real EXIF dates count; files without EXIF never match (ORG-011).
+			srcDate, err1 := metadata.ExtractEXIFDate(srcPath)
+			tgtDate, err2 := metadata.ExtractEXIFDate(targetPath)
 			results[i] = err1 == nil && err2 == nil && srcDate.Equal(tgtDate)
 		default:
 			results[i] = false

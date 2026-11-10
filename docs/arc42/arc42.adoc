@@ -371,6 +371,9 @@ Decisions are recorded as ADRs in link:../decisions/README.md[docs/decisions]. T
 
 | link:../decisions/0011-specs-and-agents-md-instead-of-openspec.md[0011]
 | Specs in `docs/specs` + `AGENTS.md` instead of openspec
+
+| link:../decisions/0012-duplicate-checks-require-real-exif.md[0012]
+| Duplicate checks on dates require real EXIF
 |===
 
 == 10. Risks and Technical Debt
@@ -398,14 +401,6 @@ Decisions are recorded as ADRs in link:../decisions/README.md[docs/decisions]. T
 | Local/private web UI only
 | Public exposure would be unsafe without additional controls
 | Document local/private deployment scope and rely on external protection if exposed.
-
-| "EXIF" comparisons use the resolved date
-| Organizer `exif` mode and dedup `metadata` mode also match on filename/path/mtime dates, which may produce false positives
-| Open question, tracked in specs ORG-011 / DUP-002.
-
-| Groups of 3+ duplicates in dedup
-| Pairwise matching acts on an already-moved file and counts an error
-| Tracked in spec DUP-004. Fix by grouping matches before acting.
 
 | Duplicated token list
 | `targetStructure` tokens are defined in both `config` and `metadata`, so they can diverge

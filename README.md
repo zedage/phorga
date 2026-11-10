@@ -38,7 +38,7 @@ organizer:
         mode: move                      # move | copy
         schedule: "0 2 * * *"
         duplicates:
-          detectionMode: filename       # filename, filedate, exif (combine with + or |)
+          detectionMode: filename       # filename, filedate, exif (EXIF date only); combine with + or |
           action:
             method: skip                # replace | addSuffix | moveToFolder | skip
 
@@ -46,7 +46,7 @@ duplicateDetection:
   - enabled: true
     schedule: "0 4 * * *"
     sources: [/photos/organized, /photos/archive]
-    detectionMode: content              # content | metadata
+    detectionMode: content              # content (pHash) | metadata (size + EXIF date)
     action:
       method: moveToFolder
       duplicateFolder: /photos/duplicates

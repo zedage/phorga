@@ -30,7 +30,7 @@ The organizer takes files from one or more **source** folders and sorts them int
 
 **Move or copy.** Each source chooses whether files are moved (the source is cleaned up) or copied (the source stays untouched).
 
-**When a file with the same name is already there.** The organizer can do a quick check for duplicates: same name, same file date, or same capture date. You choose what happens then: replace it, keep both with a short random suffix, put the new one into a duplicates folder, or skip it. This is deliberately lightweight. Real content comparison is the job of duplicate detection (below).
+**When a file with the same name is already there.** The organizer can do a quick check for duplicates: same name, same file date, or same EXIF capture date (files without EXIF never match on the capture date). You choose what happens then: replace it, keep both with a short random suffix, put the new one into a duplicates folder, or skip it. This is deliberately lightweight. Real content comparison is the job of duplicate detection (below).
 
 **Files without a date** go to an optional `fallbackFolder`.
 
@@ -47,9 +47,9 @@ Duplicate detection is a **separate feature** with its own folders, schedule and
 Two modes:
 
 - **content** compares what the images look like (a "perceptual hash"), so re-saved or resized copies are found too ([ADR-0004](decisions/0004-perceptual-hash-for-content-dedup.md)). This works for images, not for videos.
-- **metadata** is faster. It treats files as duplicates when they have the same size and the same capture date.
+- **metadata** is faster. It treats files as duplicates when they have the same size and the same EXIF capture date. Files without EXIF are never matched this way, so no false matches come from copy dates.
 
-Found duplicates are either moved to a duplicates folder or just reported. Nothing is deleted. A dry run shows the results without touching anything.
+If several copies of the same picture are found, the first one stays and all others count as its duplicates. Found duplicates are either moved to a duplicates folder or just reported. Nothing is deleted. A dry run shows the results without touching anything.
 
 Exact rules: [specs/duplicate-detection.md](specs/duplicate-detection.md)
 

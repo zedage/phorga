@@ -23,7 +23,7 @@ organizer:
       - path: /path/to/photos1
         mode: move # move or copy
         duplicates:
-          detectionMode: filename # filename, filedate, exif; use '+' (AND) or '|' (OR), not mixed
+          detectionMode: filename # filename, filedate, exif (EXIF date only); use '+' (AND) or '|' (OR), not mixed
           action:
             method: skip # replace, addSuffix, moveToFolder, skip
         schedule: "0 2 * * *" # daily at 02:00
@@ -46,7 +46,7 @@ duplicateDetection:
     sources:
       - /path/to/photos1
       - /path/to/photos2
-    detectionMode: content # content | metadata
+    detectionMode: content # content (pHash) | metadata (size + EXIF date; files without EXIF never match)
     action:
       method: moveToFolder # moveToFolder | skip
       duplicateFolder: /path/to/duplicates

@@ -12,7 +12,7 @@ Many files have no EXIF date: screenshots, messenger images, videos, and exporte
 
 ## Consequences
 - Most files end up in a plausible folder, and only files that cannot be stat'ed go to `fallbackFolder`.
-- Anything that compares "EXIF dates" (organizer `exif` detection mode, dedup `metadata` mode) actually compares this resolved date. That is a known open question in the specs.
+- Anything that compares "EXIF dates" (organizer `exif` detection mode, dedup `metadata` mode) originally compared this resolved date as well. *Update 2026-11-10:* they now use real EXIF only, see [ADR-0012](0012-duplicate-checks-require-real-exif.md). The resolution order itself is unchanged.
 - Filename patterns can misfire on arbitrary numbers. Patterns are kept strict (valid month/day ranges).
 
 ## Alternatives considered

@@ -18,7 +18,7 @@ Defaults applied after loading:
 | `webUI.address` (if a `webUI` block exists) | `127.0.0.1:8080` |
 
 **Code:** `internal/config/loader.go`, `internal/config/config.go`
-**Tests:** `internal/config/config_test.go#TestLoadYAML`, `internal/config/config_test.go#TestLoadJSON`, `internal/config/config_test.go#TestLoadUnsupportedExtension`
+**Tests:** `internal/config/config_test.go#TestLoadYAML`, `internal/config/config_test.go#TestLoadJSON`, `internal/config/config_test.go#TestLoadUnsupportedExtension`, `internal/config/defaults_test.go#TestLoadAppliesDefaults`
 
 ### CFG-002 Fail-fast validation
 **Status:** implemented
@@ -53,8 +53,7 @@ The config path MUST be resolved in this order:
 If the chosen file does not exist, startup MUST fail with a message that names all three options.
 
 **Code:** `internal/config/resolve.go`, `cmd/phorga/main.go`
-**Tests:** `internal/config/config_test.go#TestResolveConfigPath_CLI`, `internal/config/config_test.go#TestResolveConfigPath_Env`, `internal/config/config_test.go#TestResolveConfigPath_NotFound`
-**Gap:** No test covers step 3 (`./config.yaml` present).
+**Tests:** `internal/config/config_test.go#TestResolveConfigPath_CLI`, `internal/config/config_test.go#TestResolveConfigPath_Env`, `internal/config/config_test.go#TestResolveConfigPath_NotFound`, `internal/config/defaults_test.go#TestResolveConfigPath_DefaultFileInWorkingDir`
 
 ### CFG-004 Saving configuration
 **Status:** implemented

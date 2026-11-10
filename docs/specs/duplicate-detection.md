@@ -20,17 +20,18 @@ A duplicate detection job MUST have its own `sources`, `schedule`, `detectionMod
 ### DUP-002 Metadata mode
 **Status:** implemented
 
-With `detectionMode: metadata`, two files MUST count as duplicates when they have the same file size **and** the same, non-zero resolved capture date.
+With `detectionMode: metadata`, two files MUST count as duplicates when they have the same file size **and** the same **EXIF** capture date (`DateTimeOriginal`). Files without EXIF MUST never match in this mode. Dates from the filename, path or mtime are not used.
 
 - **WHEN** two files have the same size and the same capture date `2024-07-15 10:00:00`
   **THEN** they are duplicates
 - **WHEN** two files have the same size but different capture dates
   **THEN** they are not duplicates
+- **WHEN** two files have the same size and mtime but no EXIF
+  **THEN** they are not duplicates
 
 **Code:** `internal/dedup/dedup.go`
-**Tests:** `internal/dedup/dedup_test.go#TestDedup_MetadataMode_SameSize`
-**Gap:** `TestDedup_MetadataMode_SameSize` only logs its result and asserts nothing about duplicates. There is no negative test.
-**Notes:** The old spec said "`fileSize` + `exifDateTimeOriginal`". The code uses `metadata.ExtractDate`, which falls back to filename, path and mtime (ORG-002). So two files without EXIF but with the same size and mtime are reported as duplicates. Open question: should metadata mode require a real EXIF date?
+**Tests:** `internal/dedup/dedup_test.go#TestDedup_MetadataMode_SameSize`, `internal/dedup/metadata_mode_test.go#TestDedup_MetadataMode_SameSizeAndEXIFDate`, `internal/dedup/metadata_mode_test.go#TestDedup_MetadataMode_DifferentEXIFDate`, `internal/dedup/metadata_mode_test.go#TestDedup_MetadataMode_NoEXIFNeverMatches`
+**Notes:** Until 2026-11, the code used the resolved date (incl. mtime), so files without EXIF could match. It now requires real EXIF, see [ADR-0012](../decisions/0012-duplicate-checks-require-real-exif.md).
 
 ### DUP-003 Content mode (perceptual hash)
 **Status:** implemented
@@ -49,14 +50,16 @@ With `detectionMode: content`, the system MUST compute a perceptual hash (pHash)
 ### DUP-004 Cross-source matching
 **Status:** implemented
 
-Every file of every source in a job MUST be compared with every other file. Of each matching pair, the file found first (in source order, then walk order) is kept as the original, and the other one is treated as the duplicate.
+Every file of every source in a job MUST be compared with every other file. The file found first (in source order, then walk order) is kept as the original. Each other file MUST be reported as a duplicate **at most once**, against the first earlier non-duplicate file it matches. A group of N matching files therefore yields N-1 pairs that share one original.
 
 - **WHEN** `/photos1/img.jpg` and `/photos2/copy.jpg` are duplicates
   **THEN** the pair is reported and `/photos2/copy.jpg` is treated as the duplicate
+- **WHEN** three sources each contain the same image and the method is `moveToFolder`
+  **THEN** 2 pairs are reported, 2 files are moved, the first stays in place, and there are 0 errors
 
 **Code:** `internal/dedup/dedup.go`
-**Tests:** `internal/dedup/dedup_test.go#TestDedup_CrossSource`
-**Notes:** Comparison is pairwise O(n²). If three or more files match each other, more than one pair is produced, and acting on a file that was already moved counts as an error. See arc42 §10.
+**Tests:** `internal/dedup/dedup_test.go#TestDedup_CrossSource`, `internal/dedup/actions_test.go#TestDedup_GroupOfThree_MovesTwoWithoutErrors`
+**Notes:** Comparison is pairwise O(n²), see arc42 §10. Until 2026-11, groups of 3+ produced every pair (A-B, A-C, B-C), and moving the already-moved file counted as an error. That is now fixed.
 
 ### DUP-005 Action `moveToFolder`
 **Status:** implemented
@@ -67,7 +70,7 @@ With `action.method: moveToFolder`, the duplicate MUST be moved into `action.dup
   **THEN** the duplicate is moved into `duplicateFolder` and the original stays in place
 
 **Code:** `internal/dedup/dedup.go`, `internal/config/validate.go`
-**Tests:** `internal/dedup/dedup_test.go#TestDedup_MoveToFolder`, `internal/config/config_test.go#TestValidateMoveToFolderRequiresDuplicateFolder`
+**Tests:** `internal/dedup/dedup_test.go#TestDedup_MoveToFolder`, `internal/config/config_test.go#TestValidateMoveToFolderRequiresDuplicateFolder`, `internal/dedup/actions_test.go#TestDedup_GroupOfThree_MovesTwoWithoutErrors`
 
 ### DUP-006 Action `skip`
 **Status:** implemented
@@ -75,8 +78,7 @@ With `action.method: moveToFolder`, the duplicate MUST be moved into `action.dup
 With `action.method: skip`, the system MUST NOT modify any file. It MUST log each duplicate pair.
 
 **Code:** `internal/dedup/dedup.go`
-**Tests:** none
-**Gap:** No test runs a non-dry-run job with `skip` and checks that the files are unchanged.
+**Tests:** `internal/dedup/actions_test.go#TestDedup_SkipLeavesFilesUntouched`
 
 ### DUP-007 Dry-run
 **Status:** implemented
@@ -102,6 +104,8 @@ Each enabled job MUST run on its own 5-field cron `schedule`, independent of org
 
 Errors while scanning a file or applying an action MUST be logged and counted. The run MUST continue.
 
+- **WHEN** `duplicateFolder` is not a directory and two duplicates are found
+  **THEN** both moves fail, `errors` is 2, and all files stay in place
+
 **Code:** `internal/dedup/dedup.go`
-**Tests:** none
-**Gap:** No error-path test.
+**Tests:** `internal/dedup/actions_test.go#TestDedup_ActionErrorDoesNotAbortRun`
