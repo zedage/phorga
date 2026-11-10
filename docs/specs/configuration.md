@@ -18,7 +18,7 @@ Defaults applied after loading:
 | `webUI.address` (if a `webUI` block exists) | `127.0.0.1:8080` |
 
 **Code:** `internal/config/loader.go`, `internal/config/config.go`
-**Tests:** `internal/config/config_test.go#TestLoadYAML`, `internal/config/config_test.go#TestLoadJSON`, `internal/config/config_test.go#TestLoadUnsupportedExtension`
+**Tests:** `internal/config/config_test.go#TestLoadYAML`, `internal/config/config_test.go#TestLoadJSON`, `internal/config/config_test.go#TestLoadUnsupportedExtension`, `internal/config/defaults_test.go#TestLoadAppliesDefaults`
 
 ### CFG-002 Fail-fast validation
 **Status:** implemented
@@ -39,7 +39,7 @@ Rules:
   **THEN** startup fails and names the invalid expression
 
 **Code:** `internal/config/validate.go`, `cmd/phorga/main.go`
-**Tests:** `internal/config/config_test.go#TestValidateValid`, `internal/config/config_test.go#TestValidateMissingTarget`, `internal/config/config_test.go#TestValidateInvalidMode`, `internal/config/config_test.go#TestValidateInvalidCron`, `internal/config/config_test.go#TestValidateInvalidTargetToken`, `internal/config/config_test.go#TestValidateMoveToFolderRequiresDuplicateFolder`, `internal/config/config_test.go#TestValidateMixedOperators`, `internal/config/config_test.go#TestValidateDuplicateDetection`, `internal/config/config_test.go#TestValidateEmptyConfig`, `internal/config/config_test.go#TestValidateWebUIRequiresAddressWhenEnabled`, `internal/config/config_test.go#TestValidateProblemsReturnsIndividualMessages`
+**Tests:** `internal/config/config_test.go#TestValidateValid`, `internal/config/config_test.go#TestValidateMissingTarget`, `internal/config/config_test.go#TestValidateInvalidMode`, `internal/config/config_test.go#TestValidateInvalidCron`, `internal/config/config_test.go#TestValidateInvalidTargetToken`, `internal/config/config_test.go#TestValidateMoveToFolderRequiresDuplicateFolder`, `internal/config/config_test.go#TestValidateMixedOperators`, `internal/config/config_test.go#TestValidateDuplicateDetection`, `internal/config/config_test.go#TestValidateEmptyConfig`, `internal/config/config_test.go#TestValidateWebUIRequiresAddressWhenEnabled`, `internal/config/config_test.go#TestValidateProblemsReturnsIndividualMessages`, `cmd/phorga/main_test.go#TestRun_InvalidConfigExitsNonZero`
 
 ### CFG-003 Config path resolution
 **Status:** implemented
@@ -50,11 +50,10 @@ The config path MUST be resolved in this order:
 2. `PHORGA_CONFIG` environment variable
 3. `./config.yaml` in the working directory
 
-If the chosen file does not exist, startup MUST fail with a message that names all three options.
+If the chosen file does not exist, startup MUST fail (exit status 1) with a message that names all three options. Unknown command-line flags MUST fail with exit status 2.
 
 **Code:** `internal/config/resolve.go`, `cmd/phorga/main.go`
-**Tests:** `internal/config/config_test.go#TestResolveConfigPath_CLI`, `internal/config/config_test.go#TestResolveConfigPath_Env`, `internal/config/config_test.go#TestResolveConfigPath_NotFound`
-**Gap:** No test covers step 3 (`./config.yaml` present).
+**Tests:** `internal/config/config_test.go#TestResolveConfigPath_CLI`, `internal/config/config_test.go#TestResolveConfigPath_Env`, `internal/config/config_test.go#TestResolveConfigPath_NotFound`, `internal/config/defaults_test.go#TestResolveConfigPath_DefaultFileInWorkingDir`, `cmd/phorga/main_test.go#TestRun_MissingConfigFileExitsNonZero`, `cmd/phorga/main_test.go#TestRun_UnknownFlagExitsWithUsageError`
 
 ### CFG-004 Saving configuration
 **Status:** implemented
@@ -70,6 +69,9 @@ The system MUST be able to write a configuration back to disk. It writes in the 
 
 The running process MUST keep using the configuration it loaded at startup. Changes to the file, including changes saved via the web UI, take effect only after a restart.
 
-**Code:** `cmd/phorga/main.go`
-**Tests:** none
-**Gap:** Behavior by construction; not tested. See [ADR-0009](../decisions/0009-ui-save-destination-and-no-hot-reload.md).
+- **WHEN** the config file is changed on disk while Phorga runs
+  **THEN** the web UI still shows the values loaded at startup
+
+**Code:** `cmd/phorga/main.go`, `internal/webui/server.go`
+**Tests:** `cmd/phorga/main_test.go#TestRun_ConfigIsNotReloaded`
+**Notes:** See [ADR-0009](../decisions/0009-ui-save-destination-and-no-hot-reload.md).

@@ -57,7 +57,7 @@ func IsSupported(path string) bool {
 // Returns the resolved date and the method used ("exif", "filename", "path", "mtime").
 func ExtractDate(path string) (time.Time, string, error) {
 	// Try EXIF first
-	if t, err := extractEXIFDate(path); err == nil {
+	if t, err := ExtractEXIFDate(path); err == nil {
 		return t, "exif", nil
 	}
 
@@ -225,8 +225,9 @@ func extractPathDate(path string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("no date found in path: %s", dir)
 }
 
-// extractEXIFDate attempts to read DateTimeOriginal from EXIF data.
-func extractEXIFDate(path string) (time.Time, error) {
+// ExtractEXIFDate reads only the EXIF capture date (DateTimeOriginal, falling
+// back to DateTime). Unlike ExtractDate it never uses filename, path or mtime.
+func ExtractEXIFDate(path string) (time.Time, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return time.Time{}, err

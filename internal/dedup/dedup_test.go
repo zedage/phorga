@@ -93,9 +93,10 @@ func TestDedup_MetadataMode_SameSize(t *testing.T) {
 	if result.TotalFiles != 2 {
 		t.Errorf("expected 2 files, got %d", result.TotalFiles)
 	}
-	// Metadata mode requires matching EXIF dates — plain text files won't match
-	// So this should find 0 duplicates (no EXIF)
-	t.Logf("duplicates found: %d (expected 0 for files without EXIF)", result.DuplicatesPair)
+	// Metadata mode requires real EXIF dates — plain text files never match.
+	if result.DuplicatesPair != 0 {
+		t.Errorf("expected 0 duplicates for files without EXIF, got %d", result.DuplicatesPair)
+	}
 }
 
 // Spec: DUP-003

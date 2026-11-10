@@ -7,11 +7,17 @@
 ### WEB-001 Optional, built into the same process
 **Status:** implemented
 
-The web UI MUST be off by default. It MUST start in the same process as the scheduler when either `webUI.enabled: true` is set or the `--web-ui` flag is given. `--web-ui-addr` overrides the listen address; otherwise `webUI.address` or `127.0.0.1:8080` is used. On SIGINT/SIGTERM it MUST shut down gracefully together with the scheduler. If the HTTP server fails, the process MUST exit with a non-zero status.
+The web UI MUST be off by default. It MUST start in the same process as the scheduler when either `webUI.enabled: true` is set or the `--web-ui` flag is given. `--web-ui-addr` overrides the listen address; otherwise `webUI.address` or `127.0.0.1:8080` is used. On SIGINT/SIGTERM it MUST shut down gracefully together with the scheduler. If the HTTP server fails (e.g. the port is taken), the process MUST exit with a non-zero status.
+
+- **WHEN** `--web-ui --web-ui-addr 127.0.0.1:9090` is given and the config has no `webUI` block
+  **THEN** `GET http://127.0.0.1:9090/ui` answers 200, and after shutdown the port is closed and the exit code is 0
+- **WHEN** `webUI.address` is set but `webUI.enabled` is `false` and `--web-ui` is not given
+  **THEN** nothing listens on that address
+- **WHEN** the UI address is already in use
+  **THEN** the process exits with status 1
 
 **Code:** `cmd/phorga/main.go`, `internal/webui/server.go`
-**Tests:** none
-**Gap:** Startup wiring in `main.go` is not tested; it was verified manually.
+**Tests:** `internal/webui/address_test.go#TestNewAddressPrecedence`, `cmd/phorga/main_test.go#TestRun_WebUIEnabledByFlag`, `cmd/phorga/main_test.go#TestRun_WebUIEnabledByConfig`, `cmd/phorga/main_test.go#TestRun_WebUIOffByDefault`, `cmd/phorga/main_test.go#TestRun_WebUIListenFailureExitsNonZero`
 
 ### WEB-002 Server-rendered configuration page
 **Status:** implemented
@@ -71,6 +77,5 @@ All UI text MUST come from server-side message catalogs for `de`, `en`, `it` and
 The UI has no authentication. Its documentation MUST state that it is meant for local or trusted networks only. The default address MUST bind to loopback (`127.0.0.1`).
 
 **Code:** `internal/config/loader.go`
-**Tests:** none
-**Gap:** No test asserts the loopback default address.
+**Tests:** `internal/config/defaults_test.go#TestLoadAppliesDefaults`, `internal/webui/address_test.go#TestNewAddressPrecedence`
 **Notes:** The page loads HTMX from `unpkg.com`. Without internet access, the forms still work as plain POSTs and return full pages.

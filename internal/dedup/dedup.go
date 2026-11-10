@@ -113,8 +113,9 @@ func scanSource(srcPath string, detectionMode string, result *RunResult) []fileI
 		}
 
 		// Extract metadata when needed
+		// Only real EXIF dates count; files without EXIF never match (DUP-002).
 		if detectionMode == "metadata" {
-			date, _, err := metadata.ExtractDate(path)
+			date, err := metadata.ExtractEXIFDate(path)
 			if err == nil {
 				fi.ExifDate = date
 			}
@@ -160,14 +161,24 @@ func computePHash(path string) (*goimagehash.ImageHash, error) {
 func findDuplicates(files []fileInfo, detectionMode string) []duplicatePair {
 	var pairs []duplicatePair
 
+	// Each file is reported as a duplicate at most once, against the first
+	// earlier file it matches that is not itself a duplicate. For a group of
+	// N matching files this yields N-1 pairs sharing one canonical (DUP-004).
+	isDup := make([]bool, len(files))
 	for i := 0; i < len(files); i++ {
+		if isDup[i] {
+			continue
+		}
 		for j := i + 1; j < len(files); j++ {
+			if isDup[j] {
+				continue
+			}
 			if isDuplicate(files[i], files[j], detectionMode) {
-				// Keep the first occurrence as canonical, second as duplicate
 				pairs = append(pairs, duplicatePair{
 					canonical: files[i],
 					duplicate: files[j],
 				})
+				isDup[j] = true
 			}
 		}
 	}

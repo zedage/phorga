@@ -35,7 +35,7 @@ The system MUST determine a file's date with the first source that succeeds, in 
   **THEN** the file's mtime is used
 
 **Code:** `internal/metadata/metadata.go`
-**Tests:** `internal/metadata/metadata_test.go#TestExtractDate_FallbackToMtime`, `internal/metadata/metadata_test.go#TestExtractFilenameDate`, `internal/metadata/metadata_test.go#TestExtractDate_FilenameBeforeMtime`, `internal/metadata/metadata_test.go#TestExtractPathDate`, `internal/metadata/metadata_test.go#TestExtractDate_PathBeforeMtime`
+**Tests:** `internal/metadata/metadata_test.go#TestExtractDate_FallbackToMtime`, `internal/metadata/metadata_test.go#TestExtractFilenameDate`, `internal/metadata/metadata_test.go#TestExtractDate_FilenameBeforeMtime`, `internal/metadata/metadata_test.go#TestExtractPathDate`, `internal/metadata/metadata_test.go#TestExtractDate_PathBeforeMtime`, `internal/metadata/exif_test.go#TestExtractDate_EXIFBeforeFilename`
 **Notes:** The old openspec spec said "EXIF → mtime". The filename and path steps were added later, and this spec now matches the code. See [ADR-0003](../decisions/0003-date-resolution-order.md).
 
 ### ORG-003 Fallback folder for files without a date
@@ -82,8 +82,7 @@ English tokens: `{year}` (4 digits), `{month}` (2 digits), `{day}` (2 digits), `
   **THEN** the path is `photos/2024/01-january/15`
 
 **Code:** `internal/metadata/targetpath.go`, `internal/config/loader.go`
-**Tests:** `internal/metadata/metadata_test.go#TestResolveTargetPath`
-**Gap:** No test asserts the `{year}/{month}` default that `applyDefaults` sets.
+**Tests:** `internal/metadata/metadata_test.go#TestResolveTargetPath`, `internal/config/defaults_test.go#TestLoadAppliesDefaults`
 
 ### ORG-006 Multilingual tokens
 **Status:** implemented
@@ -169,7 +168,7 @@ When a file with the same name already exists at the target path, the organizer 
 Fields:
 - `filename`: same base name
 - `filedate`: same mtime
-- `exif`: same resolved capture date (ORG-002)
+- `exif`: same **EXIF** capture date (`DateTimeOriginal`). Files without EXIF never match, even if a date can be resolved from their filename, path or mtime
 
 Fields can be combined with `+` (AND) or `|` (OR). Mixing `+` and `|` in one expression MUST be rejected at validation.
 
@@ -177,12 +176,14 @@ Fields can be combined with `+` (AND) or `|` (OR). Mixing `+` and `|` in one exp
   **THEN** it is a duplicate
 - **WHEN** `detectionMode` is `filename+filedate` and the mtimes differ
   **THEN** it is not a duplicate
+- **WHEN** `detectionMode` is `exif` and both files have no EXIF but the same filename date (`IMG_20240315_143000.jpg`)
+  **THEN** it is not a duplicate
 - **WHEN** `detectionMode` is `filename+filedate|exif`
   **THEN** validation fails
 
 **Code:** `internal/organizer/organizer.go`, `internal/config/validate.go`
-**Tests:** `internal/organizer/organizer_test.go#TestIsDuplicate_Filename`, `internal/organizer/organizer_test.go#TestIsDuplicate_UnknownField`, `internal/organizer/organizer_test.go#TestOrganize_FiledateDetection`, `internal/organizer/organizer_test.go#TestOrganize_ExifDetection`, `internal/organizer/organizer_test.go#TestOrganize_OrDetection`, `internal/organizer/organizer_test.go#TestOrganize_AndDetection_NotMatching`, `internal/config/config_test.go#TestValidateMixedOperators`
-**Notes:** `exif` compares the *resolved* date, which can come from the filename, the path or mtime, not strictly EXIF. Open question: should `exif` require a real EXIF date?
+**Tests:** `internal/organizer/organizer_test.go#TestIsDuplicate_Filename`, `internal/organizer/organizer_test.go#TestIsDuplicate_UnknownField`, `internal/organizer/organizer_test.go#TestOrganize_FiledateDetection`, `internal/organizer/organizer_test.go#TestOrganize_ExifDetection`, `internal/organizer/organizer_test.go#TestOrganize_OrDetection`, `internal/organizer/organizer_test.go#TestOrganize_AndDetection_NotMatching`, `internal/config/config_test.go#TestValidateMixedOperators`, `internal/organizer/exif_detection_test.go#TestOrganize_ExifDetection_SameEXIFDateIsDuplicate`, `internal/organizer/exif_detection_test.go#TestOrganize_ExifDetection_NoEXIFNeverMatches`
+**Notes:** Until 2026-11, `exif` compared the resolved date (incl. filename/path/mtime). It now requires real EXIF, see [ADR-0012](../decisions/0012-duplicate-checks-require-real-exif.md).
 
 ### ORG-012 Duplicate actions
 **Status:** implemented
@@ -208,7 +209,7 @@ For a detected duplicate, the organizer MUST apply `duplicates.action.method`:
   **THEN** the file is skipped and logged
 
 **Code:** `internal/organizer/organizer.go`
-**Tests:** `internal/organizer/organizer_test.go#TestOrganize_NoDuplicateConfig_ExistingTarget`, `internal/organizer/organizer_test.go#TestOrganize_AndDetection_NotMatching`
+**Tests:** `internal/organizer/organizer_test.go#TestOrganize_NoDuplicateConfig_ExistingTarget`, `internal/organizer/organizer_test.go#TestOrganize_AndDetection_NotMatching`, `internal/organizer/exif_detection_test.go#TestOrganize_ExifDetection_NoEXIFNeverMatches`
 **Notes:** This requirement was not in openspec. It documents the existing behavior.
 
 ### ORG-014 Dry-run
@@ -251,6 +252,8 @@ The system MUST process files with these extensions (case-insensitive): `jpg jpe
 
 A failure on a single file (unreadable, transfer error, …) MUST be logged and counted in the run result. The run MUST continue with the next file.
 
+- **WHEN** the target directory for one file cannot be created
+  **THEN** that file counts as an error and the other files are still organized
+
 **Code:** `internal/organizer/organizer.go`
-**Tests:** none
-**Gap:** No test injects a failing file in the middle of a run.
+**Tests:** `internal/organizer/errors_test.go#TestOrganize_FileErrorDoesNotAbortRun`

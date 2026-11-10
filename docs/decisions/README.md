@@ -15,6 +15,7 @@ Short records of decisions that shaped Phorga: what was decided, why, and what i
 | [0009](0009-ui-save-destination-and-no-hot-reload.md) | UI saves to active or separate file, no hot reload | 2026-06-06 | accepted |
 | [0010](0010-multilingual-tokens-by-name.md) | Language chosen by token name, case controls rendering | 2026-06-06 | accepted |
 | [0011](0011-specs-and-agents-md-instead-of-openspec.md) | Specs in `docs/specs` + `AGENTS.md` instead of openspec | 2026-11-10 | accepted |
+| [0012](0012-duplicate-checks-require-real-exif.md) | Duplicate checks on dates require real EXIF | 2026-11-10 | accepted |
 
 ## Writing a new ADR
 

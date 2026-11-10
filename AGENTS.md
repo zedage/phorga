@@ -26,7 +26,7 @@ So `grep -rn ORG-002` finds the requirement, the code reference, and the test.
 ## Repository layout
 
 ```
-cmd/phorga/          main: flags, config loading, scheduler + web UI lifecycle
+cmd/phorga/          main → run(ctx, args, logOut): flags, config, scheduler + web UI lifecycle (tested)
 internal/
   config/            load (YAML/JSON), defaults, validate, resolve path, save
   organizer/         organizer run: walk sources, resolve date, transfer, duplicates
