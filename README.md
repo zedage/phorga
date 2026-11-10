@@ -183,6 +183,9 @@ internal/
 ```bash
 docker build -t phorga .
 docker compose up -d
+
+# Multi-arch (e.g. for an arm64 NAS); Go cross-compiles, no emulation needed for the build
+docker buildx build --platform linux/amd64,linux/arm64 -t <registry>/phorga --push .
 ```
 
 Mount your source/target directories and `config.yaml` as volumes. State is persisted in `/data/state`.
