@@ -7,11 +7,17 @@
 ### WEB-001 Optional, built into the same process
 **Status:** implemented
 
-The web UI MUST be off by default. It MUST start in the same process as the scheduler when either `webUI.enabled: true` is set or the `--web-ui` flag is given. `--web-ui-addr` overrides the listen address; otherwise `webUI.address` or `127.0.0.1:8080` is used. On SIGINT/SIGTERM it MUST shut down gracefully together with the scheduler. If the HTTP server fails, the process MUST exit with a non-zero status.
+The web UI MUST be off by default. It MUST start in the same process as the scheduler when either `webUI.enabled: true` is set or the `--web-ui` flag is given. `--web-ui-addr` overrides the listen address; otherwise `webUI.address` or `127.0.0.1:8080` is used. On SIGINT/SIGTERM it MUST shut down gracefully together with the scheduler. If the HTTP server fails (e.g. the port is taken), the process MUST exit with a non-zero status.
+
+- **WHEN** `--web-ui --web-ui-addr 127.0.0.1:9090` is given and the config has no `webUI` block
+  **THEN** `GET http://127.0.0.1:9090/ui` answers 200, and after shutdown the port is closed and the exit code is 0
+- **WHEN** `webUI.address` is set but `webUI.enabled` is `false` and `--web-ui` is not given
+  **THEN** nothing listens on that address
+- **WHEN** the UI address is already in use
+  **THEN** the process exits with status 1
 
 **Code:** `cmd/phorga/main.go`, `internal/webui/server.go`
-**Tests:** `internal/webui/address_test.go#TestNewAddressPrecedence`
-**Gap:** The address precedence is tested. The enable/shutdown wiring in `main.go` is only verified manually.
+**Tests:** `internal/webui/address_test.go#TestNewAddressPrecedence`, `cmd/phorga/main_test.go#TestRun_WebUIEnabledByFlag`, `cmd/phorga/main_test.go#TestRun_WebUIEnabledByConfig`, `cmd/phorga/main_test.go#TestRun_WebUIOffByDefault`, `cmd/phorga/main_test.go#TestRun_WebUIListenFailureExitsNonZero`
 
 ### WEB-002 Server-rendered configuration page
 **Status:** implemented

@@ -162,7 +162,7 @@ package "internal" {
 | Package | Responsibility
 
 | `cmd/phorga`
-| Entry point. Parses config, registers jobs, starts scheduler, handles signals.
+| Entry point. `main` only wires SIGINT/SIGTERM to a context; `run(ctx, args, logOut)` parses flags, loads and validates the config, registers jobs, starts the scheduler and the optional web UI, and returns the exit code (0 ok, 1 error, 2 usage). Tested end-to-end in `main_test.go`.
 
 | `config`
 | YAML/JSON loading, defaults, fail-fast validation.
