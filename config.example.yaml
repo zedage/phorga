@@ -1,11 +1,14 @@
 # Phorga Configuration Example
-# See https://github.com/zedage/phorganizer for documentation.
+# See https://github.com/zedage/phorga for documentation.
 
 # State directory for resume support (default: /data/state)
 stateDir: /data/state
 
 # --- Optional Web UI ---
 # Small server-rendered configuration UI for local/private use.
+# In Docker, use address 0.0.0.0:8080 and publish the port on the host's
+# loopback only (see docker-compose.yml); 127.0.0.1 inside the container
+# is not reachable from the host.
 webUI:
   enabled: false
   address: 127.0.0.1:8080

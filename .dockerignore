@@ -1,0 +1,19 @@
+# Keep the build context small: only Go sources, go.mod/go.sum are needed.
+.git
+.github
+.claude
+docs
+openspec
+data
+testdata
+coverage
+coverage.out
+*.test
+/phorga
+/phorga.exe
+*.exe
+*.md
+config.yaml
+docker-compose.yml
+Dockerfile
+.dockerignore

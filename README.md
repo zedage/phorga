@@ -183,9 +183,14 @@ internal/
 ```bash
 docker build -t phorga .
 docker compose up -d
+
+# Multi-arch (e.g. for an arm64 NAS); Go cross-compiles, no emulation needed for the build
+docker buildx build --platform linux/amd64,linux/arm64 -t <registry>/phorga --push .
 ```
 
 Mount your source/target directories and `config.yaml` as volumes. State is persisted in `/data/state`.
+
+**Web UI in Docker:** inside the container, `127.0.0.1` is not reachable from the host. Set `webUI.address: 0.0.0.0:8080` in `config.yaml` and publish the port on the host's loopback only, e.g. `-p 127.0.0.1:8080:8080` (see the commented `ports` entry in [`docker-compose.yml`](docker-compose.yml)). The UI has no authentication, so do not publish it on all interfaces.
 
 ## Documentation
 

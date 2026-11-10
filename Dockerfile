@@ -1,5 +1,9 @@
-# Build stage
-FROM golang:1.26-alpine AS builder
+# Build stage: runs natively on the build machine and cross-compiles for the
+# target platform (no CGO), so multi-arch builds do not need emulation.
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
+
+ARG TARGETOS
+ARG TARGETARCH
 
 RUN apk add --no-cache git
 
@@ -10,7 +14,7 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /phorga ./cmd/phorga
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -ldflags="-s -w" -o /phorga ./cmd/phorga
 
 # Runtime stage
 FROM alpine:3.20
