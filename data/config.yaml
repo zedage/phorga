@@ -2,7 +2,7 @@
 # Reset test data: go run testdata/tools/generate.go
 # Run Phorga:  go run ./cmd/phorga --config data/config.yaml
 
-stateDir: C:\Users\meinr\github\zedage\phorganizer\data\state
+stateDir: data/state
 
 # Optional built-in web UI (recommended only on local/private networks)
 # webUI:
@@ -13,9 +13,9 @@ organizer:
   - dryRun: false
     target: data/target
     targetStructure: "{year}/{month}"
-    fallbackFolder: C:\Users\meinr\github\zedage\phorganizer\data\fallback
+    fallbackFolder: data/fallback
     sources:
-      - path: C:\Users\meinr\github\zedage\phorganizer\data\source
+      - path: data/source
         mode: copy
         duplicates:
           detectionMode: filename
@@ -28,11 +28,11 @@ duplicateDetection:
     dryRun: true
     schedule: "* * * * *"  # every minute for demo purposes
     sources:
-      - C:\Users\meinr\github\zedage\phorganizer\data\source
+      - data/source
     detectionMode: content
     action:
       method: moveToFolder
-      duplicateFolder: C:\Users\meinr\github\zedage\phorganizer\data\duplicates
+      duplicateFolder: data/duplicates
 webUI:
   enabled: true
   address: 127.0.0.1:8080
