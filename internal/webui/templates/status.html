@@ -1,0 +1,58 @@
+{{/* Status page (WEB-011). Data is a statusData. */}}
+{{define "status"}}
+<!doctype html>
+<html lang="{{.Lang}}">
+{{template "head" (dict "Title" (call .T "status_title"))}}
+<body>
+  <header>
+    {{template "nav" (dict "T" .T "Active" "status")}}
+    <h1>{{call .T "status_heading"}}</h1>
+    <p class="notice">{{call .T "status_intro"}}</p>
+  </header>
+  <main>
+    <div class="card table-wrap" id="status-table" hx-get="/ui/status/table" hx-trigger="every 10s" hx-swap="innerHTML">
+      {{template "statusTable" .}}
+    </div>
+  </main>
+</body>
+</html>
+{{end}}
+
+{{define "statusTable"}}
+{{if not .Data.Available}}
+<p class="muted">{{call .T "status_unavailable"}}</p>
+{{else if not .Data.Jobs}}
+<p class="muted">{{call .T "status_no_jobs"}}</p>
+{{else}}
+<table>
+  <thead>
+    <tr>
+      <th>{{call .T "status_job"}}</th>
+      <th>{{call .T "status_schedule"}}</th>
+      <th>{{call .T "status_next"}}</th>
+      <th>{{call .T "status_state"}}</th>
+      <th>{{call .T "status_last"}}</th>
+      <th>{{call .T "status_duration"}}</th>
+      <th>{{call .T "status_result"}}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Data.Jobs}}
+    <tr data-job="{{.Name}}">
+      <td><strong>{{call $.T (printf "kind_%s" .Kind)}}</strong><br><span class="muted">{{.Label}}</span></td>
+      <td><code>{{.Schedule}}</code></td>
+      <td>{{fmtTime .Next}}</td>
+      <td>{{if .Running}}<span class="badge running">{{call $.T "status_running"}}</span>{{else}}<span class="badge">{{call $.T "status_idle"}}</span>{{end}}</td>
+      {{if .HasLast}}
+      <td>{{fmtTime .LastStart}}{{if .DryRun}} <span class="badge dry">{{call $.T "status_dry_run"}}</span>{{end}}</td>
+      <td>{{fmtDuration .LastDuration}}</td>
+      <td>{{range $k, $c := .Counters}}{{if $k}} · {{end}}{{$c.Value}} {{call $.T (printf "counter_%s" $c.Key)}}{{end}}</td>
+      {{else}}
+      <td colspan="3" class="muted">{{call $.T "status_never"}}</td>
+      {{end}}
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{end}}
+{{end}}

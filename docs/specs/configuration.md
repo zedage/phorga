@@ -75,3 +75,17 @@ The running process MUST keep using the configuration it loaded at startup. Chan
 **Code:** `cmd/phorga/main.go`, `internal/webui/server.go`
 **Tests:** `cmd/phorga/main_test.go#TestRun_ConfigIsNotReloaded`
 **Notes:** See [ADR-0009](../decisions/0009-ui-save-destination-and-no-hot-reload.md).
+
+### CFG-006 Folder picker roots (`webUI.browseRoots`)
+**Status:** implemented
+
+`webUI.browseRoots` is an optional list of folders for the web UI folder picker (WEB-010). It has no default; empty or missing turns the picker off. Validation (CFG-002) MUST report each entry that is not an absolute path, does not exist, or is not a directory, as `webUI.browseRoots[<i>] …`. The value MUST survive a save and load round trip (CFG-004). It is editable in the UI as one path per line.
+
+- **WHEN** `browseRoots: [photos]`
+  **THEN** validation reports `webUI.browseRoots[0] must be an absolute path`
+- **WHEN** `browseRoots` names a file
+  **THEN** validation reports `webUI.browseRoots[0] '<path>' is not a directory`
+
+**Code:** `internal/config/config.go`, `internal/config/validate.go`, `internal/config/saver.go`, `internal/webui/model.go`
+**Tests:** `internal/config/browseroots_test.go#TestValidateBrowseRoots`, `internal/config/browseroots_test.go#TestSaveAndLoadKeepsBrowseRoots`
+**Notes:** See [ADR-0013](../decisions/0013-folder-picker-limited-to-browse-roots.md).

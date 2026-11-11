@@ -155,6 +155,7 @@ func validFormValues(cfg *config.Config, saveTarget string, separatePath string)
 		values.Set("webUI.enabled", "on")
 	}
 	values.Set("webUI.address", form.WebUI.Address)
+	values.Set("webUI.browseRoots", strings.Join(form.WebUI.BrowseRoots, "\n"))
 	values.Set("organizerCount", strconv.Itoa(len(form.Organizer)))
 	for i, org := range form.Organizer {
 		prefix := "organizer." + strconv.Itoa(i)

@@ -72,3 +72,64 @@ func TestOverlapPrevention(t *testing.T) {
 	lock.Unlock()
 }
 
+
+// Spec: WEB-011
+func TestNextAndRunning(t *testing.T) {
+	s := New()
+	started := make(chan struct{})
+	release := make(chan struct{})
+	id, err := s.Register("status-job", "0 2 * * *", func() {
+		close(started)
+		<-release
+	})
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	if !s.Next("unknown").IsZero() || s.Running("unknown") {
+		t.Fatal("unknown job must have no next run and not be running")
+	}
+
+	s.Start()
+	defer s.Stop()
+	next := s.Next("status-job")
+	if next.IsZero() || next.Hour() != 2 || next.Minute() != 0 {
+		t.Fatalf("unexpected next run %v", next)
+	}
+
+	done := make(chan struct{})
+	go func() { s.cron.Entry(id).Job.Run(); close(done) }()
+	<-started
+	if !s.Running("status-job") {
+		t.Fatal("expected job to be reported as running")
+	}
+	close(release)
+	<-done
+	if s.Running("status-job") {
+		t.Fatal("expected job to be idle after it finished")
+	}
+}
+
+// Spec: WEB-008
+func TestNextTimes(t *testing.T) {
+	from := time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC)
+	times, err := NextTimes("30 2 * * *", from, 3)
+	if err != nil {
+		t.Fatalf("NextTimes: %v", err)
+	}
+	want := []time.Time{
+		time.Date(2026, 11, 12, 2, 30, 0, 0, time.UTC),
+		time.Date(2026, 11, 13, 2, 30, 0, 0, time.UTC),
+		time.Date(2026, 11, 14, 2, 30, 0, 0, time.UTC),
+	}
+	if len(times) != 3 {
+		t.Fatalf("got %v", times)
+	}
+	for i := range want {
+		if !times[i].Equal(want[i]) {
+			t.Errorf("times[%d] = %v, want %v", i, times[i], want[i])
+		}
+	}
+	if _, err := NextTimes("not a cron", from, 3); err == nil {
+		t.Fatal("expected error for invalid expression")
+	}
+}

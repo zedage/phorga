@@ -140,3 +140,19 @@ func TestAtomicCopy_NoTempLeftOnError(t *testing.T) {
 		}
 	}
 }
+
+func TestWriteFileAtomic(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sub", "out.json")
+	if err := WriteFileAtomic(path, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("WriteFileAtomic: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != "hello" {
+		t.Fatalf("got %q, %v", data, err)
+	}
+	entries, _ := os.ReadDir(filepath.Dir(path))
+	if len(entries) != 1 {
+		t.Fatalf("expected no temp files left, got %d entries", len(entries))
+	}
+}

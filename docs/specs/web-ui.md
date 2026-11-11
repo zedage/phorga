@@ -1,6 +1,6 @@
 # Spec: Web UI (`WEB`)
 
-> Human explanation: [product.md › Web UI](../product.md#web-ui) · Architecture: [arc42 §6 Web UI Request, §8 Configuration UI](../arc42/arc42.adoc) · Decisions: [ADR-0008](../decisions/0008-built-in-server-rendered-web-ui.md), [ADR-0009](../decisions/0009-ui-save-destination-and-no-hot-reload.md) · Format: [README](README.md)
+> Human explanation: [product.md › Web UI](../product.md#web-ui) · Architecture: [arc42 §6 Web UI Request, §8 Configuration UI](../arc42/arc42.adoc) · Decisions: [ADR-0008](../decisions/0008-built-in-server-rendered-web-ui.md), [ADR-0009](../decisions/0009-ui-save-destination-and-no-hot-reload.md), [ADR-0013](../decisions/0013-folder-picker-limited-to-browse-roots.md), [ADR-0014](../decisions/0014-persisted-run-status-without-dry-runs.md) · Format: [README](README.md)
 
 ---
 
@@ -78,4 +78,93 @@ The UI has no authentication. Its documentation MUST state that it is meant for 
 
 **Code:** `internal/config/loader.go`
 **Tests:** `internal/config/defaults_test.go#TestLoadAppliesDefaults`, `internal/webui/address_test.go#TestNewAddressPrecedence`
-**Notes:** In Docker, the in-container address must be `0.0.0.0:8080`, and the loopback restriction moves to the host port mapping (`127.0.0.1:8080:8080`). README, `docker-compose.yml` and `config.example.yaml` document this. The page loads HTMX from `unpkg.com`. Without internet access, the forms still work as plain POSTs and return full pages.
+**Notes:** In Docker, the in-container address must be `0.0.0.0:8080`, and the loopback restriction moves to the host port mapping (`127.0.0.1:8080:8080`). README, `docker-compose.yml` and `config.example.yaml` document this. HTMX is embedded in the binary (WEB-009), so the UI needs no internet access. Without JavaScript, the forms still work as plain POSTs and return full pages. The folder picker (WEB-010) can list directories, so its roots should be limited to the media folders.
+
+### WEB-007 Choice fields and help texts
+**Status:** implemented
+
+Fields with a fixed set of values MUST be rendered as `<select>`. The allowed values MUST come from the same lists the validation uses (CFG-002):
+- organizer source `mode`: `copy`, `move`
+- organizer source duplicate `actionMethod`: `addSuffix`, `moveToFolder`, `replace`, `skip`
+- duplicate detection `detectionMode`: `content`, `metadata`
+- duplicate detection `actionMethod`: `moveToFolder`, `skip`
+
+Each select also offers an empty "not set" option. A value from the file that is not in the list MUST stay selected, shown as `<value> (unknown)`, so validation can report it. The organizer duplicate `detectionMode` stays a text field, because it combines fields with `+` or `|`. Every editable field MUST show a short help text from the message catalogs (WEB-005), linked with `aria-describedby`.
+
+- **WHEN** a source has `mode: copy`
+  **THEN** the mode select has `copy` selected and also offers `move`
+- **WHEN** a dedup job has `action.method: explode`
+  **THEN** the select shows `explode (unknown)` as the selected option
+
+**Code:** `internal/webui/templates/partials.html`, `internal/webui/templates/page.html`, `internal/webui/model.go`, `internal/webui/i18n_ui.go`, `internal/config/validate.go`
+**Tests:** `internal/webui/usability_test.go#TestPageRendersSelectsWithCurrentValue`, `internal/webui/usability_test.go#TestUIMessagesExistInAllLanguages`, `internal/webui/usability_test.go#TestPageUsesOnlyKnownKeys`, `internal/config/browseroots_test.go#TestEnumAccessorsMatchValidation`
+
+### WEB-008 Live previews and field errors
+**Status:** implemented
+
+While the user types (HTMX, 300 ms delay) and on page load, the UI MUST show:
+- for each `targetStructure`, the path it produces for the fixed sample date 2024-03-15 (`POST /ui/preview/structure?field=<name>`). An empty value previews the default `{year}/{month}`. An invalid structure shows the validation error.
+- for each `schedule`, the next 3 run times in server time (`POST /ui/preview/schedule?field=<name>`), parsed with the scheduler's 5-field rules. An invalid expression shows the parse error.
+
+Previews MUST NOT write anything. When validate or save (WEB-003, WEB-004) finds problems, each problem that belongs to one field MUST also be shown next to that field: as out-of-band HTMX swaps (`hx-swap-oob`) in fragment responses, and inline in full-page responses. The summary list at the top stays.
+
+- **WHEN** `targetStructure` is `{year}/{month}/{day}`
+  **THEN** the preview shows `2024/03/15`
+- **WHEN** `schedule` is `0 2 * * *` and it is 2026-11-11 10:00
+  **THEN** the preview shows 2026-11-12, 2026-11-13 and 2026-11-14 at 02:00
+- **WHEN** an HTMX validate request has an empty `organizer.0.target`
+  **THEN** the response contains `id="err-f-organizer-0-target" hx-swap-oob="true"` with the message `organizer[0].target is required`
+
+**Code:** `internal/webui/preview.go`, `internal/webui/model.go`, `internal/webui/server.go`, `internal/webui/templates/partials.html`, `internal/scheduler/scheduler.go`, `internal/config/validate.go`
+**Tests:** `internal/webui/usability_test.go#TestPreviewStructure`, `internal/webui/usability_test.go#TestPreviewSchedule`, `internal/webui/usability_test.go#TestValidateReturnsFieldErrorsOutOfBand`, `internal/webui/usability_test.go#TestFieldForProblem`, `internal/scheduler/scheduler_test.go#TestNextTimes`
+
+### WEB-009 Embedded assets
+**Status:** implemented
+
+HTMX (1.9.12) MUST be embedded in the binary and served from `/ui/static/htmx.min.js` with a `Cache-Control` header. UI pages MUST NOT load scripts or styles from external hosts.
+
+- **WHEN** `/ui` or `/ui/status` is rendered
+  **THEN** it loads `/ui/static/htmx.min.js` and contains no `unpkg.com` reference
+
+**Code:** `internal/webui/server.go`, `internal/webui/static/htmx.min.js`, `internal/webui/templates/layout.html`
+**Tests:** `internal/webui/usability_test.go#TestHTMXIsServedFromBinary`
+
+### WEB-010 Folder picker
+**Status:** implemented
+
+When `webUI.browseRoots` (CFG-006) is set, every path field MUST offer autocomplete suggestions and a "Browse…" button that opens a folder dialog. The picker MUST:
+- list only directories, sorted by name, without hidden (dot) folders, and only below one of the roots after `..` cleanup and symlink resolution
+- answer `403` for `GET /ui/fs/list?path=<p>` when `<p>` is relative, not a directory, or outside the roots
+- for `GET /ui/fs/list?start=<field value>`, open the nearest existing allowed folder, or the list of roots
+- for `GET /ui/fs/suggest?field=<name>`, return at most 20 `<option>` completions of the typed path
+- never create, change or delete anything on disk
+- use the roots loaded at startup (CFG-005)
+
+When `browseRoots` is not set, the picker controls MUST be hidden and both endpoints MUST answer `404`.
+
+- **WHEN** the root contains `albums/`, `archive/`, `.hidden/` and `notes.txt`
+  **THEN** the listing shows `albums` and `archive` only
+- **WHEN** `path` is `<root>/albums/../..` or a symlink inside the root that points outside
+  **THEN** the response is `403`
+- **WHEN** the field value is `<root>/albums/2025/new`, which does not exist yet
+  **THEN** the dialog opens at `<root>/albums`
+
+**Code:** `internal/webui/fsbrowse.go`, `internal/webui/templates/partials.html`, `internal/webui/templates/page.html`
+**Tests:** `internal/webui/fsbrowse_test.go#TestPickerListsOnlyVisibleSubfolders`, `internal/webui/fsbrowse_test.go#TestPickerRejectsPathsOutsideRoots`, `internal/webui/fsbrowse_test.go#TestPickerStartsAtNearestAllowedFolder`, `internal/webui/fsbrowse_test.go#TestPickerSuggestCompletesPrefix`, `internal/webui/fsbrowse_test.go#TestPickerDisabledWithoutRoots`, `internal/webui/fsbrowse_test.go#TestPickerNeverWrites`
+**Notes:** The symlink case is skipped where the OS does not allow creating symlinks (Windows without developer mode). See [ADR-0013](../decisions/0013-folder-picker-limited-to-browse-roots.md).
+
+### WEB-011 Status page
+**Status:** implemented
+
+`GET /ui/status` MUST show one row per registered job (each organizer source, each enabled dedup job) with: kind and label (`<source> → <target>`, or the dedup sources), cron schedule, next planned run, running/idle, and the last run's start, duration, counters and a dry-run badge. Jobs that have not run show "not run yet". The table MUST refresh itself every 10 s from `GET /ui/status/table` (fragment). Both endpoints answer `405` for other methods.
+
+The last result of each job MUST be recorded after every run. Results of non-dry runs MUST be persisted atomically in `<stateDir>/run-status.json` and loaded at startup. Results of dry runs MUST be kept in memory only, so a dry run never writes a file. A failure to write the status file MUST be logged and never fail the job.
+
+- **WHEN** an organizer run (not dry) finishes and Phorga restarts
+  **THEN** the status page still shows that run with its counters
+- **WHEN** a dedup job with `dryRun: true` finishes
+  **THEN** the page shows it with a "dry run" badge, and `run-status.json` is not created or changed
+
+**Code:** `internal/runstatus/runstatus.go`, `internal/webui/status.go`, `internal/webui/templates/status.html`, `internal/scheduler/scheduler.go`, `internal/fileops/fileops.go`, `cmd/phorga/main.go`
+**Tests:** `internal/runstatus/runstatus_test.go#TestFinishPersistsAndReloads`, `internal/runstatus/runstatus_test.go#TestDryRunIsNotWritten`, `internal/runstatus/runstatus_test.go#TestWriteErrorDoesNotPanic`, `internal/scheduler/scheduler_test.go#TestNextAndRunning`, `internal/webui/usability_test.go#TestStatusTableShowsJobs`, `internal/webui/usability_test.go#TestStatusPageWithoutSource`, `cmd/phorga/status_test.go#TestStatusBoardReportsRecordedRun`, `cmd/phorga/status_test.go#TestRun_StatusPageIsServed`
+**Notes:** See [ADR-0014](../decisions/0014-persisted-run-status-without-dry-runs.md).

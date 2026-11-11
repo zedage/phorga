@@ -53,6 +53,10 @@ func normalizedCopy(cfg *Config) *Config {
 	clone.DuplicateDetection = append([]DuplicateDetection(nil), cfg.DuplicateDetection...)
 	if cfg.WebUI != nil {
 		webUI := *cfg.WebUI
+		webUI.BrowseRoots = append([]string(nil), cfg.WebUI.BrowseRoots...)
+		if len(webUI.BrowseRoots) == 0 {
+			webUI.BrowseRoots = nil
+		}
 		clone.WebUI = &webUI
 	}
 

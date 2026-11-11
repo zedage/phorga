@@ -12,6 +12,11 @@ stateDir: /data/state
 webUI:
   enabled: false
   address: 127.0.0.1:8080
+  # Optional: folders the UI folder picker may browse (absolute paths).
+  # Without this list the picker is off. In Docker, use the mounted media
+  # folder, e.g. /photos. The picker only lists folder names and never writes.
+  # browseRoots:
+  #   - /path/to/photos
 
 # --- Organizer Feature ---
 # Organizes photos/videos from source directories into a date-based target structure.

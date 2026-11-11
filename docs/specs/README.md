@@ -10,7 +10,7 @@ They are written mainly so that AI agents (and reviewers) can change code safely
 | [duplicate-detection.md](duplicate-detection.md) | `DUP` | Independent cross-source duplicate detection |
 | [configuration.md](configuration.md) | `CFG` | Config loading, path resolution, validation, saving |
 | [notifications.md](notifications.md) | `NTF` | ntfy.sh run summaries |
-| [web-ui.md](web-ui.md) | `WEB` | Optional built-in configuration UI |
+| [web-ui.md](web-ui.md) | `WEB` | Optional built-in configuration UI, folder picker and status page |
 
 ## Requirement format
 

@@ -3,6 +3,9 @@ package config
 import (
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/robfig/cron/v3"
@@ -29,6 +32,27 @@ var validDedupMethods = map[string]bool{
 var validDedupModes = map[string]bool{
 	"content":  true,
 	"metadata": true,
+}
+
+// SourceModes returns the accepted organizer source modes, sorted.
+func SourceModes() []string { return sortedKeys(validModes) }
+
+// OrganizerDuplicateMethods returns the accepted organizer duplicate action methods, sorted.
+func OrganizerDuplicateMethods() []string { return sortedKeys(validOrgDupMethods) }
+
+// DedupMethods returns the accepted duplicate detection action methods, sorted.
+func DedupMethods() []string { return sortedKeys(validDedupMethods) }
+
+// DedupModes returns the accepted duplicate detection modes, sorted.
+func DedupModes() []string { return sortedKeys(validDedupModes) }
+
+func sortedKeys(m map[string]bool) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // validTargetTokens lists the allowed tokens in targetStructure.
@@ -94,6 +118,22 @@ func ValidateProblems(cfg *Config) []string {
 
 func validateWebUIConfig(prefix string, webUI WebUIConfig) []string {
 	var errs []string
+
+	for i, root := range webUI.BrowseRoots {
+		rootPrefix := fmt.Sprintf("%s.browseRoots[%d]", prefix, i)
+		if !filepath.IsAbs(root) {
+			errs = append(errs, fmt.Sprintf("%s must be an absolute path, got '%s'", rootPrefix, root))
+			continue
+		}
+		info, err := os.Stat(root)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("%s '%s' does not exist", rootPrefix, root))
+			continue
+		}
+		if !info.IsDir() {
+			errs = append(errs, fmt.Sprintf("%s '%s' is not a directory", rootPrefix, root))
+		}
+	}
 
 	if !webUI.Enabled {
 		return errs
@@ -213,6 +253,12 @@ func validateCron(expr string) error {
 		return fmt.Errorf("invalid cron expression '%s': %v", expr, err)
 	}
 	return nil
+}
+
+// ValidateTargetStructure checks a targetStructure value with the startup
+// rules (CFG-002). It is used by the web UI preview (WEB-008).
+func ValidateTargetStructure(structure string) error {
+	return validateTargetStructure(structure)
 }
 
 // validateTargetStructure checks that all tokens in the structure are valid.
