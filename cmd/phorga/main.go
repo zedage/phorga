@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/zedage/phorga/internal/dedup"
 	"github.com/zedage/phorga/internal/notify"
 	"github.com/zedage/phorga/internal/organizer"
+	"github.com/zedage/phorga/internal/runstatus"
 	"github.com/zedage/phorga/internal/scheduler"
 	"github.com/zedage/phorga/internal/state"
 	"github.com/zedage/phorga/internal/webui"
@@ -69,7 +71,9 @@ func run(ctx context.Context, args []string, logOut io.Writer) int {
 	}
 
 	sched := scheduler.New()
-	if err := registerJobs(sched, cfg); err != nil {
+	recorder := runstatus.Load(runstatus.Path(cfg.StateDir))
+	jobs, err := registerJobs(sched, cfg, recorder)
+	if err != nil {
 		slog.Error("failed to register jobs", "error", err)
 		return exitError
 	}
@@ -80,7 +84,12 @@ func run(ctx context.Context, args []string, logOut io.Writer) int {
 	var ui *webui.Server
 	uiErrCh := make(chan error, 1)
 	if webUIEnabled(*webUIFlag, cfg) {
-		ui, err = webui.New(webui.Options{Address: *webUIAddr, ConfigPath: cfgPath, Config: cfg})
+		ui, err = webui.New(webui.Options{
+			Address:    *webUIAddr,
+			ConfigPath: cfgPath,
+			Config:     cfg,
+			Status:     &statusBoard{sched: sched, recorder: recorder, jobs: jobs},
+		})
 		if err != nil {
 			slog.Error("web UI setup failed", "error", err)
 			return exitError
@@ -132,45 +141,113 @@ func webUIEnabled(flagSet bool, cfg *config.Config) bool {
 	return flagSet || (cfg.WebUI != nil && cfg.WebUI.Enabled)
 }
 
+// jobInfo describes a registered job for the status page (WEB-011).
+type jobInfo struct {
+	name        string
+	kind        string // "organizer" or "dedup"
+	label       string
+	schedule    string
+	counterKeys []string
+}
+
+var (
+	organizerCounterKeys = []string{"processed", "skipped", "errors"}
+	dedupCounterKeys     = []string{"files", "duplicates", "actions", "errors"}
+)
+
 // registerJobs registers one job per organizer source and one per enabled
-// duplicate detection job (ORG-010, DUP-008).
-func registerJobs(sched *scheduler.Scheduler, cfg *config.Config) error {
+// duplicate detection job (ORG-010, DUP-008). Each run's result is recorded
+// for the status page (WEB-011).
+func registerJobs(sched *scheduler.Scheduler, cfg *config.Config, recorder *runstatus.Recorder) ([]jobInfo, error) {
+	var jobs []jobInfo
 	for i, profile := range cfg.Organizer {
 		for j, source := range profile.Sources {
-			p, s := profile, source
 			name := fmt.Sprintf("organizer-%d-source-%d", i, j)
-			statePath := organizer.StatePath(cfg.StateDir, p.Target, s.Path)
-
-			if _, err := sched.Register(name, s.Schedule, func() {
-				st := state.Load(statePath)
-				result, duration := organizer.RunWithTime(p, s, st, statePath)
-				if p.Ntfy != nil {
-					title, msg := notify.FormatOrganizerSummary(s.Path, result.Processed, result.Skipped, result.Errors, duration)
-					notify.New(p.Ntfy.URL).SendSummary(title, msg)
-				}
-			}); err != nil {
-				return fmt.Errorf("%s: %w", name, err)
+			statePath := organizer.StatePath(cfg.StateDir, profile.Target, source.Path)
+			if _, err := sched.Register(name, source.Schedule, organizerJob(name, profile, source, statePath, recorder)); err != nil {
+				return nil, fmt.Errorf("%s: %w", name, err)
 			}
+			jobs = append(jobs, jobInfo{
+				name: name, kind: "organizer", schedule: source.Schedule,
+				label:       fmt.Sprintf("%s → %s", source.Path, profile.Target),
+				counterKeys: organizerCounterKeys,
+			})
 		}
 	}
 
 	for i, dd := range cfg.DuplicateDetection {
-		job := dd
-		if !job.Enabled {
+		if !dd.Enabled {
 			continue
 		}
 		name := fmt.Sprintf("dedup-%d", i)
+		if _, err := sched.Register(name, dd.Schedule, dedupJob(name, dd, recorder)); err != nil {
+			return nil, fmt.Errorf("%s: %w", name, err)
+		}
+		jobs = append(jobs, jobInfo{
+			name: name, kind: "dedup", schedule: dd.Schedule,
+			label:       strings.Join(dd.Sources, ", "),
+			counterKeys: dedupCounterKeys,
+		})
+	}
+	return jobs, nil
+}
 
-		if _, err := sched.Register(name, job.Schedule, func() {
-			start := time.Now()
-			result := dedup.Run(job)
-			if job.Ntfy != nil {
-				title, msg := notify.FormatDedupSummary(result.TotalFiles, result.DuplicatesPair, result.ActionsApplied, result.Errors, time.Since(start))
-				notify.New(job.Ntfy.URL).SendSummary(title, msg)
-			}
-		}); err != nil {
-			return fmt.Errorf("%s: %w", name, err)
+// organizerJob runs one organizer source, notifies, and records the result.
+func organizerJob(name string, p config.OrganizerProfile, s config.OrganizerSource, statePath string, recorder *runstatus.Recorder) func() {
+	return func() {
+		start := time.Now()
+		st := state.Load(statePath)
+		result, duration := organizer.RunWithTime(p, s, st, statePath)
+		recorder.Finish(name, runstatus.Record{
+			Start: start, Duration: duration, DryRun: result.DryRun,
+			Counters: map[string]int{"processed": result.Processed, "skipped": result.Skipped, "errors": result.Errors},
+		})
+		if p.Ntfy != nil {
+			title, msg := notify.FormatOrganizerSummary(s.Path, result.Processed, result.Skipped, result.Errors, duration)
+			notify.New(p.Ntfy.URL).SendSummary(title, msg)
 		}
 	}
-	return nil
+}
+
+// dedupJob runs one duplicate detection job, notifies, and records the result.
+func dedupJob(name string, job config.DuplicateDetection, recorder *runstatus.Recorder) func() {
+	return func() {
+		start := time.Now()
+		result := dedup.Run(job)
+		duration := time.Since(start)
+		recorder.Finish(name, runstatus.Record{
+			Start: start, Duration: duration, DryRun: result.DryRun,
+			Counters: map[string]int{"files": result.TotalFiles, "duplicates": result.DuplicatesPair, "actions": result.ActionsApplied, "errors": result.Errors},
+		})
+		if job.Ntfy != nil {
+			title, msg := notify.FormatDedupSummary(result.TotalFiles, result.DuplicatesPair, result.ActionsApplied, result.Errors, duration)
+			notify.New(job.Ntfy.URL).SendSummary(title, msg)
+		}
+	}
+}
+
+// statusBoard combines scheduler state and recorded results for the web UI
+// status page (WEB-011). It implements webui.StatusSource.
+type statusBoard struct {
+	sched    *scheduler.Scheduler
+	recorder *runstatus.Recorder
+	jobs     []jobInfo
+}
+
+func (b *statusBoard) Jobs() []webui.JobStatus {
+	out := make([]webui.JobStatus, 0, len(b.jobs))
+	for _, j := range b.jobs {
+		js := webui.JobStatus{
+			Name: j.name, Kind: j.kind, Label: j.label, Schedule: j.schedule,
+			Next: b.sched.Next(j.name), Running: b.sched.Running(j.name),
+		}
+		if rec, ok := b.recorder.Last(j.name); ok {
+			js.HasLast, js.LastStart, js.LastDuration, js.DryRun = true, rec.Start, rec.Duration, rec.DryRun
+			for _, key := range j.counterKeys {
+				js.Counters = append(js.Counters, webui.Counter{Key: key, Value: rec.Counters[key]})
+			}
+		}
+		out = append(out, js)
+	}
+	return out
 }

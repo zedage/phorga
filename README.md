@@ -6,7 +6,7 @@ Headless photo/video organizer and duplicate detector. Runs as a daemon, organiz
 
 - **Organizer**: date-based file organization (EXIF → filename → source path → mtime fallback), move/copy, per-source cron scheduling, lightweight duplicate handling, dry-run, state/resume
 - **Duplicate Detection**: independent metadata- or content-based (perceptual hash) dedup across sources, moveToFolder/skip actions, dry-run
-- **Web UI**: optional built-in server-rendered configuration UI with HTMX-friendly endpoints and UI localization (DE/EN/IT/FR)
+- **Web UI**: optional built-in configuration UI with dropdowns, help texts, live previews, a folder picker and a job status page, in DE/EN/IT/FR
 - **Notifications**: optional ntfy.sh push notifications on run completion
 - **Docker-first**: single container, multi-arch (amd64/arm64), works on Synology NAS
 
@@ -62,9 +62,14 @@ webUI:
 
 Phorga can expose a small built-in configuration UI from the same process that runs the scheduler.
 
-- Server-rendered HTML with HTMX-compatible validation/save endpoints
+- Server-rendered HTML with HTMX-compatible validation/save endpoints. HTMX is embedded in the binary, so no internet access is needed.
 - UI localization: German, English, Italian, French
 - Displays the currently loaded effective configuration values
+- Dropdowns for fields with fixed values, and a help text under every field
+- Live previews: the folder a `targetStructure` produces (for 15 March 2024), and the next 3 runs of each cron `schedule`
+- Validation errors are shown next to the field they belong to
+- Folder picker ("Browse…" dialog and autocomplete) for all path fields, limited to `webUI.browseRoots`
+- Status page (`/ui/status`): next run, running state and last result of every job, refreshed every 10 s
 - Saves either back to the active config file or to a separate config file
 
 Enable it in config:
@@ -83,6 +88,20 @@ go run ./cmd/phorga --config config.yaml --web-ui --web-ui-addr 127.0.0.1:9090
 ```
 
 The UI shows the values currently loaded at startup. Saving to a separate file writes a new config file but does not automatically reload the running scheduler.
+
+**Folder picker.** It is off until you list the folders it may browse:
+
+```yaml
+webUI:
+  enabled: true
+  address: 127.0.0.1:8080
+  browseRoots:
+    - /photos   # absolute paths; in Docker, the mounted media folder
+```
+
+The picker shows only folders (no files, no hidden folders) below these roots, and never creates or changes anything.
+
+**Status page.** The last result of each job is stored in `<stateDir>/run-status.json`, so it survives a restart. Dry runs are shown too, but only kept in memory, so a dry run never writes a file.
 
 ### TargetStructure Tokens
 
@@ -175,7 +194,8 @@ internal/
   state/                 JSON state persistence (resume support)
   scheduler/             Cron wrapper with overlap prevention
   notify/                ntfy.sh client
-  webui/                 Optional built-in configuration UI (HTTP, templates, i18n)
+  runstatus/             Last run result per job for the status page
+  webui/                 Optional built-in configuration UI (HTTP, templates, i18n, folder picker, status page)
 ```
 
 ## Docker

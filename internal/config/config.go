@@ -12,6 +12,9 @@ type Config struct {
 type WebUIConfig struct {
 	Enabled bool   `yaml:"enabled" json:"enabled"`
 	Address string `yaml:"address,omitempty" json:"address,omitempty"`
+	// BrowseRoots limits the web UI folder picker to these directories.
+	// Empty disables the picker (WEB-010, CFG-006).
+	BrowseRoots []string `yaml:"browseRoots,omitempty" json:"browseRoots,omitempty"`
 }
 
 // OrganizerProfile defines a single organizer target with its sources.

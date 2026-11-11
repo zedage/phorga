@@ -139,6 +139,7 @@ package "internal" {
   [state]
   [notify]
   [webui]
+  [runstatus]
 }
 
 [main] --> [config]
@@ -147,6 +148,10 @@ package "internal" {
 [main] --> [dedup]
 [main] --> [notify]
 [main] --> [webui]
+[main] --> [runstatus]
+[runstatus] --> [fileops]
+[webui] --> [scheduler]
+[webui] --> [metadata]
 [organizer] --> [metadata]
 [organizer] --> [fileops]
 [organizer] --> [state]
@@ -168,7 +173,7 @@ package "internal" {
 | YAML/JSON loading, defaults, fail-fast validation.
 
 | `scheduler`
-| Cron wrapper with overlap prevention (TryLock per job).
+| Cron wrapper with overlap prevention (TryLock per job). Also reports the next run and running state per job, and computes next run times for the UI preview.
 
 | `organizer`
 | Recursive source scanning, date resolution, copy/move, lightweight duplicate handling.
@@ -180,7 +185,7 @@ package "internal" {
 | EXIF extraction (goexif), filename/path date parsing, file type detection, target path token resolution.
 
 | `fileops`
-| Atomic copy/move, directory creation, suffix generation.
+| Atomic copy/move, atomic byte writes, directory creation, suffix generation.
 
 | `state`
 | JSON state read/write with atomic saves and corruption recovery.
@@ -188,8 +193,11 @@ package "internal" {
 | `notify`
 | ntfy.sh HTTP client, fire-and-forget with timeout.
 
+| `runstatus`
+| Last result per job for the status page. Persists non-dry results to `<stateDir>/run-status.json`; dry-run results stay in memory (ADR-0014).
+
 | `webui`
-| Optional HTTP handlers, templates, localization, and config save/validate flow.
+| Optional HTTP handlers, templates, localization, config save/validate flow, live previews, the read-only folder picker below `webUI.browseRoots` (ADR-0013), the status page, and the embedded HTMX asset. Gets job status from `main` through the small `StatusSource` interface.
 |===
 
 == 6. Runtime View
@@ -250,7 +258,39 @@ webui --> Browser : HTML page
 Browser -> main : POST /ui/validate or /ui/save
 main -> webui : parse form
 webui -> config : validate / save
-webui --> Browser : HTML fragment or full HTML response
+webui --> Browser : HTML fragment (+ out-of-band field errors) or full HTML response
+Browser -> main : POST /ui/preview/structure or /ui/preview/schedule
+webui -> metadata : resolve sample path
+webui -> scheduler : next 3 run times
+webui --> Browser : preview fragment
+Browser -> main : GET /ui/fs/list or /ui/fs/suggest
+webui -> webui : clean path, resolve symlinks, check browseRoots
+webui --> Browser : folder list / options, or 403
+@enduml
+----
+
+=== Job Status Recording
+
+[plantuml, runtime-status, svg]
+----
+@startuml
+participant scheduler
+participant "job (main)" as job
+participant runstatus
+actor Browser
+scheduler -> job : run (TryLock, running = true)
+job -> job : organizer.Run / dedup.Run
+job -> runstatus : Finish(name, record)
+alt dryRun
+  runstatus -> runstatus : keep in memory
+else
+  runstatus -> runstatus : atomic write run-status.json
+end
+Browser -> webui : GET /ui/status/table (every 10 s)
+webui -> job : StatusSource.Jobs()
+job -> scheduler : Next(name), Running(name)
+job -> runstatus : Last(name)
+webui --> Browser : table fragment
 @enduml
 ----
 @startuml
@@ -328,8 +368,11 @@ All file writes use a temp-file in the target directory followed by `os.Rename`.
 
 === Configuration UI
 * Optional HTTP server in the main process.
-* Server-rendered templates with HTMX-compatible validation and save endpoints.
+* Server-rendered templates with HTMX-compatible validation and save endpoints. HTMX is embedded in the binary, so no internet access is needed.
 * Displays the currently loaded config and can save to the active file or a separate file.
+* Select fields and help texts, with allowed values taken from the validation rules. Live previews of `targetStructure` and cron schedules. Validation errors are shown next to their field.
+* Folder picker and autocomplete below `webUI.browseRoots` only. Paths are checked after symlink resolution, and the picker never writes. It is off when no roots are set.
+* Status page with the next run, running state and last result per job, refreshed every 10 s.
 * Intended for local/private use unless protected externally.
 
 == 9. Architectural Decisions
@@ -375,6 +418,12 @@ Decisions are recorded as ADRs in link:../decisions/README.md[docs/decisions]. T
 
 | link:../decisions/0012-duplicate-checks-require-real-exif.md[0012]
 | Duplicate checks on dates require real EXIF
+
+| link:../decisions/0013-folder-picker-limited-to-browse-roots.md[0013]
+| Folder picker limited to `browseRoots`, read-only, off by default
+
+| link:../decisions/0014-persisted-run-status-without-dry-runs.md[0014]
+| Run status persisted in `stateDir`; dry runs in memory only
 |===
 
 == 10. Risks and Technical Debt
@@ -400,8 +449,8 @@ Decisions are recorded as ADRs in link:../decisions/README.md[docs/decisions]. T
 | Lock-file per source prevents overlapping Phorga runs.
 
 | Local/private web UI only
-| Public exposure would be unsafe without additional controls
-| Document local/private deployment scope and rely on external protection if exposed.
+| Public exposure would be unsafe without additional controls. The folder picker reveals folder names below `browseRoots`.
+| Document local/private deployment scope and rely on external protection if exposed. Keep `browseRoots` limited to the media folders.
 
 | Duplicated token list
 | `targetStructure` tokens are defined in both `config` and `metadata`, so they can diverge

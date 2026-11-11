@@ -1,0 +1,58 @@
+{{define "head"}}
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}}</title>
+  <script src="/ui/static/htmx.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #f5f7fa; color: #20262e; }
+    header, main { max-width: 1100px; margin: 0 auto; padding: 1rem 1.25rem; }
+    header { padding-top: 2rem; }
+    nav { display: flex; gap: 1rem; margin-bottom: .5rem; }
+    nav a { color: #0b62d6; text-decoration: none; font-weight: 600; }
+    nav a.active { color: #20262e; border-bottom: 2px solid #0b62d6; }
+    h1, h2, h3 { margin-bottom: 0.5rem; }
+    .notice { color: #54606c; }
+    .card { background: white; border-radius: 10px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+    .grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+    label { display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.2rem; }
+    input[type=text], select, textarea { width: 100%; padding: 0.55rem 0.65rem; border: 1px solid #ccd5df; border-radius: 6px; box-sizing: border-box; font: inherit; }
+    .input-row { display: flex; gap: .4rem; }
+    .input-row input { flex: 1; min-width: 0; }
+    .checkbox { display: flex; align-items: center; gap: 0.4rem; font-weight: 600; }
+    .actions { display: flex; gap: 0.75rem; margin-top: 1rem; flex-wrap: wrap; }
+    button { padding: 0.7rem 1rem; border: none; border-radius: 6px; background: #0b62d6; color: white; cursor: pointer; }
+    button.secondary { background: #64748b; }
+    button.small { padding: .45rem .7rem; font-size: .85rem; white-space: nowrap; }
+    button.link { background: none; color: #0b62d6; padding: .3rem 0; text-align: left; }
+    .flash { border-radius: 8px; padding: 0.8rem 1rem; margin-bottom: 1rem; }
+    .flash.success { background: #e7f7ed; color: #14532d; }
+    .flash.error { background: #fdecec; color: #991b1b; }
+    .muted, .help { color: #5c6773; font-size: 0.85rem; }
+    .help { display: block; margin-top: .2rem; }
+    .field-error { color: #991b1b; font-size: .85rem; margin-top: .2rem; }
+    .field-error:empty { display: none; }
+    .preview { font-size: .85rem; margin-top: .25rem; }
+    .preview .ok { color: #14532d; }
+    .preview .bad { color: #991b1b; }
+    .preview code { background: #eef2f6; padding: 0 .25rem; border-radius: 4px; }
+    .inline-options { display: flex; gap: 1rem; flex-wrap: wrap; }
+    dialog { border: none; border-radius: 10px; padding: 1rem; width: min(560px, 92vw); box-shadow: 0 8px 30px rgba(0,0,0,.25); }
+    dialog ul { list-style: none; padding: 0; margin: .5rem 0; max-height: 50vh; overflow-y: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+    th, td { text-align: left; padding: .5rem; border-bottom: 1px solid #e3e8ee; vertical-align: top; }
+    .badge { display: inline-block; padding: .1rem .45rem; border-radius: 999px; font-size: .8rem; background: #eef2f6; }
+    .badge.running { background: #dbeafe; color: #1e40af; }
+    .badge.dry { background: #fef3c7; color: #92400e; }
+    .table-wrap { overflow-x: auto; }
+  </style>
+</head>
+{{end}}
+
+{{/* nav expects dict "T" <translate func> "Active" "config"|"status" */}}
+{{define "nav"}}
+<nav>
+  <a href="/ui" {{if eq .Active "config"}}class="active"{{end}}>{{call .T "nav_config"}}</a>
+  <a href="/ui/status" {{if eq .Active "status"}}class="active"{{end}}>{{call .T "nav_status"}}</a>
+</nav>
+{{end}}

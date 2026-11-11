@@ -3,6 +3,7 @@ package webui
 import (
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -10,10 +11,31 @@ import (
 )
 
 type pageData struct {
-	Lang       string
-	ConfigPath string
-	Form       configForm
-	Flash      flashMessage
+	Lang          string
+	ConfigPath    string
+	Form          configForm
+	Flash         flashMessage
+	FieldErrors   map[string][]string
+	BrowseEnabled bool
+	Choices       choices
+}
+
+// choices holds the allowed values for the select fields (WEB-007). They come
+// from the config validation rules so UI and validation cannot drift apart.
+type choices struct {
+	SourceModes  []string
+	OrgMethods   []string
+	DedupMethods []string
+	DedupModes   []string
+}
+
+func newChoices() choices {
+	return choices{
+		SourceModes:  config.SourceModes(),
+		OrgMethods:   config.OrganizerDuplicateMethods(),
+		DedupMethods: config.DedupMethods(),
+		DedupModes:   config.DedupModes(),
+	}
 }
 
 type flashMessage struct {
@@ -33,8 +55,9 @@ type configForm struct {
 }
 
 type webUIForm struct {
-	Enabled bool
-	Address string
+	Enabled     bool
+	Address     string
+	BrowseRoots []string
 }
 
 type organizerProfileForm struct {
@@ -77,6 +100,7 @@ func newFormFromConfig(cfg *config.Config) configForm {
 	}
 	if cfg.WebUI != nil {
 		form.WebUI.Enabled = cfg.WebUI.Enabled
+		form.WebUI.BrowseRoots = append([]string(nil), cfg.WebUI.BrowseRoots...)
 		if cfg.WebUI.Address != "" {
 			form.WebUI.Address = cfg.WebUI.Address
 		}
@@ -142,7 +166,8 @@ func parseForm(r *http.Request) (configForm, error) {
 		SeparatePath: strings.TrimSpace(r.FormValue("separatePath")),
 		WebUI: webUIForm{
 			Enabled: r.FormValue("webUI.enabled") != "",
-			Address: strings.TrimSpace(r.FormValue("webUI.address")),
+			Address:     strings.TrimSpace(r.FormValue("webUI.address")),
+			BrowseRoots: splitLines(r.FormValue("webUI.browseRoots")),
 		},
 	}
 	if form.SaveTarget == "" {
@@ -210,6 +235,11 @@ func (f configForm) toConfig() *config.Config {
 		DuplicateDetection: make([]config.DuplicateDetection, 0, len(f.DuplicateDetection)),
 	}
 	cfg.WebUI = &config.WebUIConfig{Enabled: f.WebUI.Enabled, Address: strings.TrimSpace(f.WebUI.Address)}
+	for _, root := range f.WebUI.BrowseRoots {
+		if root = strings.TrimSpace(root); root != "" {
+			cfg.WebUI.BrowseRoots = append(cfg.WebUI.BrowseRoots, root)
+		}
+	}
 
 	for _, profile := range f.Organizer {
 		item := config.OrganizerProfile{
@@ -272,4 +302,58 @@ func parseCount(value string) int {
 		return 0
 	}
 	return count
+}
+
+// splitLines splits a textarea value into trimmed, non-empty lines.
+func splitLines(value string) []string {
+	var lines []string
+	for _, line := range strings.Split(value, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			lines = append(lines, line)
+		}
+	}
+	return lines
+}
+
+var problemPath = regexp.MustCompile(`^[A-Za-z]+(?:\[\d+\])?(?:\.[A-Za-z]+(?:\[\d+\])?)*`)
+var problemIndex = regexp.MustCompile(`\[(\d+)\]`)
+
+// fieldForProblem maps a validation problem such as
+// "organizer[0].sources[1].duplicates.action.method must be ..." to the form
+// field name "organizer.0.sources.1.actionMethod" (WEB-008). It returns ""
+// when the problem does not belong to a single field.
+func fieldForProblem(problem string) string {
+	path := problemPath.FindString(problem)
+	if path == "" {
+		return ""
+	}
+	name := problemIndex.ReplaceAllString(path, ".$1")
+	replacements := []struct{ from, to string }{
+		{".duplicates.detectionMode", ".detectionMode"},
+		{".duplicates.action.method", ".actionMethod"},
+		{".duplicates.action.duplicateFolder", ".duplicateFolder"},
+		{".action.method", ".actionMethod"},
+		{".action.duplicateFolder", ".duplicateFolder"},
+	}
+	for _, r := range replacements {
+		if strings.HasSuffix(name, r.from) {
+			name = strings.TrimSuffix(name, r.from) + r.to
+			break
+		}
+	}
+	if strings.HasPrefix(name, "webUI.browseRoots") {
+		return "webUI.browseRoots"
+	}
+	return name
+}
+
+// fieldErrors groups problems by the form field they belong to.
+func fieldErrors(problems []string) map[string][]string {
+	out := map[string][]string{}
+	for _, p := range problems {
+		if field := fieldForProblem(p); field != "" {
+			out[field] = append(out[field], p)
+		}
+	}
+	return out
 }

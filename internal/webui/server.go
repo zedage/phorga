@@ -5,6 +5,7 @@ import (
 	"embed"
 	"fmt"
 	"html/template"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -16,18 +17,25 @@ import (
 //go:embed templates/*.html
 var templateFS embed.FS
 
+//go:embed static/*
+var staticFS embed.FS
+
 type Options struct {
 	Address    string
 	ConfigPath string
 	Config     *config.Config
+	// Status provides job status for the status page (WEB-011). Optional.
+	Status StatusSource
 }
 
 type Server struct {
-	address    string
-	configPath string
-	config     *config.Config
-	templates  *template.Template
-	httpServer *http.Server
+	address     string
+	configPath  string
+	config      *config.Config
+	browseRoots []string
+	status      StatusSource
+	templates   *template.Template
+	httpServer  *http.Server
 }
 
 func New(opts Options) (*Server, error) {
@@ -43,7 +51,7 @@ func New(opts Options) (*Server, error) {
 		}
 	}
 
-	tmpl, err := template.ParseFS(templateFS, "templates/*.html")
+	tmpl, err := template.New("").Funcs(templateFuncs).ParseFS(templateFS, "templates/*.html")
 	if err != nil {
 		return nil, fmt.Errorf("parsing web UI templates: %w", err)
 	}
@@ -52,7 +60,16 @@ func New(opts Options) (*Server, error) {
 		address:    address,
 		configPath: opts.ConfigPath,
 		config:     opts.Config,
+		status:     opts.Status,
 		templates:  tmpl,
+	}
+	if opts.Config.WebUI != nil {
+		s.browseRoots = append([]string(nil), opts.Config.WebUI.BrowseRoots...)
+	}
+
+	static, err := fs.Sub(staticFS, "static")
+	if err != nil {
+		return nil, fmt.Errorf("loading web UI assets: %w", err)
 	}
 
 	mux := http.NewServeMux()
@@ -60,6 +77,13 @@ func New(opts Options) (*Server, error) {
 	mux.HandleFunc("/ui", s.handlePage)
 	mux.HandleFunc("/ui/validate", s.handleValidate)
 	mux.HandleFunc("/ui/save", s.handleSave)
+	mux.HandleFunc("/ui/preview/structure", s.handlePreviewStructure)
+	mux.HandleFunc("/ui/preview/schedule", s.handlePreviewSchedule)
+	mux.HandleFunc("/ui/fs/list", s.handleFSList)
+	mux.HandleFunc("/ui/fs/suggest", s.handleFSSuggest)
+	mux.HandleFunc("/ui/status", s.handleStatusPage)
+	mux.HandleFunc("/ui/status/table", s.handleStatusTable)
+	mux.Handle("/ui/static/", http.StripPrefix("/ui/static/", cacheStatic(http.FileServer(http.FS(static)))))
 
 	s.httpServer = &http.Server{
 		Addr:              address,
@@ -105,11 +129,7 @@ func (s *Server) handlePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	lang := s.resolveLanguage(w, r)
-	data := pageData{
-		Lang:       lang,
-		ConfigPath: s.configPath,
-		Form:       newFormFromConfig(s.config),
-	}
+	data := s.newPageData(lang, newFormFromConfig(s.config))
 	s.renderPage(w, data)
 }
 
@@ -130,27 +150,25 @@ func (s *Server) processForm(w http.ResponseWriter, r *http.Request, persist boo
 	lang := s.resolveLanguage(w, r)
 	form, err := parseForm(r)
 	if err != nil {
-		s.renderResult(w, r, pageData{
-			Lang:       lang,
-			ConfigPath: s.configPath,
-			Form:       newFormFromConfig(s.config),
-			Flash: flashMessage{
-				Level:   "error",
-				Title:   t(lang, "validation_failed"),
-				Errors:  []string{err.Error()},
-				Message: err.Error(),
-			},
-		})
+		data := s.newPageData(lang, newFormFromConfig(s.config))
+		data.Flash = flashMessage{
+			Level:   "error",
+			Title:   t(lang, "validation_failed"),
+			Errors:  []string{err.Error()},
+			Message: err.Error(),
+		}
+		s.renderResult(w, r, data)
 		return
 	}
 
-	data := pageData{Lang: lang, ConfigPath: s.configPath, Form: form}
+	data := s.newPageData(lang, form)
 	cfg := form.toConfig()
 	problems := config.ValidateProblems(cfg)
 	if persist {
 		problems = append(problems, s.validateSaveTarget(form)...)
 	}
 	if len(problems) > 0 {
+		data.FieldErrors = fieldErrors(problems)
 		data.Flash = flashMessage{
 			Level:   "error",
 			Title:   t(lang, "validation_failed"),
@@ -225,12 +243,37 @@ func (s *Server) resolveLanguage(w http.ResponseWriter, r *http.Request) string 
 	return lang
 }
 
+func (s *Server) newPageData(lang string, form configForm) pageData {
+	return pageData{
+		Lang:          lang,
+		ConfigPath:    s.configPath,
+		Form:          form,
+		BrowseEnabled: len(s.browseRoots) > 0,
+		Choices:       newChoices(),
+	}
+}
+
+// renderResult answers HTMX requests with the flash fragment plus
+// out-of-band field errors (WEB-003, WEB-008), and plain POSTs with the page.
 func (s *Server) renderResult(w http.ResponseWriter, r *http.Request, data pageData) {
-	if r.Header.Get("HX-Request") == "true" {
+	if isHTMX(r) {
 		s.renderTemplate(w, "flash", data)
+		s.renderTemplate(w, "fieldErrorsOOB", data)
 		return
 	}
 	s.renderPage(w, data)
+}
+
+func isHTMX(r *http.Request) bool {
+	return r.Header.Get("HX-Request") == "true"
+}
+
+// cacheStatic marks embedded assets as cacheable (WEB-009).
+func cacheStatic(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) renderPage(w http.ResponseWriter, data pageData) {
@@ -239,10 +282,24 @@ func (s *Server) renderPage(w http.ResponseWriter, data pageData) {
 }
 
 func (s *Server) renderTemplate(w http.ResponseWriter, name string, data pageData) {
+	s.execute(w, name, data.Lang, data)
+}
+
+// execute renders a template with the language helpers T (translate) and
+// FErr (field errors of the current page, if any).
+func (s *Server) execute(w http.ResponseWriter, name string, lang string, data any) {
+	var errs map[string][]string
+	if pd, ok := data.(pageData); ok {
+		errs = pd.FieldErrors
+	}
 	if err := s.templates.ExecuteTemplate(w, name, map[string]any{
 		"Data": data,
+		"Lang": lang,
 		"T": func(key string) string {
-			return t(data.Lang, key)
+			return t(lang, key)
+		},
+		"FErr": func(field string) string {
+			return strings.Join(errs[field], "; ")
 		},
 	}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

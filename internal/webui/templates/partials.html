@@ -1,0 +1,77 @@
+{{/*
+  Form field partials (WEB-007, WEB-008, WEB-010). Each expects a dict with
+  R (the root template data), Name (form field name), Label (i18n key),
+  Value, Help (help_* key suffix, optional) and, for "field", Kind:
+  text | path | structure | schedule.
+*/}}
+
+{{define "field"}}
+<div>
+  <label for="{{fid .Name}}">{{call .R.T .Label}}</label>
+  {{if eq .Kind "path"}}
+  <div class="input-row">
+    <input type="text" id="{{fid .Name}}" name="{{.Name}}" value="{{.Value}}"{{if .Help}} aria-describedby="{{fid .Name}}-help"{{end}}{{if .R.Data.BrowseEnabled}} list="{{fid .Name}}-dl" autocomplete="off" hx-get="/ui/fs/suggest?field={{urlquery .Name}}" hx-trigger="input changed delay:300ms, focus once" hx-target="#{{fid .Name}}-dl"{{end}}>
+    {{if .R.Data.BrowseEnabled}}<button type="button" class="small secondary browse" data-target="{{fid .Name}}" onclick="phorgaBrowse(this.dataset.target)">{{call .R.T "browse"}}</button>{{end}}
+  </div>
+  {{if .R.Data.BrowseEnabled}}<datalist id="{{fid .Name}}-dl"></datalist>{{end}}
+  {{else if eq .Kind "structure"}}
+  <input type="text" id="{{fid .Name}}" name="{{.Name}}" value="{{.Value}}"{{if .Help}} aria-describedby="{{fid .Name}}-help"{{end}} hx-post="/ui/preview/structure?field={{urlquery .Name}}" hx-trigger="input changed delay:300ms, load" hx-target="#{{fid .Name}}-preview">
+  <div class="preview" id="{{fid .Name}}-preview" aria-live="polite"></div>
+  {{else if eq .Kind "schedule"}}
+  <input type="text" id="{{fid .Name}}" name="{{.Name}}" value="{{.Value}}"{{if .Help}} aria-describedby="{{fid .Name}}-help"{{end}} hx-post="/ui/preview/schedule?field={{urlquery .Name}}" hx-trigger="input changed delay:300ms, load" hx-target="#{{fid .Name}}-preview">
+  <div class="preview" id="{{fid .Name}}-preview" aria-live="polite"></div>
+  {{else}}
+  <input type="text" id="{{fid .Name}}" name="{{.Name}}" value="{{.Value}}"{{if .Help}} aria-describedby="{{fid .Name}}-help"{{end}}>
+  {{end}}
+  {{if .Help}}<small class="help" id="{{fid .Name}}-help">{{call .R.T (printf "help_%s" .Help)}}</small>{{end}}
+  <div class="field-error" id="err-{{fid .Name}}">{{call .R.FErr .Name}}</div>
+</div>
+{{end}}
+
+{{define "checkbox"}}
+<div>
+  <label class="checkbox"><input type="checkbox" id="{{fid .Name}}" name="{{.Name}}"{{if .Value}} checked{{end}}{{if .Help}} aria-describedby="{{fid .Name}}-help"{{end}}> {{call .R.T .Label}}</label>
+  {{if .Help}}<small class="help" id="{{fid .Name}}-help">{{call .R.T (printf "help_%s" .Help)}}</small>{{end}}
+  <div class="field-error" id="err-{{fid .Name}}">{{call .R.FErr .Name}}</div>
+</div>
+{{end}}
+
+{{define "select"}}
+<div>
+  <label for="{{fid .Name}}">{{call .R.T .Label}}</label>
+  {{$v := .Value}}
+  <select id="{{fid .Name}}" name="{{.Name}}"{{if .Help}} aria-describedby="{{fid .Name}}-help"{{end}}>
+    <option value=""{{if eq $v ""}} selected{{end}}>{{call .R.T "not_set"}}</option>
+    {{range .Options}}<option value="{{.}}"{{if eq . $v}} selected{{end}}>{{.}}</option>{{end}}
+    {{if and $v (not (has .Options $v))}}<option value="{{$v}}" selected>{{$v}} ({{call .R.T "unknown_value"}})</option>{{end}}
+  </select>
+  {{if .Help}}<small class="help" id="{{fid .Name}}-help">{{call .R.T (printf "help_%s" .Help)}}</small>{{end}}
+  <div class="field-error" id="err-{{fid .Name}}">{{call .R.FErr .Name}}</div>
+</div>
+{{end}}
+
+{{/* Out-of-band field errors for HTMX validate/save responses (WEB-008). */}}
+{{define "fieldErrorsOOB"}}{{range $name, $msgs := .Data.FieldErrors}}
+<div class="field-error" id="err-{{fid $name}}" hx-swap-oob="true">{{call $.FErr $name}}</div>{{end}}
+{{end}}
+
+{{/* Preview fragment (WEB-008). Data is a previewData. */}}
+{{define "preview"}}{{with .Data}}<span class="{{if .OK}}ok{{else}}bad{{end}}">{{.Label}}: {{if .OK}}{{range $i, $l := .Lines}}{{if $i}}, {{end}}<code>{{$l}}</code>{{end}}{{else}}{{.Message}}{{end}}</span>{{end}}{{end}}
+
+{{/* Folder picker dialog body (WEB-010). Data is a pickerData. */}}
+{{define "picker"}}{{with .Data}}
+<h3 id="picker-title">{{call $.T "browse_title"}}</h3>
+<p class="muted"><code>{{if .Path}}{{.Path}}{{else}}{{call $.T "browse_roots"}}{{end}}</code></p>
+{{if .Path}}<button type="button" class="small secondary" hx-get="/ui/fs/list?path={{urlquery .Parent}}" hx-target="#picker-body">↑ {{call $.T "browse_up"}}</button>{{end}}
+<ul>
+  {{range .Dirs}}<li><button type="button" class="link" hx-get="/ui/fs/list?path={{urlquery .Path}}" hx-target="#picker-body">📁 {{.Name}}</button></li>
+  {{else}}<li class="muted">{{call $.T "browse_empty"}}</li>{{end}}
+</ul>
+<div class="actions">
+  {{if .Path}}<button type="button" data-path="{{.Path}}" onclick="phorgaPick(this.dataset.path)">{{call $.T "browse_select"}}</button>{{end}}
+  <button type="button" class="secondary" onclick="document.getElementById('picker').close()">{{call $.T "browse_cancel"}}</button>
+</div>
+{{end}}{{end}}
+
+{{/* Autocomplete options (WEB-010). Data is a []dirEntry. */}}
+{{define "suggest"}}{{range .Data}}<option value="{{.Path}}"></option>{{end}}{{end}}
