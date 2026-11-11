@@ -28,3 +28,8 @@ data/fallback/
 data/state/
 
 
+
+# Local, machine-specific configs
+*.local.yaml
+*.local.yml
+*.local.json
