@@ -4,7 +4,7 @@ Headless photo/video organizer and duplicate detector. Runs as a daemon, organiz
 
 ## Features
 
-- **Organizer**: date-based file organization (EXIF → filename → source path → mtime fallback), move/copy, per-source cron scheduling, lightweight duplicate handling, dry-run, state/resume
+- **Organizer**: date-based file organization (EXIF → filename → source path → mtime fallback), move/copy, per-source cron scheduling, lightweight duplicate handling, dry-run, state/resume. Transfers keep the file's modification time, are verified before the source is deleted, and never overwrite silently
 - **Duplicate Detection**: independent metadata- or content-based (perceptual hash) dedup across sources, moveToFolder/skip actions, dry-run
 - **Web UI**: optional built-in configuration UI with dropdowns, help texts, live previews, a folder picker and a job status page, in DE/EN/IT/FR
 - **Notifications**: optional ntfy.sh push notifications on run completion
@@ -163,12 +163,26 @@ targetStructure: "{year}/{monthNumber}-{Monat}/{dayNumber}"  # 2024/03-März/15
 targetStructure: "{year}/{monthNumber}_{Monat}"              # 2024/03_März
 ```
 
+## Known Limits
+
+- **HEIC and video dates** come from the filename, the folder or the modification time. Phorga reads capture dates only from EXIF in JPEG and TIFF-based RAW files.
+- **Content duplicate detection** compares JPEG and PNG only. HEIC, RAW and videos never match. Every run decodes every image again, which takes long on a large library.
+- **Content duplicate detection keeps the first file it finds**, not the best one, and very similar shots (bursts) can count as duplicates. Duplicates are only moved to `duplicateFolder`, never deleted, so review that folder before you delete anything.
+- **Other file types stay in the source without a log line**, for example DNG, GIF, WebP, TIFF, AVI, M4V, 3GP and sidecars (XMP, AAE). The photo and the video of a Live Photo can land in different folders.
+- **Organizer duplicates with `detectionMode: filename` and `method: replace`** overwrite a different photo that happens to have the same name. Prefer `filename+exif` with `skip` or `moveToFolder`.
+- **The container runs as root by default**, so new files on the NAS belong to root. Set `user: "<uid>:<gid>"` in `docker-compose.yml` to change that.
+
+**Before you point Phorga at your only copy of your photos:** make a backup, start with `mode: copy` and `dryRun: true`, check the log and the status page, and switch to `mode: move` only after a few clean runs.
+
 ## Build & Test
 
 ```bash
 go build ./...
+go vet ./...
 go test ./...
 ```
+
+CI runs the same three commands on every pull request ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
 
 ## Demo / Test Setup
 

@@ -64,13 +64,14 @@ The demo config uses repo-relative paths and schedules every minute. Stop it wit
 - **Logging:** `log/slog` with the JSON handler. Use structured keys (`"source", path`), not formatted strings.
 - **Safety first:**
   - All file writes are atomic (temp file + rename) via `internal/fileops`.
-  - `move` deletes the source only after a successful write.
+  - `move` deletes the source only after a successful, verified write.
+  - Transfers keep the file's modification time and never overwrite an existing file, except with the duplicate action `replace`. Use `fileops.UniquePath` for new destinations.
   - `dryRun` must never change a file, including state files.
   - An error on one file is logged and counted, and never aborts a run.
 - **Config changes** always involve `config.go` (fields), `loader.go` (defaults), `validate.go` (rules), `webui/model.go` + templates (if the field is editable in the UI), `config.example.yaml`, and the README.
 - **targetStructure tokens** are defined twice, in `internal/config/validate.go` and `internal/metadata/targetpath.go`. Change both.
 - **Naming:** `Phorga` / `phorga` / `PHORGA_`, never the old name ([ADR-0007](docs/decisions/0007-rename-to-phorga.md)).
-- **Git:** conventional commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`). Use a feature branch and open a PR to `main`. Direct pushes to `main` are blocked by a ruleset, and only @zedage (repo admin) can merge. Code owners are requested as reviewers automatically ([.github/CODEOWNERS](.github/CODEOWNERS)).
+- **Git:** conventional commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`). Use a feature branch and open a PR to `main`. Direct pushes to `main` are blocked by a ruleset, and only @zedage (repo admin) can merge. CI ([ci.yml](.github/workflows/ci.yml)) runs build, vet and test on every PR and must be green. Code owners are requested as reviewers automatically ([.github/CODEOWNERS](.github/CODEOWNERS)).
 - **Docs language:** English.
 
 ## Change workflow

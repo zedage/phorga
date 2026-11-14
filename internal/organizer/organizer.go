@@ -15,6 +15,13 @@ import (
 	"github.com/zedage/phorga/internal/state"
 )
 
+// stateSaveInterval is the number of processed files after which the state
+// is saved during a run (ORG-015).
+var stateSaveInterval = 200
+
+// saveState is a variable so tests can observe when the state is written.
+var saveState = state.Save
+
 // RunResult holds statistics for an organizer run.
 type RunResult struct {
 	Processed int
@@ -34,6 +41,7 @@ func Run(profile config.OrganizerProfile, source config.OrganizerSource, st *sta
 		"dryRun", profile.DryRun,
 	)
 
+	savedAt := 0
 	err := filepath.WalkDir(source.Path, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			slog.Error("error accessing path", "path", path, "error", err)
@@ -67,6 +75,14 @@ func Run(profile config.OrganizerProfile, source config.OrganizerSource, st *sta
 			result.Errors++
 		}
 
+		// Save progress during the run, so a crash does not lose it (ORG-015).
+		if !profile.DryRun && result.Processed-savedAt >= stateSaveInterval {
+			if err := saveState(st, statePath); err != nil {
+				slog.Error("failed to save state", "error", err)
+			}
+			savedAt = result.Processed
+		}
+
 		return nil
 	})
 
@@ -76,7 +92,7 @@ func Run(profile config.OrganizerProfile, source config.OrganizerSource, st *sta
 
 	// Save state
 	if !profile.DryRun {
-		if err := state.Save(st, statePath); err != nil {
+		if err := saveState(st, statePath); err != nil {
 			slog.Error("failed to save state", "error", err)
 		}
 	}
@@ -96,7 +112,7 @@ func processFile(profile config.OrganizerProfile, source config.OrganizerSource,
 	date, method, err := metadata.ExtractDate(path)
 	if err != nil {
 		// No date available
-		return handleNoDate(profile, source, path, result)
+		return handleNoDate(profile, source, path, info, st, result)
 	}
 
 	slog.Debug("date resolved", "path", path, "date", date, "method", method)
@@ -121,9 +137,10 @@ func processFile(profile config.OrganizerProfile, source config.OrganizerSource,
 	return executeTransfer(profile, source, path, targetPath, info, st, result, method)
 }
 
-func handleNoDate(profile config.OrganizerProfile, source config.OrganizerSource, path string, result *RunResult) error {
+func handleNoDate(profile config.OrganizerProfile, source config.OrganizerSource, path string, info fs.FileInfo, st *state.State, result *RunResult) error {
 	if profile.FallbackFolder != "" {
-		targetPath := filepath.Join(profile.FallbackFolder, filepath.Base(path))
+		// Never overwrite a file that is already in the fallback folder (ORG-020).
+		targetPath := fileops.UniquePath(filepath.Join(profile.FallbackFolder, filepath.Base(path)))
 
 		if profile.DryRun {
 			slog.Info("[DRY-RUN] would transfer to fallback", "source", path, "target", targetPath, "mode", source.Mode)
@@ -134,6 +151,8 @@ func handleNoDate(profile config.OrganizerProfile, source config.OrganizerSource
 		if err := transferFile(source.Mode, path, targetPath); err != nil {
 			return fmt.Errorf("transferring to fallback: %w", err)
 		}
+		// Remember the file, so copy mode does not copy it again on every run.
+		st.MarkProcessed(path, info.Size(), info.ModTime())
 		result.Processed++
 		return nil
 	}
@@ -153,9 +172,7 @@ func handleDuplicate(profile config.OrganizerProfile, source config.OrganizerSou
 
 	if !isDuplicate(source.Duplicates.DetectionMode, srcPath, targetPath) {
 		// Not actually a duplicate by detection criteria — add suffix
-		suffix := fileops.GenerateSuffix()
-		newName := fileops.AddSuffix(filepath.Base(srcPath), suffix)
-		targetPath = filepath.Join(filepath.Dir(targetPath), newName)
+		targetPath = fileops.SuffixedPath(targetPath)
 		return executeTransfer(profile, source, srcPath, targetPath, info, st, result, dateMethod)
 	}
 
@@ -171,12 +188,11 @@ func handleDuplicate(profile config.OrganizerProfile, source config.OrganizerSou
 	case "replace":
 		return executeTransfer(profile, source, srcPath, targetPath, info, st, result, dateMethod)
 	case "addSuffix":
-		suffix := fileops.GenerateSuffix()
-		newName := fileops.AddSuffix(filepath.Base(srcPath), suffix)
-		newTarget := filepath.Join(filepath.Dir(targetPath), newName)
+		newTarget := fileops.SuffixedPath(targetPath)
 		return executeTransfer(profile, source, srcPath, newTarget, info, st, result, dateMethod)
 	case "moveToFolder":
-		dupTarget := filepath.Join(source.Duplicates.Action.DuplicateFolder, filepath.Base(srcPath))
+		// Never overwrite a file that is already in the duplicate folder (ORG-020).
+		dupTarget := fileops.UniquePath(filepath.Join(source.Duplicates.Action.DuplicateFolder, filepath.Base(srcPath)))
 		return executeTransfer(profile, source, srcPath, dupTarget, info, st, result, dateMethod)
 	case "skip":
 		slog.Info("skipping duplicate", "source", srcPath, "target", targetPath)

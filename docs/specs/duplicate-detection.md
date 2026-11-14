@@ -64,13 +64,15 @@ Every file of every source in a job MUST be compared with every other file. The 
 ### DUP-005 Action `moveToFolder`
 **Status:** implemented
 
-With `action.method: moveToFolder`, the duplicate MUST be moved into `action.duplicateFolder`. That field is required for this method (CFG-002).
+With `action.method: moveToFolder`, the duplicate MUST be moved into `action.duplicateFolder`. That field is required for this method (CFG-002). A file that is already in `duplicateFolder` MUST NOT be overwritten; the duplicate is then written with a random suffix (as in ORG-020). The move keeps the modification time and is verified (ORG-018, ORG-019).
 
 - **WHEN** a duplicate is found and the method is `moveToFolder`
   **THEN** the duplicate is moved into `duplicateFolder` and the original stays in place
+- **WHEN** `duplicateFolder` already holds a `photo.jpg` and another duplicate named `photo.jpg` is found
+  **THEN** both files are in `duplicateFolder` afterwards
 
 **Code:** `internal/dedup/dedup.go`, `internal/config/validate.go`
-**Tests:** `internal/dedup/dedup_test.go#TestDedup_MoveToFolder`, `internal/config/config_test.go#TestValidateMoveToFolderRequiresDuplicateFolder`, `internal/dedup/actions_test.go#TestDedup_GroupOfThree_MovesTwoWithoutErrors`
+**Tests:** `internal/dedup/dedup_test.go#TestDedup_MoveToFolder`, `internal/config/config_test.go#TestValidateMoveToFolderRequiresDuplicateFolder`, `internal/dedup/actions_test.go#TestDedup_GroupOfThree_MovesTwoWithoutErrors`, `internal/dedup/actions_test.go#TestDedup_MoveToFolderNeverOverwrites`
 
 ### DUP-006 Action `skip`
 **Status:** implemented
