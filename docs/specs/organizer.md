@@ -300,3 +300,16 @@ The organizer MUST NOT overwrite an existing file, except with the duplicate act
 **Code:** `internal/fileops/fileops.go`, `internal/organizer/organizer.go`
 **Tests:** `internal/fileops/safety_test.go#TestUniquePath`, `internal/organizer/safety_test.go#TestOrganize_MoveToFolderNeverOverwrites`, `internal/organizer/safety_test.go#TestHandleNoDate_FallbackNeverOverwrites`
 **Notes:** Before this requirement, both paths replaced the earlier file, and in `move` mode that file was lost. Duplicate detection has the same rule in DUP-005.
+
+### ORG-021 Stopping a run on shutdown
+**Status:** implemented
+
+When Phorga shuts down (RUN-001), a running organizer run MUST stop before it starts the next file. The file in progress is finished, so no file is left half-transferred. The run MUST then save its state as at the end of a normal run (ORG-015, never in a dry run) and report that it stopped early.
+
+- **WHEN** Phorga is told to stop after the first of 5 files was moved
+  **THEN** the run ends, 4 files stay untouched in the source, and the state lists the 1 moved file
+- **WHEN** the stop request comes before the first file
+  **THEN** no file is changed
+
+**Code:** `internal/organizer/organizer.go`
+**Tests:** `internal/organizer/cancel_test.go#TestOrganize_StopsWhenCancelled`, `internal/organizer/cancel_test.go#TestOrganize_CancelledBeforeStartChangesNothing`

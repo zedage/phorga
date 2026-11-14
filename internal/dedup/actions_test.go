@@ -1,6 +1,7 @@
 package dedup
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -35,7 +36,7 @@ func TestDedup_GroupOfThree_MovesTwoWithoutErrors(t *testing.T) {
 	createTestImage(t, src2, "copy1.jpg", 100, 100, 100)
 	createTestImage(t, src3, "copy2.jpg", 100, 100, 100)
 
-	result := Run(contentJob("moveToFolder", dupDir, src1, src2, src3))
+	result := Run(context.Background(), contentJob("moveToFolder", dupDir, src1, src2, src3))
 
 	if result.Errors != 0 {
 		t.Errorf("errors = %d, want 0", result.Errors)
@@ -57,7 +58,7 @@ func TestDedup_SkipLeavesFilesUntouched(t *testing.T) {
 	createTestImage(t, src1, "a.jpg", 100, 100, 100)
 	createTestImage(t, src2, "b.jpg", 100, 100, 100)
 
-	result := Run(contentJob("skip", "", src1, src2))
+	result := Run(context.Background(), contentJob("skip", "", src1, src2))
 
 	if result.DuplicatesPair != 1 {
 		t.Errorf("pairs = %d, want 1", result.DuplicatesPair)
@@ -80,7 +81,7 @@ func TestDedup_ActionErrorDoesNotAbortRun(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := Run(contentJob("moveToFolder", blocker, src1, src2, src3))
+	result := Run(context.Background(), contentJob("moveToFolder", blocker, src1, src2, src3))
 
 	if result.DuplicatesPair != 2 {
 		t.Fatalf("pairs = %d, want 2", result.DuplicatesPair)
@@ -106,7 +107,7 @@ func TestDedup_MoveToFolderNeverOverwrites(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := Run(contentJob("moveToFolder", dupDir, src1, src2))
+	result := Run(context.Background(), contentJob("moveToFolder", dupDir, src1, src2))
 
 	if result.Errors != 0 || result.ActionsApplied != 1 {
 		t.Fatalf("errors = %d, actions = %d", result.Errors, result.ActionsApplied)

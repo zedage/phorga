@@ -167,7 +167,7 @@ package "internal" {
 | Package | Responsibility
 
 | `cmd/phorga`
-| Entry point. `main` only wires SIGINT/SIGTERM to a context; `run(ctx, args, logOut)` parses flags, loads and validates the config, registers jobs, starts the scheduler and the optional web UI, and returns the exit code (0 ok, 1 error, 2 usage). Tested end-to-end in `main_test.go`.
+| Entry point. `main` only wires SIGINT/SIGTERM to a context (and restores the default handling after the first signal, so a second one terminates); `run(ctx, args, logOut)` parses flags, loads and validates the config, registers jobs, starts the scheduler and the optional web UI, and returns the exit code (0 ok, 1 error, 2 usage). Tested end-to-end in `main_test.go`.
 
 | `config`
 | YAML/JSON loading, defaults, fail-fast validation.
@@ -244,6 +244,10 @@ stop
 
 [plantuml, runtime-dedup, svg]
 ----
+
+=== Shutdown
+
+On SIGINT/SIGTERM, `run` returns and its deferred `Scheduler.Stop()` names the running jobs in the log, cancels the context that every job receives, stops cron from starting new runs, and waits for running jobs (logging every 10 s). The organizer and duplicate detection check the context between files (ORG-021, DUP-010). Cancelled runs are not recorded or notified. A second signal uses the OS default and terminates the process (RUN-001).
 
 === Web UI Request
 

@@ -35,6 +35,13 @@ const uiShutdownTimeout = 5 * time.Second
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	// After the first signal, restore the default signal handling, so a
+	// second Ctrl+C ends the process at once instead of being swallowed
+	// while running jobs stop (RUN-001).
+	go func() {
+		<-ctx.Done()
+		stop()
+	}()
 	os.Exit(run(ctx, os.Args[1:], os.Stdout))
 }
 
@@ -78,6 +85,8 @@ func run(ctx context.Context, args []string, logOut io.Writer) int {
 		return exitError
 	}
 	sched.Start()
+	// Stop cancels running jobs and waits for them (RUN-001). It is called
+	// explicitly below; the defer covers early returns. Stop is idempotent.
 	defer sched.Stop()
 	slog.Info("scheduler started, waiting for jobs...")
 
@@ -115,6 +124,7 @@ func run(ctx context.Context, args []string, logOut io.Writer) int {
 		}
 		cancel()
 	}
+	sched.Stop()
 	slog.Info("phorga stopped")
 	return exitCode
 }
@@ -193,11 +203,15 @@ func registerJobs(sched *scheduler.Scheduler, cfg *config.Config, recorder *runs
 }
 
 // organizerJob runs one organizer source, notifies, and records the result.
-func organizerJob(name string, p config.OrganizerProfile, s config.OrganizerSource, statePath string, recorder *runstatus.Recorder) func() {
-	return func() {
+// A run stopped by shutdown is neither recorded nor notified (RUN-001).
+func organizerJob(name string, p config.OrganizerProfile, s config.OrganizerSource, statePath string, recorder *runstatus.Recorder) scheduler.Job {
+	return func(ctx context.Context) {
 		start := time.Now()
 		st := state.Load(statePath)
-		result, duration := organizer.RunWithTime(p, s, st, statePath)
+		result, duration := organizer.RunWithTime(ctx, p, s, st, statePath)
+		if result.Canceled {
+			return
+		}
 		recorder.Finish(name, runstatus.Record{
 			Start: start, Duration: duration, DryRun: result.DryRun,
 			Counters: map[string]int{"processed": result.Processed, "skipped": result.Skipped, "errors": result.Errors},
@@ -210,11 +224,15 @@ func organizerJob(name string, p config.OrganizerProfile, s config.OrganizerSour
 }
 
 // dedupJob runs one duplicate detection job, notifies, and records the result.
-func dedupJob(name string, job config.DuplicateDetection, recorder *runstatus.Recorder) func() {
-	return func() {
+// A run stopped by shutdown is neither recorded nor notified (RUN-001).
+func dedupJob(name string, job config.DuplicateDetection, recorder *runstatus.Recorder) scheduler.Job {
+	return func(ctx context.Context) {
 		start := time.Now()
-		result := dedup.Run(job)
+		result := dedup.Run(ctx, job)
 		duration := time.Since(start)
+		if result.Canceled {
+			return
+		}
 		recorder.Finish(name, runstatus.Record{
 			Start: start, Duration: duration, DryRun: result.DryRun,
 			Counters: map[string]int{"files": result.TotalFiles, "duplicates": result.DuplicatesPair, "actions": result.ActionsApplied, "errors": result.Errors},

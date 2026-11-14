@@ -98,3 +98,11 @@ Phorga is a single Go binary without external dependencies. It runs on Linux, ma
 - **No deletion of duplicates.** They are moved aside or reported, and a person decides.
 - **No public-facing web app.** The UI is a local admin page, not a multi-user service.
 - **No tunable dedup algorithms (yet).** The thresholds are fixed to keep the configuration simple.
+
+## Starting and stopping
+
+Phorga runs until you stop it, with Ctrl+C in a terminal or `docker stop` for the container. It then finishes the file it is working on, tells you in the log which jobs it is waiting for, and exits within a few seconds. A run that was interrupted this way is not shown as the last result on the status page, and no notification is sent for it. The organizer remembers how far it got and continues there next time.
+
+If a stop ever takes too long, press Ctrl+C a second time to end Phorga immediately.
+
+Exact rules: [specs/runtime.md](specs/runtime.md)

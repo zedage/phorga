@@ -1,6 +1,7 @@
 package organizer
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -28,10 +29,15 @@ type RunResult struct {
 	Skipped   int
 	Errors    int
 	DryRun    bool
+	// Canceled is true when the run stopped early because ctx was
+	// cancelled (ORG-021).
+	Canceled bool
 }
 
-// Run executes the organizer for a single source against a profile.
-func Run(profile config.OrganizerProfile, source config.OrganizerSource, st *state.State, statePath string) RunResult {
+// Run executes the organizer for a single source against a profile. When ctx
+// is cancelled, it stops before the next file, saves the state and returns
+// with Canceled set (ORG-021).
+func Run(ctx context.Context, profile config.OrganizerProfile, source config.OrganizerSource, st *state.State, statePath string) RunResult {
 	result := RunResult{DryRun: profile.DryRun}
 
 	slog.Info("organizer run starting",
@@ -43,6 +49,10 @@ func Run(profile config.OrganizerProfile, source config.OrganizerSource, st *sta
 
 	savedAt := 0
 	err := filepath.WalkDir(source.Path, func(path string, d fs.DirEntry, err error) error {
+		if ctx.Err() != nil {
+			result.Canceled = true
+			return filepath.SkipAll
+		}
 		if err != nil {
 			slog.Error("error accessing path", "path", path, "error", err)
 			result.Errors++
@@ -97,7 +107,11 @@ func Run(profile config.OrganizerProfile, source config.OrganizerSource, st *sta
 		}
 	}
 
-	slog.Info("organizer run complete",
+	msg := "organizer run complete"
+	if result.Canceled {
+		msg = "organizer run stopped early because of shutdown"
+	}
+	slog.Info(msg,
 		"source", source.Path,
 		"processed", result.Processed,
 		"skipped", result.Skipped,
@@ -292,8 +306,8 @@ func StatePath(stateDir, profileTarget, sourcePath string) string {
 }
 
 // RunWithTime is a helper that wraps Run with timing.
-func RunWithTime(profile config.OrganizerProfile, source config.OrganizerSource, st *state.State, statePath string) (RunResult, time.Duration) {
+func RunWithTime(ctx context.Context, profile config.OrganizerProfile, source config.OrganizerSource, st *state.State, statePath string) (RunResult, time.Duration) {
 	start := time.Now()
-	result := Run(profile, source, st, statePath)
+	result := Run(ctx, profile, source, st, statePath)
 	return result, time.Since(start)
 }
