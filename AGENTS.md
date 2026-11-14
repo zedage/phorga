@@ -70,7 +70,7 @@ The demo config uses repo-relative paths and schedules every minute. Stop it wit
 - **Config changes** always involve `config.go` (fields), `loader.go` (defaults), `validate.go` (rules), `webui/model.go` + templates (if the field is editable in the UI), `config.example.yaml`, and the README.
 - **targetStructure tokens** are defined twice, in `internal/config/validate.go` and `internal/metadata/targetpath.go`. Change both.
 - **Naming:** `Phorga` / `phorga` / `PHORGA_`, never the old name ([ADR-0007](docs/decisions/0007-rename-to-phorga.md)).
-- **Git:** conventional commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`). Use a feature branch and open a PR to `main`. Code owners must approve ([.github/CODEOWNERS](.github/CODEOWNERS)).
+- **Git:** conventional commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`). Use a feature branch and open a PR to `main`. Direct pushes to `main` are blocked by a ruleset, and only @zedage (repo admin) can merge. Code owners are requested as reviewers automatically ([.github/CODEOWNERS](.github/CODEOWNERS)).
 - **Docs language:** English.
 
 ## Change workflow
