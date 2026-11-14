@@ -18,6 +18,7 @@ Short records of decisions that shaped Phorga: what was decided, why, and what i
 | [0012](0012-duplicate-checks-require-real-exif.md) | Duplicate checks on dates require real EXIF | 2026-11-10 | accepted |
 | [0013](0013-folder-picker-limited-to-browse-roots.md) | Folder picker limited to configured roots, read-only, off by default | 2026-11-11 | accepted |
 | [0014](0014-persisted-run-status-without-dry-runs.md) | Persisted run status, dry runs kept in memory only | 2026-11-11 | accepted |
+| [0015](0015-dedup-fingerprint-cache-written-in-dry-runs.md) | Fingerprint cache for duplicate detection, written in dry runs too | 2026-11-14 | accepted |
 
 ## Writing a new ADR
 

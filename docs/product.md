@@ -51,6 +51,8 @@ Two modes:
 - **content** compares what the images look like (a "perceptual hash"), so re-saved or resized copies are found too ([ADR-0004](decisions/0004-perceptual-hash-for-content-dedup.md)). This works for images, not for videos.
 - **metadata** is faster. It treats files as duplicates when they have the same size and the same EXIF capture date. Files without EXIF are never matched this way, so no false matches come from copy dates.
 
+**It remembers what it has seen.** The first run reads every file, which takes a while on a large library. Phorga keeps each file's fingerprint in a cache, so later runs only read new or changed files and take seconds instead of minutes. Dry runs fill the cache too; it never touches your photos ([ADR-0015](decisions/0015-dedup-fingerprint-cache-written-in-dry-runs.md)).
+
 If several copies of the same picture are found, the first one stays and all others count as its duplicates. Found duplicates are either moved to a duplicates folder or just reported. Nothing is deleted. A dry run shows the results without touching anything.
 
 Exact rules: [specs/duplicate-detection.md](specs/duplicate-detection.md)

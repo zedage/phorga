@@ -179,7 +179,7 @@ package "internal" {
 | Recursive source scanning, date resolution, copy/move, lightweight duplicate handling.
 
 | `dedup`
-| Independent duplicate detection (metadata or perceptual hash), cross-source matching.
+| Independent duplicate detection (metadata or perceptual hash), cross-source matching. One shared fingerprint cache (`<stateDir>/dedup-cache.json`) keeps pHash/EXIF results of unchanged files between runs (ADR-0015).
 
 | `metadata`
 | EXIF extraction (goexif), filename/path date parsing, file type detection, target path token resolution.
@@ -306,7 +306,8 @@ start
 :Cron triggers dedup job;
 :Count supported files (for progress);
 :Scan all sources recursively;
-:Compute metadata or pHash per file;
+:Take metadata or pHash from the cache, or compute and cache it;
+:Save cache, prune vanished files;
 :Compare all pairs (O(n²));
 :Collect duplicate pairs;
 repeat
@@ -372,6 +373,7 @@ For media files, the temp file is flushed to disk and its size is compared with 
 * JSON files, one per source/job.
 * Atomic writes (write temp → rename).
 * The organizer saves the state at the end of a run and after every 200 processed files (ORG-015), never in a dry run.
+* Duplicate detection keeps one fingerprint cache for all jobs, held by one in-process object with a mutex, saved every 500 new fingerprints and after each scan, also in dry runs (DUP-012, ADR-0015).
 * Corruption triggers a warning and full re-scan (no data loss).
 
 === Structured Logging
@@ -436,6 +438,9 @@ Decisions are recorded as ADRs in link:../decisions/README.md[docs/decisions]. T
 
 | link:../decisions/0014-persisted-run-status-without-dry-runs.md[0014]
 | Run status persisted in `stateDir`; dry runs in memory only
+
+| link:../decisions/0015-dedup-fingerprint-cache-written-in-dry-runs.md[0015]
+| Shared fingerprint cache for duplicate detection, also written in dry runs
 |===
 
 == 10. Risks and Technical Debt
@@ -446,7 +451,7 @@ Decisions are recorded as ADRs in link:../decisions/README.md[docs/decisions]. T
 
 | Large libraries (O(n²) dedup)
 | Slow on very large collections
-| State-based resume reduces repeat work. V2: index-based matching.
+| The fingerprint cache avoids re-reading unchanged files (DUP-012); comparing stays O(n²), a few seconds for 8,000 files. V2: index-based matching.
 
 | pHash memory on NAS
 | Memory spikes when hashing many large images

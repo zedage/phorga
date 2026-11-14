@@ -2,6 +2,7 @@ package dedup
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"image"
 	_ "image/jpeg"
@@ -35,6 +36,9 @@ type RunResult struct {
 	// Canceled is true when the run stopped early because ctx was
 	// cancelled (DUP-010).
 	Canceled bool
+	// CacheHits is the number of files whose fingerprint came from the
+	// cache instead of being computed (DUP-012).
+	CacheHits int
 }
 
 // fileInfo stores gathered metadata about a scanned file.
@@ -45,10 +49,17 @@ type fileInfo struct {
 	PHash    *goimagehash.ImageHash
 }
 
-// Run executes a duplicate detection job for all configured sources. When ctx
-// is cancelled, it stops before the next file and applies no further
-// actions (DUP-010).
+// Run executes a duplicate detection job without a fingerprint cache.
 func Run(ctx context.Context, job config.DuplicateDetection) RunResult {
+	return RunWithCache(ctx, job, nil)
+}
+
+// RunWithCache executes a duplicate detection job for all configured
+// sources. Fingerprints of unchanged files come from cache and new ones are
+// added to it (DUP-012); a nil cache computes everything. When ctx is
+// cancelled, it stops before the next file and applies no further actions
+// (DUP-010).
+func RunWithCache(ctx context.Context, job config.DuplicateDetection, cache *Cache) RunResult {
 	result := RunResult{DryRun: job.DryRun}
 
 	slog.Info("duplicate detection run starting",
@@ -65,11 +76,26 @@ func Run(ctx context.Context, job config.DuplicateDetection) RunResult {
 	}
 
 	// Scan all sources
-	var files []fileInfo
+	sc := &scanner{ctx: ctx, mode: job.DetectionMode, cache: cache, total: total, result: &result}
 	for _, src := range job.Sources {
-		files = scanSource(ctx, src, job.DetectionMode, files, total, &result)
+		sc.scan(src)
 	}
+	files := sc.files
 	result.TotalFiles = len(files)
+	// Keep what was computed, also when the run was interrupted. Dry runs
+	// write the cache too; it never touches a photo (ADR-0015).
+	if ctx.Err() == nil {
+		seen := make(map[string]bool, len(files))
+		for _, f := range files {
+			seen[f.Path] = true
+		}
+		if removed := cache.prune(job.Sources, seen); removed > 0 {
+			slog.Info("removed vanished files from the duplicate detection cache", "files", removed)
+		}
+	}
+	cache.Save()
+	slog.Info("duplicate detection scan complete",
+		"files", len(files), "fromCache", result.CacheHits, "computed", sc.computed)
 	if ctx.Err() != nil {
 		return canceled(result)
 	}
@@ -120,9 +146,26 @@ type duplicatePair struct {
 	duplicate fileInfo
 }
 
-// scanSource appends the supported files below srcPath to files. It stops
-// when ctx is cancelled and logs its progress every progressEvery files.
-func scanSource(ctx context.Context, srcPath string, detectionMode string, files []fileInfo, total int, result *RunResult) []fileInfo {
+// scanner collects the supported files of all sources of one run.
+type scanner struct {
+	ctx      context.Context
+	mode     string
+	cache    *Cache
+	total    int
+	result   *RunResult
+	files    []fileInfo
+	computed int // fingerprints computed (not from cache) in this run
+}
+
+// errNotDecodable marks files that are readable but not an image Phorga
+// can decode, such as videos. Only those are remembered as "no hash".
+var errNotDecodable = errors.New("not a decodable image")
+
+// scan appends the supported files below srcPath. It stops when ctx is
+// cancelled, logs its progress every progressEvery files and saves the cache
+// every cacheSaveEvery computed fingerprints.
+func (sc *scanner) scan(srcPath string) {
+	ctx, result := sc.ctx, sc.result
 	filepath.WalkDir(srcPath, func(path string, d fs.DirEntry, err error) error {
 		if ctx.Err() != nil {
 			return filepath.SkipAll
@@ -152,35 +195,94 @@ func scanSource(ctx context.Context, srcPath string, detectionMode string, files
 			Path: path,
 			Size: info.Size(),
 		}
-
-		// Extract metadata when needed
-		// Only real EXIF dates count; files without EXIF never match (DUP-002).
-		if detectionMode == "metadata" {
-			date, err := metadata.ExtractEXIFDate(path)
-			if err == nil {
-				fi.ExifDate = date
+		if sc.fromCache(&fi, info.ModTime()) {
+			result.CacheHits++
+		} else if sc.compute(&fi, info.ModTime()) {
+			sc.computed++
+			if sc.computed%cacheSaveEvery == 0 {
+				sc.cache.Save()
 			}
 		}
 
-		// Compute perceptual hash for content mode
-		if detectionMode == "content" {
-			hash, err := computePHash(path)
-			if err != nil {
-				slog.Debug("unable to compute phash, skipping", "path", path, "error", err)
-			} else {
-				fi.PHash = hash
-			}
-		}
-
-		files = append(files, fi)
-		runstatus.Report(ctx, runstatus.PhaseScanning, len(files), total)
-		if len(files)%progressEvery == 0 {
-			slog.Info("duplicate detection scan progress", "scannedFiles", len(files), "source", srcPath)
+		sc.files = append(sc.files, fi)
+		runstatus.Report(ctx, runstatus.PhaseScanning, len(sc.files), sc.total)
+		if len(sc.files)%progressEvery == 0 {
+			slog.Info("duplicate detection scan progress", "scannedFiles", len(sc.files), "fromCache", result.CacheHits, "source", srcPath)
 		}
 		return nil
 	})
+}
 
-	return files
+// fromCache fills fi from the cache when the file is unchanged and the
+// cache has a result for this run's mode.
+func (sc *scanner) fromCache(fi *fileInfo, mtime time.Time) bool {
+	e, ok := sc.cache.lookup(fi.Path, fi.Size, mtime)
+	if !ok {
+		return false
+	}
+	switch sc.mode {
+	case "content":
+		if e.PHash != nil {
+			fi.PHash = hashFromCache(*e.PHash)
+			return true
+		}
+		return e.NoPHash
+	case "metadata":
+		if e.ExifDate != nil {
+			fi.ExifDate = *e.ExifDate
+			return true
+		}
+		return e.NoExif
+	}
+	return false
+}
+
+// compute reads the file to fill fi and stores the result in the cache. It
+// reports whether there was a result worth caching; read errors are not
+// cached, because they may go away.
+func (sc *scanner) compute(fi *fileInfo, mtime time.Time) bool {
+	switch sc.mode {
+	case "metadata":
+		// Only real EXIF dates count; files without EXIF never match (DUP-002).
+		date, err := metadata.ExtractEXIFDate(fi.Path)
+		var pathErr *fs.PathError
+		if errors.As(err, &pathErr) {
+			slog.Debug("unable to read file", "path", fi.Path, "error", err)
+			return false
+		}
+		if err == nil {
+			fi.ExifDate = date
+		}
+		sc.cache.update(fi.Path, fi.Size, mtime, func(e *cacheEntry) {
+			if err == nil {
+				e.ExifDate, e.NoExif = &date, false
+			} else {
+				e.ExifDate, e.NoExif = nil, true
+			}
+		})
+		return true
+	case "content":
+		hash, err := computePHash(fi.Path)
+		if err != nil && !errors.Is(err, errNotDecodable) {
+			slog.Debug("unable to read file", "path", fi.Path, "error", err)
+			return false
+		}
+		if err != nil {
+			slog.Debug("unable to compute phash, skipping", "path", fi.Path, "error", err)
+		} else {
+			fi.PHash = hash
+		}
+		sc.cache.update(fi.Path, fi.Size, mtime, func(e *cacheEntry) {
+			if err == nil {
+				v := hash.GetHash()
+				e.PHash, e.NoPHash = &v, false
+			} else {
+				e.PHash, e.NoPHash = nil, true
+			}
+		})
+		return true
+	}
+	return false
 }
 
 func computePHash(path string) (*goimagehash.ImageHash, error) {
@@ -192,12 +294,12 @@ func computePHash(path string) (*goimagehash.ImageHash, error) {
 
 	img, _, err := image.Decode(f)
 	if err != nil {
-		return nil, fmt.Errorf("decoding image: %w", err)
+		return nil, fmt.Errorf("%w: decoding image: %v", errNotDecodable, err)
 	}
 
 	hash, err := goimagehash.PerceptionHash(img)
 	if err != nil {
-		return nil, fmt.Errorf("computing phash: %w", err)
+		return nil, fmt.Errorf("%w: computing phash: %v", errNotDecodable, err)
 	}
 
 	return hash, nil
