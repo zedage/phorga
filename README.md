@@ -28,7 +28,7 @@ Stop Phorga with Ctrl+C (or `docker stop`). It finishes the current file and exi
 
 ## Configuration
 
-YAML or JSON. See [`config.example.yaml`](config.example.yaml) for a complete example.
+YAML or JSON. Below is a short example; [`config.example.yaml`](config.example.yaml) is a complete, commented one, and the [reference](#reference) lists every field.
 
 ```yaml
 organizer:
@@ -59,6 +59,101 @@ webUI:
 ```
 
 `webUI` is optional. The UI is intended for **local/private deployments**. Do not expose it publicly without additional protection.
+
+### Where Phorga looks for its config
+
+Phorga uses the first of these that is set:
+
+1. `--config <path>`
+2. the environment variable `PHORGA_CONFIG` (set to `/config/config.yaml` in the Docker image)
+3. `config.yaml` in the current working directory
+
+Files ending in `.yaml`, `.yml` or `.json` are accepted. The config is read **once at startup**; after a change, restart Phorga. An invalid config stops Phorga at startup with exit code 1 and a list of all problems found. The config must define at least one `organizer` profile or one `duplicateDetection` job.
+
+| Flag | Meaning |
+|---|---|
+| `--config <path>` | Config file to use (see above) |
+| `--web-ui` | Start the web UI even if `webUI.enabled` is `false` |
+| `--web-ui-addr <host:port>` | Listen address of the web UI, overrides `webUI.address` |
+
+### Reference
+
+Relative paths are resolved against the working directory. In Docker, use the paths *inside* the container (the right-hand side of your volume mounts).
+
+**Top level**
+
+| Field | Type | Required | Default | Meaning |
+|---|---|---|---|---|
+| `stateDir` | path | no | `/data/state` | Folder for Phorga's own files (see [Files in `stateDir`](#files-in-statedir)). Created if missing. |
+| `organizer` | list | one of the two | – | Organizer profiles, see below. |
+| `duplicateDetection` | list | one of the two | – | Duplicate detection jobs, see below. |
+| `webUI` | object | no | off | Built-in web UI, see below. |
+
+**`organizer[]`**: one entry per target folder
+
+| Field | Type | Required | Default | Meaning |
+|---|---|---|---|---|
+| `target` | path | yes | – | Folder the organized files go into. |
+| `targetStructure` | text | no | `{year}/{month}` | Subfolder template below `target`, see [tokens](#targetstructure-tokens). Unknown tokens are rejected. |
+| `fallbackFolder` | path | no | – | Where files go when no date can be determined. Without it, such files are skipped and logged. |
+| `dryRun` | bool | no | `false` | Only log what would happen. No file is changed, not even Phorga's state. |
+| `ntfy.url` | URL | no | – | ntfy topic URL that receives a short summary after every run, e.g. `https://ntfy.sh/my-topic`. |
+| `sources` | list | yes, ≥ 1 | – | Folders to take files from, see below. |
+
+**`organizer[].sources[]`**: one entry per source folder, each with its own schedule
+
+| Field | Type | Required | Default | Meaning |
+|---|---|---|---|---|
+| `path` | path | yes | – | Folder to read from, including all subfolders. |
+| `mode` | `move` \| `copy` | yes | – | `move` deletes the source file after a verified copy; `copy` leaves it in place. |
+| `schedule` | cron | yes | – | When this source runs, see [Schedules](#schedules). |
+| `duplicates` | object | no | – | What to do when a file with the same name already exists in the target. Without it, such files are skipped and logged. |
+| `duplicates.detectionMode` | text | yes, if `duplicates` | – | When an existing file counts as the same: `filename` (same name), `filedate` (same modification time), `exif` (same EXIF capture date; files without EXIF never match). Combine with `+` (all must match) or `\|` (any may match), not both. If it doesn't match, the file is kept with a random suffix. |
+| `duplicates.action.method` | `replace` \| `addSuffix` \| `moveToFolder` \| `skip` | yes, if `duplicates` | – | `replace` overwrites the existing file; `addSuffix` keeps both (`photo-a3f9.jpg`); `moveToFolder` puts the new file into `duplicateFolder`; `skip` leaves it in the source. |
+| `duplicates.action.duplicateFolder` | path | for `moveToFolder` | – | Folder for duplicates. Existing files there are never overwritten. |
+
+**`duplicateDetection[]`**: one entry per job
+
+| Field | Type | Required | Default | Meaning |
+|---|---|---|---|---|
+| `enabled` | bool | no | `false` | Only enabled jobs are scheduled. Disabled jobs are still validated. |
+| `sources` | list of paths | yes, ≥ 1 | – | Folders to compare, including all subfolders. Duplicates are found across all of them. |
+| `schedule` | cron | yes | – | When the job runs, see [Schedules](#schedules). |
+| `detectionMode` | `content` \| `metadata` | yes | – | `content` compares what images look like (perceptual hash; JPEG and PNG only); `metadata` compares file size and EXIF capture date (much faster; files without EXIF never match). |
+| `action.method` | `moveToFolder` \| `skip` | yes | – | `moveToFolder` moves each duplicate into `duplicateFolder` (the first file found stays); `skip` only logs it. Nothing is ever deleted. |
+| `action.duplicateFolder` | path | for `moveToFolder` | – | Folder for duplicates. Existing files there are never overwritten. |
+| `dryRun` | bool | no | `false` | Only log what would be done. No photo is moved. |
+| `ntfy.url` | URL | no | – | ntfy topic URL for a summary after every run. |
+
+**`webUI`**
+
+| Field | Type | Required | Default | Meaning |
+|---|---|---|---|---|
+| `enabled` | bool | no | `false` | Start the web UI together with Phorga (also possible with `--web-ui`). |
+| `address` | `host:port` | no | `127.0.0.1:8080` | Listen address. In Docker use `0.0.0.0:8080` and publish the port on `127.0.0.1` only. |
+| `browseRoots` | list of absolute paths | no | – | Folders the folder picker may show. Each must exist. Without it, the picker is off. |
+
+### Schedules
+
+`schedule` is a standard 5-field cron expression: `minute hour day-of-month month day-of-week`, evaluated in the **local time of the machine** (in Docker, set `TZ`, e.g. `TZ=Europe/Zurich`). A run never overlaps with itself: if the previous run is still busy, the next one is skipped.
+
+| Expression | Runs |
+|---|---|
+| `0 2 * * *` | every day at 02:00 |
+| `30 3 * * 0` | every Sunday at 03:30 |
+| `0 */6 * * *` | every 6 hours |
+| `*/15 * * * *` | every 15 minutes |
+
+The web UI shows the next three run times while you type.
+
+### Files in `stateDir`
+
+| File | Written by | Content |
+|---|---|---|
+| `org-<target>-<source>.state.json` | organizer, one per source | Files already handled, so later runs skip them. Never written in a dry run. |
+| `run-status.json` | all jobs | Last result of each job for the status page. Dry runs are not stored. |
+
+All files are written atomically. Deleting a state file makes the organizer look at all files of that source again (already organized files are recognized as duplicates).
 
 ### Web UI
 
