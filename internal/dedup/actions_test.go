@@ -94,3 +94,28 @@ func TestDedup_ActionErrorDoesNotAbortRun(t *testing.T) {
 		}
 	}
 }
+
+// Spec: DUP-005
+func TestDedup_MoveToFolderNeverOverwrites(t *testing.T) {
+	src1, src2 := t.TempDir(), t.TempDir()
+	dupDir := t.TempDir()
+	createTestImage(t, src1, "a.jpg", 100, 100, 100)
+	createTestImage(t, src2, "photo.jpg", 100, 100, 100)
+	// A file with the same name is already in the duplicate folder.
+	if err := os.WriteFile(filepath.Join(dupDir, "photo.jpg"), []byte("earlier duplicate"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result := Run(contentJob("moveToFolder", dupDir, src1, src2))
+
+	if result.Errors != 0 || result.ActionsApplied != 1 {
+		t.Fatalf("errors = %d, actions = %d", result.Errors, result.ActionsApplied)
+	}
+	if n := countFiles(t, dupDir); n != 2 {
+		t.Errorf("duplicate folder has %d files, want 2", n)
+	}
+	kept, err := os.ReadFile(filepath.Join(dupDir, "photo.jpg"))
+	if err != nil || string(kept) != "earlier duplicate" {
+		t.Errorf("earlier file was changed: %q, %v", kept, err)
+	}
+}

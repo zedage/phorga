@@ -26,6 +26,15 @@ func createTestFile(t *testing.T, dir, name, content string) string {
 	return path
 }
 
+func mustStat(t *testing.T, path string) os.FileInfo {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return info
+}
+
 // Spec: ORG-001, ORG-004
 func TestOrganize_CopyMode(t *testing.T) {
 	srcDir, tgtDir, stateDir := setupTestDirs(t)
@@ -604,7 +613,7 @@ func TestHandleNoDate_WithFallback_Copy(t *testing.T) {
 	}
 	result := &RunResult{}
 
-	err := handleNoDate(profile, source, srcFile, result)
+	err := handleNoDate(profile, source, srcFile, mustStat(t, srcFile), state.New(), result)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -633,7 +642,7 @@ func TestHandleNoDate_WithFallback_DryRun(t *testing.T) {
 	}
 	result := &RunResult{}
 
-	err := handleNoDate(profile, source, srcFile, result)
+	err := handleNoDate(profile, source, srcFile, mustStat(t, srcFile), state.New(), result)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -659,7 +668,7 @@ func TestHandleNoDate_WithoutFallback(t *testing.T) {
 	}
 	result := &RunResult{}
 
-	err := handleNoDate(profile, source, srcFile, result)
+	err := handleNoDate(profile, source, srcFile, mustStat(t, srcFile), state.New(), result)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -682,7 +691,7 @@ func TestHandleNoDate_WithFallback_Move(t *testing.T) {
 	}
 	result := &RunResult{}
 
-	err := handleNoDate(profile, source, srcFile, result)
+	err := handleNoDate(profile, source, srcFile, mustStat(t, srcFile), state.New(), result)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -41,7 +41,7 @@ The system MUST determine a file's date with the first source that succeeds, in 
 ### ORG-003 Fallback folder for files without a date
 **Status:** implemented
 
-If no date can be determined for a file, the system MUST transfer it to `fallbackFolder` when one is configured (respecting `mode` and `dryRun`). Otherwise it MUST skip the file and log a warning.
+If no date can be determined for a file, the system MUST transfer it to `fallbackFolder` when one is configured (respecting `mode` and `dryRun`). Otherwise it MUST skip the file and log a warning. A file that is already in `fallbackFolder` MUST NOT be overwritten (ORG-020), and a transferred file MUST be recorded in the state (ORG-015), so `copy` mode does not copy it again on every run.
 
 - **WHEN** no date can be determined and `fallbackFolder` is set
   **THEN** the file is copied/moved to `fallbackFolder`
@@ -49,7 +49,7 @@ If no date can be determined for a file, the system MUST transfer it to `fallbac
   **THEN** the file is skipped and a warning is logged
 
 **Code:** `internal/organizer/organizer.go`
-**Tests:** `internal/organizer/organizer_test.go#TestOrganize_FallbackFolder`, `internal/organizer/organizer_test.go#TestHandleNoDate_WithFallback_Copy`, `internal/organizer/organizer_test.go#TestHandleNoDate_WithFallback_Move`, `internal/organizer/organizer_test.go#TestHandleNoDate_WithFallback_DryRun`, `internal/organizer/organizer_test.go#TestHandleNoDate_WithoutFallback`
+**Tests:** `internal/organizer/organizer_test.go#TestOrganize_FallbackFolder`, `internal/organizer/organizer_test.go#TestHandleNoDate_WithFallback_Copy`, `internal/organizer/organizer_test.go#TestHandleNoDate_WithFallback_Move`, `internal/organizer/organizer_test.go#TestHandleNoDate_WithFallback_DryRun`, `internal/organizer/organizer_test.go#TestHandleNoDate_WithoutFallback`, `internal/organizer/safety_test.go#TestHandleNoDate_FallbackNeverOverwrites`, `internal/organizer/safety_test.go#TestHandleNoDate_CopyIsRemembered`
 **Notes:** Because mtime is the last step of ORG-002, this path is only reached when the file cannot be stat'ed at all.
 
 ### ORG-004 Move and copy modes
@@ -193,12 +193,12 @@ For a detected duplicate, the organizer MUST apply `duplicates.action.method`:
 | Method | Effect |
 |---|---|
 | `replace` | Overwrite the existing target file |
-| `addSuffix` | Write as `<name>-<4 random [a-z0-9]>.<ext>`, e.g. `photo-a3f9.jpg` |
-| `moveToFolder` | Put the file into `action.duplicateFolder` (required) |
+| `addSuffix` | Write as `<name>-<4 random [a-z0-9]>.<ext>`, e.g. `photo-a3f9.jpg`, using a name that is still free |
+| `moveToFolder` | Put the file into `action.duplicateFolder` (required), without overwriting a file that is already there (ORG-020) |
 | `skip` | Do not transfer, log the duplicate |
 
 **Code:** `internal/organizer/organizer.go`, `internal/fileops/fileops.go`
-**Tests:** `internal/organizer/organizer_test.go#TestOrganize_DuplicateReplace`, `internal/organizer/organizer_test.go#TestOrganize_DuplicateAddSuffix`, `internal/organizer/organizer_test.go#TestOrganize_DuplicateMoveToFolder`, `internal/organizer/organizer_test.go#TestOrganize_DuplicateSkip`, `internal/fileops/fileops_test.go#TestGenerateSuffix`, `internal/fileops/fileops_test.go#TestAddSuffix`
+**Tests:** `internal/organizer/organizer_test.go#TestOrganize_DuplicateReplace`, `internal/organizer/organizer_test.go#TestOrganize_DuplicateAddSuffix`, `internal/organizer/organizer_test.go#TestOrganize_DuplicateMoveToFolder`, `internal/organizer/organizer_test.go#TestOrganize_DuplicateSkip`, `internal/fileops/fileops_test.go#TestGenerateSuffix`, `internal/fileops/fileops_test.go#TestAddSuffix`, `internal/organizer/safety_test.go#TestOrganize_MoveToFolderNeverOverwrites`
 
 ### ORG-013 Name collisions that are not duplicates
 **Status:** implemented
@@ -221,20 +221,25 @@ With `dryRun: true`, the organizer MUST log every planned action (transfer, fall
   **THEN** source and target directories are unchanged and the planned actions are logged with a `[DRY-RUN]` prefix
 
 **Code:** `internal/organizer/organizer.go`
-**Tests:** `internal/organizer/organizer_test.go#TestOrganize_DryRun`, `internal/organizer/organizer_test.go#TestOrganize_DuplicateDryRun`, `internal/organizer/organizer_test.go#TestHandleNoDate_WithFallback_DryRun`
+**Tests:** `internal/organizer/organizer_test.go#TestOrganize_DryRun`, `internal/organizer/organizer_test.go#TestOrganize_DuplicateDryRun`, `internal/organizer/organizer_test.go#TestHandleNoDate_WithFallback_DryRun`, `internal/organizer/safety_test.go#TestOrganize_DryRunNeverSavesState`
 
 ### ORG-015 State persistence and resume
 **Status:** implemented
 
 The organizer MUST store which files it has processed (keyed by path, size and mtime) in a JSON state file per profile target and source under `stateDir`. On later runs it MUST skip files that are unchanged. A missing or corrupt state file MUST lead to a warning and a full re-scan, not a failure.
 
+The state MUST be saved at the end of every run and also during the run, after every 200 processed files, so a crash or power cut loses at most that much progress. A dry run MUST never save the state (ORG-014).
+
 - **WHEN** the daemon restarts after processing 50 of 100 files
   **THEN** the next run skips those 50 and processes the rest
+- **WHEN** a run is killed after 1,000 of 5,000 files
+  **THEN** the state file already lists those 1,000 files
 - **WHEN** the state file is corrupt
   **THEN** a warning is logged and the run starts fresh
 
 **Code:** `internal/state/state.go`, `internal/organizer/organizer.go`
-**Tests:** `internal/organizer/organizer_test.go#TestOrganize_Resume`, `internal/organizer/organizer_test.go#TestStatePath`, `internal/state/state_test.go#TestMarkAndCheck`, `internal/state/state_test.go#TestSaveAndLoad`, `internal/state/state_test.go#TestLoadMissing`, `internal/state/state_test.go#TestLoadCorrupt`, `internal/state/state_test.go#TestSaveAtomicity`
+**Tests:** `internal/organizer/organizer_test.go#TestOrganize_Resume`, `internal/organizer/organizer_test.go#TestStatePath`, `internal/state/state_test.go#TestMarkAndCheck`, `internal/state/state_test.go#TestSaveAndLoad`, `internal/state/state_test.go#TestLoadMissing`, `internal/state/state_test.go#TestLoadCorrupt`, `internal/state/state_test.go#TestSaveAtomicity`, `internal/organizer/safety_test.go#TestOrganize_SavesStateDuringRun`, `internal/organizer/safety_test.go#TestOrganize_DryRunNeverSavesState`, `internal/organizer/safety_test.go#TestHandleNoDate_CopyIsRemembered`
+**Notes:** Without the saves during a run, a crash in `copy` mode made the next run process the same files again. Files without EXIF then failed an `exif` duplicate check and got a second copy with a suffix.
 
 ### ORG-016 Supported file formats
 **Status:** implemented
@@ -257,3 +262,41 @@ A failure on a single file (unreadable, transfer error, …) MUST be logged and 
 
 **Code:** `internal/organizer/organizer.go`
 **Tests:** `internal/organizer/errors_test.go#TestOrganize_FileErrorDoesNotAbortRun`
+
+### ORG-018 Transfers keep the modification time
+**Status:** implemented
+
+A copied or moved file MUST have the same modification time (mtime) as its source. If the mtime cannot be set, the transfer MUST fail and the source MUST stay in place.
+
+- **WHEN** a video with mtime `2019-07-15 14:30` and no other date is moved
+  **THEN** the file in the target has mtime `2019-07-15 14:30`
+
+**Code:** `internal/fileops/fileops.go`
+**Tests:** `internal/fileops/safety_test.go#TestAtomicCopy_KeepsModTime`, `internal/fileops/safety_test.go#TestAtomicMove_KeepsModTime`, `internal/organizer/safety_test.go#TestOrganize_KeepsModTime`
+**Notes:** For files without readable EXIF (HEIC, videos, screenshots), the mtime is often the only date. Before this requirement, a transfer set it to the time of the run, and `move` lost the original for good. It also means the `filedate` check (ORG-011) can now match a file that Phorga transferred itself.
+
+### ORG-019 Verified, durable transfers
+**Status:** implemented
+
+Before a transferred file becomes visible under its final name, the system MUST flush it to disk and MUST check that it has the same size as the source. If the sizes differ, the transfer MUST fail, the temp file MUST be removed, and in `move` mode the source MUST NOT be deleted.
+
+- **WHEN** a copy stops halfway without reporting an error
+  **THEN** the transfer fails with `incomplete copy`, the source is untouched and nothing is left in the target directory
+
+**Code:** `internal/fileops/fileops.go`
+**Tests:** `internal/fileops/safety_test.go#TestAtomicMove_IncompleteCopyKeepsSource`
+**Notes:** Extends ORG-004, see [ADR-0006](../decisions/0006-atomic-file-operations.md). The flush costs some speed per file. It cannot be tested against a real power cut; the test covers the size check.
+
+### ORG-020 No silent overwrite
+**Status:** implemented
+
+The organizer MUST NOT overwrite an existing file, except with the duplicate action `replace` (ORG-012). When the destination in `fallbackFolder` (ORG-003) or in `action.duplicateFolder` (ORG-012) already exists, the file MUST be written with a random suffix, as in `addSuffix`.
+
+- **WHEN** three different photos named `IMG_0001.jpg` arrive one after another and the action is `moveToFolder`
+  **THEN** the first is organized and the duplicate folder holds the other two
+- **WHEN** two files named `nodate.jpg` are moved to `fallbackFolder`
+  **THEN** both are in `fallbackFolder` afterwards
+
+**Code:** `internal/fileops/fileops.go`, `internal/organizer/organizer.go`
+**Tests:** `internal/fileops/safety_test.go#TestUniquePath`, `internal/organizer/safety_test.go#TestOrganize_MoveToFolderNeverOverwrites`, `internal/organizer/safety_test.go#TestHandleNoDate_FallbackNeverOverwrites`
+**Notes:** Before this requirement, both paths replaced the earlier file, and in `move` mode that file was lost. Duplicate detection has the same rule in DUP-005.

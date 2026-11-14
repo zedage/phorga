@@ -224,12 +224,8 @@ func applyAction(job config.DuplicateDetection, pair duplicatePair, result *RunR
 
 	switch method {
 	case "moveToFolder":
-		dst := filepath.Join(job.Action.DuplicateFolder, filepath.Base(pair.duplicate.Path))
-		// Avoid overwriting in duplicate folder
-		if _, err := os.Stat(dst); err == nil {
-			suffix := fileops.GenerateSuffix()
-			dst = filepath.Join(job.Action.DuplicateFolder, fileops.AddSuffix(filepath.Base(pair.duplicate.Path), suffix))
-		}
+		// Never overwrite a file that is already in the duplicate folder.
+		dst := fileops.UniquePath(filepath.Join(job.Action.DuplicateFolder, filepath.Base(pair.duplicate.Path)))
 		if err := fileops.AtomicMove(pair.duplicate.Path, dst); err != nil {
 			return fmt.Errorf("moving duplicate to folder: %w", err)
 		}

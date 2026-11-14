@@ -16,7 +16,9 @@ Photos pile up in many places: phone backups, messenger downloads, camera cards,
 Phorga is meant to be **set up once and then left alone**. That is why safety matters more than features:
 
 - It never leaves half-written files behind.
-- It only deletes a source file after the copy has been written successfully.
+- It only deletes a source file after the copy has been written to disk and checked for completeness.
+- It keeps each file's own date (the modification time) when it copies or moves it.
+- It never overwrites a file, unless you explicitly choose "replace" for duplicates.
 - It has a dry-run mode to see what would happen.
 - One broken file never stops a run.
 
@@ -32,9 +34,9 @@ The organizer takes files from one or more **source** folders and sorts them int
 
 **When a file with the same name is already there.** The organizer can do a quick check for duplicates: same name, same file date, or same EXIF capture date (files without EXIF never match on the capture date). You choose what happens then: replace it, keep both with a short random suffix, put the new one into a duplicates folder, or skip it. This is deliberately lightweight. Real content comparison is the job of duplicate detection (below).
 
-**Files without a date** go to an optional `fallbackFolder`.
+**Files without a date** go to an optional `fallbackFolder`. If a file with the same name is already there, the new one gets a short random suffix.
 
-**Remembering progress.** Phorga remembers which files it has already handled. After a restart, it continues where it left off instead of starting over.
+**Remembering progress.** Phorga remembers which files it has already handled. After a restart, it continues where it left off instead of starting over. It writes this down during a run as well, so even a crash in the middle of a large first run loses little.
 
 **Schedules.** Every source has its own schedule in cron format, for example "every night at 2:00". A run never overlaps with itself.
 

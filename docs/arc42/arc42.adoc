@@ -352,6 +352,8 @@ app --> ntfy : HTTP POST
 === Atomic File Operations
 All file writes use a temp-file in the target directory followed by `os.Rename`. Move mode deletes the source only after successful rename.
 
+For media files, the temp file is flushed to disk and its size is compared with the source before the rename (ORG-019). It also gets the source's modification time (ORG-018). Destinations in `fallbackFolder` and `duplicateFolder` are never overwritten; a taken name gets a random suffix (ORG-020, DUP-005).
+
 === Error Resilience
 * Single file errors are logged and skipped; the run continues.
 * Single source failures do not block other sources.
@@ -360,6 +362,7 @@ All file writes use a temp-file in the target directory followed by `os.Rename`.
 === State Management
 * JSON files, one per source/job.
 * Atomic writes (write temp → rename).
+* The organizer saves the state at the end of a run and after every 200 processed files (ORG-015), never in a dry run.
 * Corruption triggers a warning and full re-scan (no data loss).
 
 === Structured Logging
