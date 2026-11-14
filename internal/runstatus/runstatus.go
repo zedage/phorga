@@ -5,6 +5,7 @@
 package runstatus
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"os"
@@ -32,6 +33,7 @@ type Recorder struct {
 	path      string
 	last      map[string]Record
 	persisted map[string]Record
+	progress  map[string]Progress // running jobs only, never persisted
 }
 
 // Path returns the status file path for a state directory.
@@ -90,4 +92,67 @@ func (r *Recorder) Last(name string) (Record, bool) {
 	defer r.mu.Unlock()
 	rec, ok := r.last[name]
 	return rec, ok
+}
+
+// Progress phases reported by running jobs (WEB-014).
+const (
+	PhaseCounting   = "counting"   // counting the files to work on
+	PhaseProcessing = "processing" // organizer: handling files
+	PhaseScanning   = "scanning"   // duplicate detection: reading files
+	PhaseComparing  = "comparing"  // duplicate detection: comparing files
+	PhaseActing     = "acting"     // duplicate detection: applying actions
+)
+
+// Progress is what a running job is doing right now. Total is 0 when the
+// amount of work is not known yet. It is kept in memory only.
+type Progress struct {
+	Phase string
+	Done  int
+	Total int
+	Start time.Time // start of the run
+}
+
+// SetProgress stores the current progress of a running job.
+func (r *Recorder) SetProgress(name string, p Progress) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.progress == nil {
+		r.progress = map[string]Progress{}
+	}
+	r.progress[name] = p
+}
+
+// ClearProgress removes the progress of a job once its run has ended.
+func (r *Recorder) ClearProgress(name string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.progress, name)
+}
+
+// Progress returns the current progress of a running job.
+func (r *Recorder) Progress(name string) (Progress, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	p, ok := r.progress[name]
+	return p, ok
+}
+
+// ReportFunc receives progress updates from a running job.
+type ReportFunc func(phase string, done, total int)
+
+type reporterKey struct{}
+
+// WithReporter returns a context whose jobs send their progress to fn.
+// Progress travels with the run's context, like its cancellation, so the
+// organizer and duplicate detection need no extra parameter.
+func WithReporter(ctx context.Context, fn ReportFunc) context.Context {
+	return context.WithValue(ctx, reporterKey{}, fn)
+}
+
+// Report sends a progress update to the reporter in ctx, if there is one.
+// It is cheap enough to call once per file.
+func Report(ctx context.Context, phase string, done, total int) {
+	if fn, ok := ctx.Value(reporterKey{}).(ReportFunc); ok {
+		fn(phase, done, total)
+	}
 }

@@ -1,7 +1,9 @@
 package metadata
 
 import (
+	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -50,6 +52,23 @@ var supportedExtensions = map[string]bool{
 func IsSupported(path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
 	return supportedExtensions[ext]
+}
+
+// CountSupported counts the supported media files below root without
+// opening them, so a run can show "x of y" (WEB-014). Unreadable entries are
+// skipped; it stops early when ctx is cancelled.
+func CountSupported(ctx context.Context, root string) int {
+	n := 0
+	filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if ctx.Err() != nil {
+			return filepath.SkipAll
+		}
+		if err == nil && !d.IsDir() && IsSupported(path) {
+			n++
+		}
+		return nil
+	})
+	return n
 }
 
 // ExtractDate attempts to extract the capture date from a media file.

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/zedage/phorga/internal/config"
 	"github.com/zedage/phorga/internal/organizer"
@@ -87,6 +88,28 @@ func TestRun_StatusPageIsServed(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(cfg.StateDir, runstatus.FileName)); !os.IsNotExist(err) {
 		t.Errorf("no run happened, so no status file may exist (err=%v)", err)
+	}
+}
+
+// Spec: WEB-014
+func TestProgressIsShownWhileRunningAndClearedAfter(t *testing.T) {
+	dir := t.TempDir()
+	recorder := runstatus.Load(filepath.Join(dir, "run-status.json"))
+	start := time.Now()
+
+	ctx := withProgress(context.Background(), recorder, "dedup-0", start)
+	runstatus.Report(ctx, runstatus.PhaseScanning, 10, 40)
+	p, ok := recorder.Progress("dedup-0")
+	if !ok || p.Phase != runstatus.PhaseScanning || p.Done != 10 || p.Total != 40 || !p.Start.Equal(start) {
+		t.Fatalf("progress = %+v, %v", p, ok)
+	}
+
+	// A finished run removes its progress.
+	profile := config.OrganizerProfile{Target: filepath.Join(dir, "target"), TargetStructure: "{year}/{month}"}
+	source := config.OrganizerSource{Path: filepath.Join(dir, "empty"), Mode: "copy", Schedule: "0 2 * * *"}
+	organizerJob("org", profile, source, filepath.Join(dir, "state.json"), recorder)(context.Background())
+	if _, ok := recorder.Progress("org"); ok {
+		t.Error("progress must be cleared when the run ends")
 	}
 }
 

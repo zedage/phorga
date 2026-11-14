@@ -253,6 +253,40 @@ func TestStatusTableShowsJobs(t *testing.T) {
 	}
 }
 
+// Spec: WEB-014
+func TestStatusTableShowsProgress(t *testing.T) {
+	jobs := fakeStatus{
+		{
+			Name: "dedup-0", Kind: "dedup", Label: "/photos", Schedule: "0 3 * * *", Running: true,
+			Phase: "scanning", Done: 1500, Total: 7402, Since: time.Now().Add(-3 * time.Minute),
+		},
+		{Name: "organizer-0-source-0", Kind: "organizer", Label: "/in → /out", Schedule: "0 2 * * *", Running: true, Phase: "counting"},
+		{Name: "dedup-1", Kind: "dedup", Label: "/other", Schedule: "0 4 * * *", Phase: "scanning", Done: 1, Total: 2},
+	}
+	s, err := New(Options{Address: "127.0.0.1:0", ConfigPath: sampleConfigPath(), Config: sampleConfig(), Status: jobs})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body := get(t, s, "/ui/status/table?lang=de").Body.String()
+	for _, want := range []string{
+		"Dateien prüfen: 1500 / 7402 (20 %)",
+		`<progress max="7402" value="1500">`,
+		"läuft seit 3m0s",
+		"Dateien zählen",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("status table missing %q:\n%s", want, body)
+		}
+	}
+	if strings.Count(body, "<progress") != 1 {
+		t.Error("only a running job with a known total shows a progress bar")
+	}
+	if strings.Contains(body, "phase_") || strings.Contains(body, "progress_since") {
+		t.Error("untranslated progress key")
+	}
+}
+
 // Spec: WEB-011
 func TestStatusPageWithoutSource(t *testing.T) {
 	body := get(t, newTestServer(t), "/ui/status").Body.String()

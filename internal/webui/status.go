@@ -14,6 +14,12 @@ type JobStatus struct {
 	Next     time.Time
 	Running  bool
 
+	// Progress of the current run (WEB-014); Phase is empty when unknown.
+	Phase string
+	Done  int
+	Total int
+	Since time.Time
+
 	HasLast      bool
 	LastStart    time.Time
 	LastDuration time.Duration

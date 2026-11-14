@@ -6,7 +6,7 @@ Headless photo/video organizer and duplicate detector. Runs as a daemon, organiz
 
 - **Organizer**: date-based file organization (EXIF → filename → source path → mtime fallback), move/copy, per-source cron scheduling, lightweight duplicate handling, dry-run, state/resume. Transfers keep the file's modification time, are verified before the source is deleted, and never overwrite silently
 - **Duplicate Detection**: independent metadata- or content-based (perceptual hash) dedup across sources, moveToFolder/skip actions, dry-run
-- **Web UI**: optional built-in configuration UI with dropdowns, help texts, live previews, a folder picker and a job status page, in DE/EN/IT/FR
+- **Web UI**: optional built-in configuration UI with dropdowns, help texts, live previews, a folder picker and a job status page with live progress, in DE/EN/IT/FR
 - **Notifications**: optional ntfy.sh push notifications on run completion
 - **Docker-first**: single container, multi-arch (amd64/arm64), works on Synology NAS
 

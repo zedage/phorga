@@ -284,6 +284,10 @@ participant runstatus
 actor Browser
 scheduler -> job : run (TryLock, running = true)
 job -> job : organizer.Run / dedup.Run
+loop per file (WEB-014)
+  job -> runstatus : Report(ctx, phase, done, total) -> SetProgress (memory only)
+end
+job -> runstatus : ClearProgress(name)
 job -> runstatus : Finish(name, record)
 alt dryRun
   runstatus -> runstatus : keep in memory
@@ -293,13 +297,14 @@ end
 Browser -> webui : GET /ui/status/table (every 10 s)
 webui -> job : StatusSource.Jobs()
 job -> scheduler : Next(name), Running(name)
-job -> runstatus : Last(name)
+job -> runstatus : Last(name), Progress(name)
 webui --> Browser : table fragment
 @enduml
 ----
 @startuml
 start
 :Cron triggers dedup job;
+:Count supported files (for progress);
 :Scan all sources recursively;
 :Compute metadata or pHash per file;
 :Compare all pairs (O(n²));

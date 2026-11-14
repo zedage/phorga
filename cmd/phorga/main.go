@@ -207,6 +207,8 @@ func registerJobs(sched *scheduler.Scheduler, cfg *config.Config, recorder *runs
 func organizerJob(name string, p config.OrganizerProfile, s config.OrganizerSource, statePath string, recorder *runstatus.Recorder) scheduler.Job {
 	return func(ctx context.Context) {
 		start := time.Now()
+		ctx = withProgress(ctx, recorder, name, start)
+		defer recorder.ClearProgress(name)
 		st := state.Load(statePath)
 		result, duration := organizer.RunWithTime(ctx, p, s, st, statePath)
 		if result.Canceled {
@@ -228,6 +230,8 @@ func organizerJob(name string, p config.OrganizerProfile, s config.OrganizerSour
 func dedupJob(name string, job config.DuplicateDetection, recorder *runstatus.Recorder) scheduler.Job {
 	return func(ctx context.Context) {
 		start := time.Now()
+		ctx = withProgress(ctx, recorder, name, start)
+		defer recorder.ClearProgress(name)
 		result := dedup.Run(ctx, job)
 		duration := time.Since(start)
 		if result.Canceled {
@@ -244,6 +248,13 @@ func dedupJob(name string, job config.DuplicateDetection, recorder *runstatus.Re
 	}
 }
 
+// withProgress makes a job's progress visible on the status page (WEB-014).
+func withProgress(ctx context.Context, recorder *runstatus.Recorder, name string, start time.Time) context.Context {
+	return runstatus.WithReporter(ctx, func(phase string, done, total int) {
+		recorder.SetProgress(name, runstatus.Progress{Phase: phase, Done: done, Total: total, Start: start})
+	})
+}
+
 // statusBoard combines scheduler state and recorded results for the web UI
 // status page (WEB-011). It implements webui.StatusSource.
 type statusBoard struct {
@@ -258,6 +269,9 @@ func (b *statusBoard) Jobs() []webui.JobStatus {
 		js := webui.JobStatus{
 			Name: j.name, Kind: j.kind, Label: j.label, Schedule: j.schedule,
 			Next: b.sched.Next(j.name), Running: b.sched.Running(j.name),
+		}
+		if p, ok := b.recorder.Progress(j.name); ok && js.Running {
+			js.Phase, js.Done, js.Total, js.Since = p.Phase, p.Done, p.Total, p.Start
 		}
 		if rec, ok := b.recorder.Last(j.name); ok {
 			js.HasLast, js.LastStart, js.LastDuration, js.DryRun = true, rec.Start, rec.Duration, rec.DryRun
