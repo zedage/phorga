@@ -62,7 +62,7 @@ webUI:
 
 Phorga can expose a small built-in configuration UI from the same process that runs the scheduler.
 
-- Server-rendered HTML with HTMX-compatible validation/save endpoints. HTMX is embedded in the binary, so no internet access is needed.
+- Server-rendered HTML with HTMX-compatible validation/save endpoints. HTMX and the stylesheet are embedded in the binary, so no internet access is needed. Light/dark mode follows the system setting, with a manual switch in the top bar.
 - UI localization: German, English, Italian, French
 - Displays the currently loaded effective configuration values
 - Dropdowns for fields with fixed values, and a help text under every field

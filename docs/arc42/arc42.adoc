@@ -197,7 +197,7 @@ package "internal" {
 | Last result per job for the status page. Persists non-dry results to `<stateDir>/run-status.json`; dry-run results stay in memory (ADR-0014).
 
 | `webui`
-| Optional HTTP handlers, templates, localization, config save/validate flow, live previews, the read-only folder picker below `webUI.browseRoots` (ADR-0013), the status page, and the embedded HTMX asset. Gets job status from `main` through the small `StatusSource` interface.
+| Optional HTTP handlers, templates, localization, config save/validate flow, live previews, the read-only folder picker below `webUI.browseRoots` (ADR-0013), the status page, and the embedded HTMX and stylesheet assets. Gets job status from `main` through the small `StatusSource` interface.
 |===
 
 == 6. Runtime View
@@ -368,7 +368,7 @@ All file writes use a temp-file in the target directory followed by `os.Rename`.
 
 === Configuration UI
 * Optional HTTP server in the main process.
-* Server-rendered templates with HTMX-compatible validation and save endpoints. HTMX is embedded in the binary, so no internet access is needed.
+* Server-rendered templates with HTMX-compatible validation and save endpoints. HTMX and the stylesheet are embedded in the binary, so no internet access is needed. The theme follows the system light/dark setting (WEB-012); a top-bar switch can override it per browser (WEB-013).
 * Displays the currently loaded config and can save to the active file or a separate file.
 * Select fields and help texts, with allowed values taken from the validation rules. Live previews of `targetStructure` and cron schedules. Validation errors are shown next to their field.
 * Folder picker and autocomplete below `webUI.browseRoots` only. Paths are checked after symlink resolution, and the picker never writes. It is off when no roots are set.
