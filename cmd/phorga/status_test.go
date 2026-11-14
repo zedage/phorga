@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"os"
@@ -38,8 +39,8 @@ func TestStatusBoardReportsRecordedRun(t *testing.T) {
 	}
 
 	profile, source := cfg.Organizer[0], cfg.Organizer[0].Sources[0]
-	organizerJob(jobs[0].name, profile, source, organizer.StatePath(cfg.StateDir, profile.Target, source.Path), recorder)()
-	dedupJob(jobs[1].name, cfg.DuplicateDetection[0], recorder)()
+	organizerJob(jobs[0].name, profile, source, organizer.StatePath(cfg.StateDir, profile.Target, source.Path), recorder)(context.Background())
+	dedupJob(jobs[1].name, cfg.DuplicateDetection[0], recorder)(context.Background())
 
 	after := board.Jobs()
 	org, dd := after[0], after[1]
@@ -86,5 +87,26 @@ func TestRun_StatusPageIsServed(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(cfg.StateDir, runstatus.FileName)); !os.IsNotExist(err) {
 		t.Errorf("no run happened, so no status file may exist (err=%v)", err)
+	}
+}
+
+// Spec: RUN-001
+func TestCancelledRunIsNotRecorded(t *testing.T) {
+	dir := t.TempDir()
+	recorder := runstatus.Load(filepath.Join(dir, "run-status.json"))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	profile := config.OrganizerProfile{Target: filepath.Join(dir, "target"), TargetStructure: "{year}/{month}"}
+	source := config.OrganizerSource{Path: dir, Mode: "copy", Schedule: "0 2 * * *"}
+	organizerJob("org", profile, source, filepath.Join(dir, "state.json"), recorder)(ctx)
+	dedupJob("dd", config.DuplicateDetection{
+		Sources: []string{dir}, DetectionMode: "content", Action: config.DuplicateAction{Method: "skip"},
+	}, recorder)(ctx)
+
+	for _, name := range []string{"org", "dd"} {
+		if _, ok := recorder.Last(name); ok {
+			t.Errorf("%s: a run stopped by shutdown must not be recorded", name)
+		}
 	}
 }

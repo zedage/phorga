@@ -1,6 +1,7 @@
 package organizer
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,7 +25,7 @@ func TestOrganize_FileErrorDoesNotAbortRun(t *testing.T) {
 	profile := config.OrganizerProfile{Target: tgtDir, TargetStructure: "{year}/{month}"}
 	source := config.OrganizerSource{Path: srcDir, Mode: "copy", Schedule: "0 2 * * *"}
 
-	result := Run(profile, source, state.New(), filepath.Join(stateDir, "state.json"))
+	result := Run(context.Background(), profile, source, state.New(), filepath.Join(stateDir, "state.json"))
 
 	if result.Errors < 1 {
 		t.Errorf("errors = %d, want at least 1", result.Errors)

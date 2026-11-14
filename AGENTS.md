@@ -68,6 +68,7 @@ The demo config uses repo-relative paths and schedules every minute. Stop it wit
   - Transfers keep the file's modification time and never overwrite an existing file, except with the duplicate action `replace`. Use `fileops.UniquePath` for new destinations.
   - `dryRun` must never change a file, including state files.
   - An error on one file is logged and counted, and never aborts a run.
+  - Jobs get a `context.Context` and MUST check it between files, so shutdown stays fast ([RUN-001](docs/specs/runtime.md)).
 - **Config changes** always involve `config.go` (fields), `loader.go` (defaults), `validate.go` (rules), `webui/model.go` + templates (if the field is editable in the UI), `config.example.yaml`, and the README.
 - **targetStructure tokens** are defined twice, in `internal/config/validate.go` and `internal/metadata/targetpath.go`. Change both.
 - **Naming:** `Phorga` / `phorga` / `PHORGA_`, never the old name ([ADR-0007](docs/decisions/0007-rename-to-phorga.md)).

@@ -34,6 +34,7 @@ var specPrefixes = map[string]string{
 	"configuration.md":       "CFG",
 	"notifications.md":       "NTF",
 	"web-ui.md":              "WEB",
+	"runtime.md":             "RUN",
 }
 
 var validStatuses = map[string]bool{"proposed": true, "implemented": true, "removed": true}

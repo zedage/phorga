@@ -1,6 +1,7 @@
 package organizer
 
 import (
+	"context"
 	"image/color"
 	"os"
 	"path/filepath"
@@ -53,7 +54,7 @@ func TestOrganize_ExifDetection_SameEXIFDateIsDuplicate(t *testing.T) {
 	testutil.WriteJPEGWithEXIF(t, existingDir, "photo.jpg", grey, date)
 	testutil.WriteJPEGWithEXIF(t, srcDir, "photo.jpg", color.RGBA{R: 10, G: 200, B: 10, A: 255}, date)
 
-	result := Run(profile, source, state.New(), filepath.Join(stateDir, "state.json"))
+	result := Run(context.Background(), profile, source, state.New(), filepath.Join(stateDir, "state.json"))
 
 	if result.Skipped != 1 {
 		t.Errorf("skipped = %d, want 1 (same EXIF date → duplicate → skip)", result.Skipped)
@@ -79,7 +80,7 @@ func TestOrganize_ExifDetection_NoEXIFNeverMatches(t *testing.T) {
 	testutil.WriteJPEG(t, existingDir, name, grey)
 	testutil.WriteJPEG(t, srcDir, name, grey)
 
-	result := Run(profile, source, state.New(), filepath.Join(stateDir, "state.json"))
+	result := Run(context.Background(), profile, source, state.New(), filepath.Join(stateDir, "state.json"))
 
 	if result.Skipped != 0 {
 		t.Errorf("skipped = %d, want 0 (no EXIF → not a duplicate)", result.Skipped)

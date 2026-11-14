@@ -1,6 +1,7 @@
 package organizer
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -52,7 +53,7 @@ func TestOrganize_CopyMode(t *testing.T) {
 
 	st := state.New()
 	sp := filepath.Join(stateDir, "state.json")
-	result := Run(profile, source, st, sp)
+	result := Run(context.Background(), profile, source, st, sp)
 
 	if result.Errors > 0 {
 		t.Errorf("expected no errors, got %d", result.Errors)
@@ -84,7 +85,7 @@ func TestOrganize_MoveMode(t *testing.T) {
 
 	st := state.New()
 	sp := filepath.Join(stateDir, "state.json")
-	result := Run(profile, source, st, sp)
+	result := Run(context.Background(), profile, source, st, sp)
 
 	if result.Errors > 0 {
 		t.Errorf("expected no errors, got %d", result.Errors)
@@ -114,7 +115,7 @@ func TestOrganize_DryRun(t *testing.T) {
 
 	st := state.New()
 	sp := filepath.Join(stateDir, "state.json")
-	result := Run(profile, source, st, sp)
+	result := Run(context.Background(), profile, source, st, sp)
 
 	if !result.DryRun {
 		t.Error("expected dry run")
@@ -149,7 +150,7 @@ func TestOrganize_SkipUnsupported(t *testing.T) {
 
 	st := state.New()
 	sp := filepath.Join(stateDir, "state.json")
-	result := Run(profile, source, st, sp)
+	result := Run(context.Background(), profile, source, st, sp)
 
 	if result.Processed != 0 {
 		t.Errorf("unsupported files should not be processed, got %d", result.Processed)
@@ -174,7 +175,7 @@ func TestOrganize_Resume(t *testing.T) {
 	// First run
 	st := state.New()
 	sp := filepath.Join(stateDir, "state.json")
-	Run(profile, source, st, sp)
+	Run(context.Background(), profile, source, st, sp)
 
 	// Second run with same state — should skip
 	st2 := state.Load(sp)
@@ -183,7 +184,7 @@ func TestOrganize_Resume(t *testing.T) {
 	tgtDir2 := t.TempDir()
 	profile.Target = tgtDir2
 
-	result := Run(profile, source, st2, sp)
+	result := Run(context.Background(), profile, source, st2, sp)
 
 	// The file was already in state from first run, so it depends on whether
 	// the file info matches. Since we didn't change the file, it should be skipped.
@@ -215,14 +216,14 @@ func TestOrganize_DuplicateSkip(t *testing.T) {
 	// First run
 	st := state.New()
 	sp := filepath.Join(stateDir, "state.json")
-	Run(profile, source, st, sp)
+	Run(context.Background(), profile, source, st, sp)
 
 	// Create same-named file again in source
 	createTestFile(t, srcDir, "photo.jpg", "different data")
 
 	// Reset state to force reprocessing
 	st2 := state.New()
-	result := Run(profile, source, st2, sp)
+	result := Run(context.Background(), profile, source, st2, sp)
 
 	// The duplicate should be skipped
 	if result.Skipped == 0 {
@@ -251,7 +252,7 @@ func TestOrganize_FallbackFolder(t *testing.T) {
 
 	st := state.New()
 	sp := filepath.Join(stateDir, "state.json")
-	result := Run(profile, source, st, sp)
+	result := Run(context.Background(), profile, source, st, sp)
 
 	// File should be processed (mtime fallback works for all files)
 	if result.Errors > 0 {
@@ -284,7 +285,7 @@ func TestRunWithTime(t *testing.T) {
 
 	st := state.New()
 	sp := filepath.Join(stateDir, "state.json")
-	result, duration := RunWithTime(profile, source, st, sp)
+	result, duration := RunWithTime(context.Background(), profile, source, st, sp)
 
 	if duration <= 0 {
 		t.Error("expected positive duration")
@@ -316,12 +317,12 @@ func TestOrganize_DuplicateReplace(t *testing.T) {
 	createTestFile(t, srcDir, "photo.jpg", "original data")
 	st := state.New()
 	sp := filepath.Join(stateDir, "state.json")
-	Run(profile, source, st, sp)
+	Run(context.Background(), profile, source, st, sp)
 
 	// Second run — same filename, different content → replace
 	createTestFile(t, srcDir, "photo.jpg", "updated data")
 	st2 := state.New()
-	result := Run(profile, source, st2, sp)
+	result := Run(context.Background(), profile, source, st2, sp)
 
 	if result.Processed == 0 && result.Skipped == 0 {
 		t.Error("expected file to be processed or skipped")
@@ -350,12 +351,12 @@ func TestOrganize_DuplicateAddSuffix(t *testing.T) {
 	createTestFile(t, srcDir, "photo.jpg", "original data")
 	st := state.New()
 	sp := filepath.Join(stateDir, "state.json")
-	Run(profile, source, st, sp)
+	Run(context.Background(), profile, source, st, sp)
 
 	// Second run — same filename → addSuffix
 	createTestFile(t, srcDir, "photo.jpg", "different data")
 	st2 := state.New()
-	result := Run(profile, source, st2, sp)
+	result := Run(context.Background(), profile, source, st2, sp)
 
 	if result.Processed == 0 {
 		t.Error("expected file to be processed with suffix")
@@ -388,12 +389,12 @@ func TestOrganize_DuplicateMoveToFolder(t *testing.T) {
 	createTestFile(t, srcDir, "photo.jpg", "original data")
 	st := state.New()
 	sp := filepath.Join(stateDir, "state.json")
-	Run(profile, source, st, sp)
+	Run(context.Background(), profile, source, st, sp)
 
 	// Second run — same filename → moveToFolder
 	createTestFile(t, srcDir, "photo.jpg", "dup data")
 	st2 := state.New()
-	result := Run(profile, source, st2, sp)
+	result := Run(context.Background(), profile, source, st2, sp)
 
 	if result.Processed == 0 {
 		t.Error("expected duplicate to be moved to folder")
@@ -430,12 +431,12 @@ func TestOrganize_DuplicateDryRun(t *testing.T) {
 	profileReal.DryRun = false
 	st := state.New()
 	sp := filepath.Join(stateDir, "state.json")
-	Run(profileReal, source, st, sp)
+	Run(context.Background(), profileReal, source, st, sp)
 
 	// Dry run with same file → should log duplicate but not modify
 	createTestFile(t, srcDir, "photo.jpg", "data2")
 	st2 := state.New()
-	result := Run(profile, source, st2, sp)
+	result := Run(context.Background(), profile, source, st2, sp)
 
 	if !result.DryRun {
 		t.Error("expected dry run")
@@ -464,12 +465,12 @@ func TestOrganize_NoDuplicateConfig_ExistingTarget(t *testing.T) {
 	createTestFile(t, srcDir, "photo.jpg", "data")
 	st := state.New()
 	sp := filepath.Join(stateDir, "state.json")
-	Run(profile, source, st, sp)
+	Run(context.Background(), profile, source, st, sp)
 
 	// Second run — no duplicate config → should skip
 	createTestFile(t, srcDir, "photo.jpg", "data2")
 	st2 := state.New()
-	result := Run(profile, source, st2, sp)
+	result := Run(context.Background(), profile, source, st2, sp)
 
 	if result.Skipped == 0 {
 		t.Error("expected file to be skipped when no duplicate config and target exists")
@@ -497,12 +498,12 @@ func TestOrganize_FiledateDetection(t *testing.T) {
 	createTestFile(t, srcDir, "photo.jpg", "data")
 	st := state.New()
 	sp := filepath.Join(stateDir, "state.json")
-	Run(profile, source, st, sp)
+	Run(context.Background(), profile, source, st, sp)
 
 	// Second run with same file
 	createTestFile(t, srcDir, "photo.jpg", "data2")
 	st2 := state.New()
-	result := Run(profile, source, st2, sp)
+	result := Run(context.Background(), profile, source, st2, sp)
 
 	// filedate detection checks mtime — may or may not match
 	_ = result
@@ -529,11 +530,11 @@ func TestOrganize_ExifDetection(t *testing.T) {
 	createTestFile(t, srcDir, "photo.jpg", "data")
 	st := state.New()
 	sp := filepath.Join(stateDir, "state.json")
-	Run(profile, source, st, sp)
+	Run(context.Background(), profile, source, st, sp)
 
 	createTestFile(t, srcDir, "photo.jpg", "data2")
 	st2 := state.New()
-	result := Run(profile, source, st2, sp)
+	result := Run(context.Background(), profile, source, st2, sp)
 	_ = result
 }
 
@@ -558,11 +559,11 @@ func TestOrganize_OrDetection(t *testing.T) {
 	createTestFile(t, srcDir, "photo.jpg", "data")
 	st := state.New()
 	sp := filepath.Join(stateDir, "state.json")
-	Run(profile, source, st, sp)
+	Run(context.Background(), profile, source, st, sp)
 
 	createTestFile(t, srcDir, "photo.jpg", "data2")
 	st2 := state.New()
-	result := Run(profile, source, st2, sp)
+	result := Run(context.Background(), profile, source, st2, sp)
 	_ = result
 }
 
@@ -587,12 +588,12 @@ func TestOrganize_AndDetection_NotMatching(t *testing.T) {
 	createTestFile(t, srcDir, "photo.jpg", "data")
 	st := state.New()
 	sp := filepath.Join(stateDir, "state.json")
-	Run(profile, source, st, sp)
+	Run(context.Background(), profile, source, st, sp)
 
 	// Different content → different mtime → AND won't match → suffix added
 	createTestFile(t, srcDir, "photo.jpg", "different data different size")
 	st2 := state.New()
-	result := Run(profile, source, st2, sp)
+	result := Run(context.Background(), profile, source, st2, sp)
 
 	if result.Processed == 0 {
 		t.Error("expected file to be processed with suffix when AND detection doesn't match")
@@ -760,7 +761,7 @@ func TestOrganize_MultilingualTokens_German(t *testing.T) {
 
 	st := state.New()
 	sp := filepath.Join(stateDir, "state.json")
-	result := Run(profile, source, st, sp)
+	result := Run(context.Background(), profile, source, st, sp)
 
 	if result.Errors > 0 {
 		t.Errorf("expected no errors, got %d", result.Errors)
@@ -794,7 +795,7 @@ func TestOrganize_MultilingualTokens_French(t *testing.T) {
 
 	st := state.New()
 	sp := filepath.Join(stateDir, "state.json")
-	result := Run(profile, source, st, sp)
+	result := Run(context.Background(), profile, source, st, sp)
 
 	if result.Errors > 0 {
 		t.Errorf("expected no errors, got %d", result.Errors)
@@ -822,7 +823,7 @@ func TestOrganize_MultilingualTokens_Mixed(t *testing.T) {
 
 	st := state.New()
 	sp := filepath.Join(stateDir, "state.json")
-	result := Run(profile, source, st, sp)
+	result := Run(context.Background(), profile, source, st, sp)
 
 	if result.Errors > 0 {
 		t.Errorf("expected no errors, got %d", result.Errors)

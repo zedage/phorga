@@ -1,6 +1,7 @@
 package dedup
 
 import (
+	"context"
 	"fmt"
 	"image"
 	_ "image/jpeg"
@@ -19,6 +20,10 @@ import (
 
 const maxHammingDistance = 5
 
+// progressEvery is the number of scanned files after which the scan logs
+// its progress (DUP-011). It is a variable so tests can shorten it.
+var progressEvery = 500
+
 // RunResult holds statistics for a duplicate detection run.
 type RunResult struct {
 	TotalFiles     int
@@ -26,6 +31,9 @@ type RunResult struct {
 	ActionsApplied int
 	Errors         int
 	DryRun         bool
+	// Canceled is true when the run stopped early because ctx was
+	// cancelled (DUP-010).
+	Canceled bool
 }
 
 // fileInfo stores gathered metadata about a scanned file.
@@ -36,8 +44,10 @@ type fileInfo struct {
 	PHash    *goimagehash.ImageHash
 }
 
-// Run executes a duplicate detection job for all configured sources.
-func Run(job config.DuplicateDetection) RunResult {
+// Run executes a duplicate detection job for all configured sources. When ctx
+// is cancelled, it stops before the next file and applies no further
+// actions (DUP-010).
+func Run(ctx context.Context, job config.DuplicateDetection) RunResult {
 	result := RunResult{DryRun: job.DryRun}
 
 	slog.Info("duplicate detection run starting",
@@ -49,10 +59,12 @@ func Run(job config.DuplicateDetection) RunResult {
 	// Scan all sources
 	var files []fileInfo
 	for _, src := range job.Sources {
-		scanned := scanSource(src, job.DetectionMode, &result)
-		files = append(files, scanned...)
+		files = scanSource(ctx, src, job.DetectionMode, files, &result)
 	}
 	result.TotalFiles = len(files)
+	if ctx.Err() != nil {
+		return canceled(result)
+	}
 
 	// Find duplicates
 	duplicates := findDuplicates(files, job.DetectionMode)
@@ -60,6 +72,9 @@ func Run(job config.DuplicateDetection) RunResult {
 
 	// Apply actions
 	for _, pair := range duplicates {
+		if ctx.Err() != nil {
+			return canceled(result)
+		}
 		if err := applyAction(job, pair, &result); err != nil {
 			slog.Error("failed to apply duplicate action", "file", pair.duplicate.Path, "error", err)
 			result.Errors++
@@ -76,16 +91,30 @@ func Run(job config.DuplicateDetection) RunResult {
 	return result
 }
 
+// canceled marks a run as stopped by shutdown and logs it (DUP-010).
+func canceled(result RunResult) RunResult {
+	result.Canceled = true
+	slog.Info("duplicate detection run stopped early because of shutdown",
+		"scannedFiles", result.TotalFiles,
+		"actions", result.ActionsApplied,
+		"errors", result.Errors,
+	)
+	return result
+}
+
 // duplicatePair represents a detected duplicate with reference to the canonical file.
 type duplicatePair struct {
 	canonical fileInfo
 	duplicate fileInfo
 }
 
-func scanSource(srcPath string, detectionMode string, result *RunResult) []fileInfo {
-	var files []fileInfo
-
+// scanSource appends the supported files below srcPath to files. It stops
+// when ctx is cancelled and logs its progress every progressEvery files.
+func scanSource(ctx context.Context, srcPath string, detectionMode string, files []fileInfo, result *RunResult) []fileInfo {
 	filepath.WalkDir(srcPath, func(path string, d fs.DirEntry, err error) error {
+		if ctx.Err() != nil {
+			return filepath.SkipAll
+		}
 		if err != nil {
 			slog.Error("error accessing path", "path", path, "error", err)
 			result.Errors++
@@ -132,6 +161,9 @@ func scanSource(srcPath string, detectionMode string, result *RunResult) []fileI
 		}
 
 		files = append(files, fi)
+		if len(files)%progressEvery == 0 {
+			slog.Info("duplicate detection scan progress", "scannedFiles", len(files), "source", srcPath)
+		}
 		return nil
 	})
 

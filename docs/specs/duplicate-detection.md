@@ -111,3 +111,28 @@ Errors while scanning a file or applying an action MUST be logged and counted. T
 
 **Code:** `internal/dedup/dedup.go`
 **Tests:** `internal/dedup/actions_test.go#TestDedup_ActionErrorDoesNotAbortRun`
+
+### DUP-010 Stopping a run on shutdown
+**Status:** implemented
+
+When Phorga shuts down (RUN-001), a running duplicate detection run MUST stop before it scans the next file. It MUST NOT compare files or apply any further action after the stop request, and it MUST report that it stopped early.
+
+- **WHEN** Phorga is told to stop while the run is scanning
+  **THEN** the scan ends after the current file and no file is moved
+- **WHEN** the stop request comes while actions are applied
+  **THEN** the action in progress is finished and no further file is moved
+
+**Code:** `internal/dedup/dedup.go`
+**Tests:** `internal/dedup/cancel_test.go#TestDedup_CancelledRunMovesNothing`
+
+### DUP-011 Scan progress in the log
+**Status:** implemented
+
+While scanning, a duplicate detection run MUST log its progress every 500 scanned files, with the number of files scanned so far and the source folder.
+
+- **WHEN** a source holds 1,200 supported files
+  **THEN** the log has a progress line after 500 and after 1,000 files
+
+**Code:** `internal/dedup/dedup.go`
+**Tests:** `internal/dedup/cancel_test.go#TestDedup_LogsScanProgress`
+**Notes:** Content mode reads every image completely, so a large library takes many minutes. Without progress lines, such a run looked like a hang.

@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"context"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -11,7 +12,7 @@ func TestRegisterAndRun(t *testing.T) {
 	s := New()
 
 	var count int32
-	_, err := s.Register("test-job", "* * * * *", func() {
+	_, err := s.Register("test-job", "* * * * *", func(context.Context) {
 		atomic.AddInt32(&count, 1)
 	})
 	if err != nil {
@@ -30,7 +31,7 @@ func TestRegisterAndRun(t *testing.T) {
 
 func TestRegisterInvalidCron(t *testing.T) {
 	s := New()
-	_, err := s.Register("bad-job", "invalid", func() {})
+	_, err := s.Register("bad-job", "invalid", func(context.Context) {})
 	if err == nil {
 		t.Fatal("expected error for invalid cron expression")
 	}
@@ -43,7 +44,7 @@ func TestOverlapPrevention(t *testing.T) {
 	var running int32
 	var maxConcurrent int32
 
-	_, err := s.Register("overlap-test", "* * * * *", func() {
+	_, err := s.Register("overlap-test", "* * * * *", func(context.Context) {
 		cur := atomic.AddInt32(&running, 1)
 		if cur > atomic.LoadInt32(&maxConcurrent) {
 			atomic.StoreInt32(&maxConcurrent, cur)
@@ -78,7 +79,7 @@ func TestNextAndRunning(t *testing.T) {
 	s := New()
 	started := make(chan struct{})
 	release := make(chan struct{})
-	id, err := s.Register("status-job", "0 2 * * *", func() {
+	id, err := s.Register("status-job", "0 2 * * *", func(context.Context) {
 		close(started)
 		<-release
 	})

@@ -1,6 +1,7 @@
 package organizer
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -52,7 +53,7 @@ func TestOrganize_KeepsModTime(t *testing.T) {
 
 			profile := config.OrganizerProfile{Target: tgtDir, TargetStructure: "{year}/{month}"}
 			source := config.OrganizerSource{Path: srcDir, Mode: mode, Schedule: "0 2 * * *"}
-			result := Run(profile, source, state.New(), filepath.Join(stateDir, "state.json"))
+			result := Run(context.Background(), profile, source, state.New(), filepath.Join(stateDir, "state.json"))
 			if result.Errors != 0 || result.Processed != 1 {
 				t.Fatalf("processed = %d, errors = %d", result.Processed, result.Errors)
 			}
@@ -88,7 +89,7 @@ func TestOrganize_MoveToFolderNeverOverwrites(t *testing.T) {
 	// Three different photos that share one name, e.g. from three cameras.
 	for _, content := range []string{"first", "second", "third"} {
 		createDatedFile(t, srcDir, "IMG_0001.jpg", content, july2019)
-		if result := Run(profile, source, state.New(), sp); result.Errors != 0 {
+		if result := Run(context.Background(), profile, source, state.New(), sp); result.Errors != 0 {
 			t.Fatalf("%s: errors = %d", content, result.Errors)
 		}
 	}
@@ -160,7 +161,7 @@ func TestOrganize_SavesStateDuringRun(t *testing.T) {
 	profile := config.OrganizerProfile{Target: tgtDir, TargetStructure: "{year}/{month}"}
 	source := config.OrganizerSource{Path: srcDir, Mode: "copy", Schedule: "0 2 * * *"}
 	sp := filepath.Join(stateDir, "state.json")
-	result := Run(profile, source, state.New(), sp)
+	result := Run(context.Background(), profile, source, state.New(), sp)
 
 	if result.Processed != 5 {
 		t.Fatalf("processed = %d, want 5", result.Processed)
@@ -185,7 +186,7 @@ func TestOrganize_DryRunNeverSavesState(t *testing.T) {
 	profile := config.OrganizerProfile{Target: tgtDir, TargetStructure: "{year}/{month}", DryRun: true}
 	source := config.OrganizerSource{Path: srcDir, Mode: "move", Schedule: "0 2 * * *"}
 	sp := filepath.Join(stateDir, "state.json")
-	Run(profile, source, state.New(), sp)
+	Run(context.Background(), profile, source, state.New(), sp)
 
 	if *calls != 0 {
 		t.Errorf("dry run saved the state %d times", *calls)

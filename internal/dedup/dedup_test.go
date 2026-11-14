@@ -1,6 +1,7 @@
 package dedup
 
 import (
+	"context"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -89,7 +90,7 @@ func TestDedup_MetadataMode_SameSize(t *testing.T) {
 		Action:        config.DuplicateAction{Method: "skip"},
 	}
 
-	result := Run(job)
+	result := Run(context.Background(), job)
 	if result.TotalFiles != 2 {
 		t.Errorf("expected 2 files, got %d", result.TotalFiles)
 	}
@@ -117,7 +118,7 @@ func TestDedup_ContentMode_IdenticalImages(t *testing.T) {
 		Action:        config.DuplicateAction{Method: "skip"},
 	}
 
-	result := Run(job)
+	result := Run(context.Background(), job)
 	if result.TotalFiles != 2 {
 		t.Errorf("expected 2 files, got %d", result.TotalFiles)
 	}
@@ -144,7 +145,7 @@ func TestDedup_ContentMode_DifferentImages(t *testing.T) {
 		Action:        config.DuplicateAction{Method: "skip"},
 	}
 
-	result := Run(job)
+	result := Run(context.Background(), job)
 	if result.DuplicatesPair > 0 {
 		t.Error("visually different images should not be classified as duplicates")
 	}
@@ -171,7 +172,7 @@ func TestDedup_MoveToFolder(t *testing.T) {
 		},
 	}
 
-	result := Run(job)
+	result := Run(context.Background(), job)
 	if result.Errors > 0 {
 		t.Errorf("expected no errors, got %d", result.Errors)
 	}
@@ -204,7 +205,7 @@ func TestDedup_DryRunNoChanges(t *testing.T) {
 		},
 	}
 
-	Run(job)
+	Run(context.Background(), job)
 
 	// Both files should still exist
 	if _, err := os.Stat(path1); err != nil {
@@ -238,7 +239,7 @@ func TestDedup_CrossSource(t *testing.T) {
 		Action:        config.DuplicateAction{Method: "skip"},
 	}
 
-	result := Run(job)
+	result := Run(context.Background(), job)
 	if result.DuplicatesPair == 0 {
 		t.Error("expected cross-source duplicate detection")
 	}

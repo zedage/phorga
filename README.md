@@ -24,6 +24,8 @@ go build -o phorga ./cmd/phorga
 docker compose up -d
 ```
 
+Stop Phorga with Ctrl+C (or `docker stop`). It finishes the current file and exits within a few seconds; press Ctrl+C again to quit at once.
+
 ## Configuration
 
 YAML or JSON. See [`config.example.yaml`](config.example.yaml) for a complete example.
