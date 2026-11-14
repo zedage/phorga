@@ -3,6 +3,8 @@ package metadata
 import (
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -315,6 +317,10 @@ func TestExtractPathDate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// A backslash is a path separator on Windows only.
+			if strings.Contains(tt.path, `\`) && runtime.GOOS != "windows" {
+				t.Skip("Windows path")
+			}
 			got, err := extractPathDate(tt.path)
 			if tt.wantOk {
 				if err != nil {
