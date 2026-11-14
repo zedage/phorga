@@ -41,7 +41,7 @@ func TestStatusBoardReportsRecordedRun(t *testing.T) {
 
 	profile, source := cfg.Organizer[0], cfg.Organizer[0].Sources[0]
 	organizerJob(jobs[0].name, profile, source, organizer.StatePath(cfg.StateDir, profile.Target, source.Path), recorder)(context.Background())
-	dedupJob(jobs[1].name, cfg.DuplicateDetection[0], recorder)(context.Background())
+	dedupJob(jobs[1].name, cfg.DuplicateDetection[0], nil, recorder)(context.Background())
 
 	after := board.Jobs()
 	org, dd := after[0], after[1]
@@ -125,7 +125,7 @@ func TestCancelledRunIsNotRecorded(t *testing.T) {
 	organizerJob("org", profile, source, filepath.Join(dir, "state.json"), recorder)(ctx)
 	dedupJob("dd", config.DuplicateDetection{
 		Sources: []string{dir}, DetectionMode: "content", Action: config.DuplicateAction{Method: "skip"},
-	}, recorder)(ctx)
+	}, nil, recorder)(ctx)
 
 	for _, name := range []string{"org", "dd"} {
 		if _, ok := recorder.Last(name); ok {

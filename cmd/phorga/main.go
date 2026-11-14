@@ -170,6 +170,8 @@ var (
 // for the status page (WEB-011).
 func registerJobs(sched *scheduler.Scheduler, cfg *config.Config, recorder *runstatus.Recorder) ([]jobInfo, error) {
 	var jobs []jobInfo
+	// One fingerprint cache for all duplicate detection jobs (DUP-012).
+	cache := dedup.LoadCache(dedup.CachePath(cfg.StateDir))
 	for i, profile := range cfg.Organizer {
 		for j, source := range profile.Sources {
 			name := fmt.Sprintf("organizer-%d-source-%d", i, j)
@@ -190,7 +192,7 @@ func registerJobs(sched *scheduler.Scheduler, cfg *config.Config, recorder *runs
 			continue
 		}
 		name := fmt.Sprintf("dedup-%d", i)
-		if _, err := sched.Register(name, dd.Schedule, dedupJob(name, dd, recorder)); err != nil {
+		if _, err := sched.Register(name, dd.Schedule, dedupJob(name, dd, cache, recorder)); err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
 		jobs = append(jobs, jobInfo{
@@ -227,12 +229,12 @@ func organizerJob(name string, p config.OrganizerProfile, s config.OrganizerSour
 
 // dedupJob runs one duplicate detection job, notifies, and records the result.
 // A run stopped by shutdown is neither recorded nor notified (RUN-001).
-func dedupJob(name string, job config.DuplicateDetection, recorder *runstatus.Recorder) scheduler.Job {
+func dedupJob(name string, job config.DuplicateDetection, cache *dedup.Cache, recorder *runstatus.Recorder) scheduler.Job {
 	return func(ctx context.Context) {
 		start := time.Now()
 		ctx = withProgress(ctx, recorder, name, start)
 		defer recorder.ClearProgress(name)
-		result := dedup.Run(ctx, job)
+		result := dedup.RunWithCache(ctx, job, cache)
 		duration := time.Since(start)
 		if result.Canceled {
 			return

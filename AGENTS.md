@@ -66,7 +66,7 @@ The demo config uses repo-relative paths and schedules every minute. Stop it wit
   - All file writes are atomic (temp file + rename) via `internal/fileops`.
   - `move` deletes the source only after a successful, verified write.
   - Transfers keep the file's modification time and never overwrite an existing file, except with the duplicate action `replace`. Use `fileops.UniquePath` for new destinations.
-  - `dryRun` must never change a file, including state files.
+  - `dryRun` must never change a file, including state files. The one exception is the duplicate detection fingerprint cache, which never touches a photo ([ADR-0015](docs/decisions/0015-dedup-fingerprint-cache-written-in-dry-runs.md)).
   - An error on one file is logged and counted, and never aborts a run.
   - Jobs get a `context.Context` and MUST check it between files, so shutdown stays fast ([RUN-001](docs/specs/runtime.md)).
 - **Config changes** always involve `config.go` (fields), `loader.go` (defaults), `validate.go` (rules), `webui/model.go` + templates (if the field is editable in the UI), `config.example.yaml`, and the README.

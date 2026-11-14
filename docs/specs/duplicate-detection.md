@@ -85,10 +85,11 @@ With `action.method: skip`, the system MUST NOT modify any file. It MUST log eac
 ### DUP-007 Dry-run
 **Status:** implemented
 
-With `dryRun: true`, the system MUST log every detected pair and the action it would take, and MUST NOT modify any file.
+With `dryRun: true`, the system MUST log every detected pair and the action it would take, and MUST NOT modify, move or delete any photo or video. The only file a dry run may write is the fingerprint cache (DUP-012).
 
 **Code:** `internal/dedup/dedup.go`
-**Tests:** `internal/dedup/dedup_test.go#TestDedup_DryRunNoChanges`
+**Tests:** `internal/dedup/dedup_test.go#TestDedup_DryRunNoChanges`, `internal/dedup/cache_test.go#TestCache_DryRunWritesCacheButNoPhoto`
+**Notes:** Writing the cache in dry runs is a deliberate exception, see [ADR-0015](../decisions/0015-dedup-fingerprint-cache-written-in-dry-runs.md).
 
 ### DUP-008 Own schedule
 **Status:** implemented
@@ -136,3 +137,31 @@ While scanning, a duplicate detection run MUST log its progress every 500 scanne
 **Code:** `internal/dedup/dedup.go`
 **Tests:** `internal/dedup/cancel_test.go#TestDedup_LogsScanProgress`
 **Notes:** Content mode reads every image completely, so a large library takes many minutes. Without progress lines, such a run looked like a hang.
+
+### DUP-012 Fingerprint cache
+**Status:** implemented
+
+The system MUST remember what a scan computed for each file, so later runs do not read unchanged files again:
+
+- The cache is one file, `<stateDir>/dedup-cache.json`, shared by all duplicate detection jobs. It is separate from the organizer's state files.
+- An entry is keyed by path and is valid only while the file's size and modification time are unchanged. A changed file MUST be computed again.
+- `content` mode stores the perceptual hash, or the fact that the file cannot be decoded (e.g. videos, HEIC). `metadata` mode stores the EXIF date, or the fact that there is none. Read errors MUST NOT be cached.
+- The cache MUST be saved atomically every 500 newly computed files and at the end of each scan, also when the run was stopped (DUP-010), and also in dry runs (DUP-007).
+- After a complete scan, entries below the job's own sources whose files are gone MUST be removed. Entries of other folders MUST be kept.
+- Jobs running at the same time MUST NOT lose each other's entries.
+- A missing or corrupt cache file MUST lead to a warning and a full scan, not a failure. A failed write MUST be logged and never fail the job.
+
+- **WHEN** a library was scanned once and nothing changed
+  **THEN** the next run reads no image and finds the same duplicates
+- **WHEN** one file's modification time changed
+  **THEN** only that file is computed again
+- **WHEN** a dry run scans 3 images
+  **THEN** `dedup-cache.json` holds 3 entries and no photo was moved
+- **WHEN** a run is stopped after 2 of 3 files
+  **THEN** the saved cache holds those 2 entries
+- **WHEN** a file of job A is deleted and job A runs again
+  **THEN** its entry is removed, and the entries of job B's folders stay
+
+**Code:** `internal/dedup/cache.go`, `internal/dedup/dedup.go`, `cmd/phorga/main.go`
+**Tests:** `internal/dedup/cache_test.go#TestCache_SecondRunUsesCache`, `internal/dedup/cache_test.go#TestCache_MetadataModeUsesCache`, `internal/dedup/cache_test.go#TestCache_ChangedFileIsRecomputed`, `internal/dedup/cache_test.go#TestCache_PersistsAndReloads`, `internal/dedup/cache_test.go#TestCache_DryRunWritesCacheButNoPhoto`, `internal/dedup/cache_test.go#TestCache_RemembersUndecodableFiles`, `internal/dedup/cache_test.go#TestCache_PruneKeepsOtherJobsEntries`, `internal/dedup/cache_test.go#TestCache_CorruptFileStartsFresh`, `internal/dedup/cache_test.go#TestCache_InterruptedRunKeepsComputedFingerprints`, `internal/dedup/cache_test.go#TestCache_SharedByConcurrentJobs`
+**Notes:** See [ADR-0015](../decisions/0015-dedup-fingerprint-cache-written-in-dry-runs.md). Deleting `dedup-cache.json` forces a full scan, e.g. after editing photos with a tool that keeps the modification time.

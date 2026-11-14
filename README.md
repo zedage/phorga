@@ -152,6 +152,7 @@ The web UI shows the next three run times while you type.
 |---|---|---|
 | `org-<target>-<source>.state.json` | organizer, one per source | Files already handled, so later runs skip them. Never written in a dry run. |
 | `run-status.json` | all jobs | Last result of each job for the status page. Dry runs are not stored. |
+| `dedup-cache.json` | duplicate detection, shared by all jobs | Fingerprints (pHash or EXIF date) of unchanged files, so later runs only read new or changed files. Written in dry runs too; it never touches a photo. Delete it to force a full scan. |
 
 All files are written atomically. Deleting a state file makes the organizer look at all files of that source again (already organized files are recognized as duplicates).
 
@@ -263,7 +264,7 @@ targetStructure: "{year}/{monthNumber}_{Monat}"              # 2024/03_März
 ## Known Limits
 
 - **HEIC and video dates** come from the filename, the folder or the modification time. Phorga reads capture dates only from EXIF in JPEG and TIFF-based RAW files.
-- **Content duplicate detection** compares JPEG and PNG only. HEIC, RAW and videos never match. Every run decodes every image again, which takes long on a large library.
+- **Content duplicate detection** compares JPEG and PNG only. HEIC, RAW and videos never match. The first run decodes every image, which takes long on a large library; later runs only read new or changed files, thanks to the cache in `<stateDir>/dedup-cache.json`.
 - **Content duplicate detection keeps the first file it finds**, not the best one, and very similar shots (bursts) can count as duplicates. Duplicates are only moved to `duplicateFolder`, never deleted, so review that folder before you delete anything.
 - **Other file types stay in the source without a log line**, for example DNG, GIF, WebP, TIFF, AVI, M4V, 3GP and sidecars (XMP, AAE). The photo and the video of a Live Photo can land in different folders.
 - **Organizer duplicates with `detectionMode: filename` and `method: replace`** overwrite a different photo that happens to have the same name. Prefer `filename+exif` with `skip` or `moveToFolder`.
