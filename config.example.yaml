@@ -1,5 +1,7 @@
 # Phorga Configuration Example
-# See https://github.com/zedage/phorga for documentation.
+# Every field is described in the README: https://github.com/zedage/phorga#reference
+# Schedules are 5-field cron expressions (minute hour day month weekday) in the
+# machine's local time; in Docker set TZ.
 
 # State directory for resume support (default: /data/state)
 stateDir: /data/state
@@ -21,7 +23,7 @@ webUI:
 # --- Organizer Feature ---
 # Organizes photos/videos from source directories into a date-based target structure.
 organizer:
-  - dryRun: false
+  - dryRun: false # true = only log what would happen, change nothing
     ntfy:
       url: https://ntfy.sh/your-topic # optional
     target: /path/to/organized/photos
@@ -48,8 +50,8 @@ organizer:
 # --- Duplicate Detection Feature ---
 # Independently scans sources for duplicates (metadata or content-based).
 duplicateDetection:
-  - enabled: true
-    dryRun: true
+  - enabled: true # only enabled jobs are scheduled
+    dryRun: true # true = only log duplicates, move nothing
     schedule: "0 4 * * *"
     sources:
       - /path/to/photos1
