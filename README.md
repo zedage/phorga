@@ -312,15 +312,29 @@ internal/
 
 ## Docker
 
-```bash
-docker build -t phorga .
-docker compose up -d
+A ready-made image for **amd64 and arm64** is published on Docker Hub as [`mnrd001/phorga`](https://hub.docker.com/r/mnrd001/phorga). It is built automatically after every merge to `main` ([`.github/workflows/docker.yml`](.github/workflows/docker.yml)).
 
-# Multi-arch (e.g. for an arm64 NAS); Go cross-compiles, no emulation needed for the build
-docker buildx build --platform linux/amd64,linux/arm64 -t <registry>/phorga --push .
+| Tag | Meaning |
+|---|---|
+| `latest` | The current state of `main` |
+| `sha-<commit>` | A fixed build, e.g. `sha-60d4bc4`, to pin a version or go back |
+
+```bash
+docker pull mnrd001/phorga:latest
+docker compose up -d       # uses the image from Docker Hub, see docker-compose.yml
 ```
 
-Mount your source/target directories and `config.yaml` as volumes. State is persisted in `/data/state`.
+Mount your source/target directories and `config.yaml` as volumes. State is persisted in `/data/state`. In `mode: move`, the source folder must be writable (no `:ro`).
+
+**Synology:** in Container Manager, search the registry for `mnrd001/phorga`, download `latest`, and create a project from [`docker-compose.yml`](docker-compose.yml) with your shared folders as volumes. Set `user:` to your NAS user (`id` in an SSH shell shows uid and gid), so organized files belong to you.
+
+**Build it yourself:**
+
+```bash
+docker build -t phorga .
+# Multi-arch; Go cross-compiles, only the small runtime stage needs QEMU for arm64
+docker buildx build --platform linux/amd64,linux/arm64 -t <registry>/phorga --push .
+```
 
 **Web UI in Docker:** inside the container, `127.0.0.1` is not reachable from the host. Set `webUI.address: 0.0.0.0:8080` in `config.yaml` and publish the port on the host's loopback only, e.g. `-p 127.0.0.1:8080:8080` (see the commented `ports` entry in [`docker-compose.yml`](docker-compose.yml)). The UI has no authentication, so do not publish it on all interfaces.
 

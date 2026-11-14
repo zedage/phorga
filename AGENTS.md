@@ -53,7 +53,7 @@ go vet ./...
 go run ./cmd/phorga --config data/config.yaml   # run the demo (from repo root)
 go run ./cmd/phorga --config data/config.yaml --web-ui --web-ui-addr 127.0.0.1:8080
 go run testdata/tools/generate.go               # (re)generate demo images in data/
-docker build -t phorga .                        # container image
+docker build -t phorga .                        # container image (CI pushes mnrd001/phorga after every merge to main)
 ```
 
 The demo config uses repo-relative paths and schedules every minute. Stop it with Ctrl+C.
