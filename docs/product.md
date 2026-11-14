@@ -73,7 +73,7 @@ The page is meant to be usable without knowing the config format:
 - **Live previews.** While you type a folder structure such as `{year}/{month}`, you see the folder it produces for an example date. While you type a schedule, you see its next three run times.
 - **Errors next to the field.** "Validate" marks each wrong field directly, not only in a list at the top.
 - **Folder picker.** A "Browse…" button and suggestions while typing, so you can pick folders on the NAS instead of typing paths. For safety it only shows folders below the locations you list in `webUI.browseRoots`, and it never changes anything. Without that list, it is off ([ADR-0013](decisions/0013-folder-picker-limited-to-browse-roots.md)).
-- **Status page.** For every job: when it runs next, whether it is running right now, and what the last run did (files processed, duplicates found, errors). It refreshes by itself. The last results survive a restart. Dry runs are shown but not stored ([ADR-0014](decisions/0014-persisted-run-status-without-dry-runs.md)).
+- **Status page.** For every job: when it runs next, whether it is running right now, and what the last run did (files processed, duplicates found, errors). While a job runs, you see what it is doing, for example "Scanning files: 1500 / 7402 (20 %)" with a progress bar and how long it has been running. It refreshes by itself every 10 seconds. The last results survive a restart. Dry runs are shown but not stored ([ADR-0014](decisions/0014-persisted-run-status-without-dry-runs.md)).
 
 - **Light and dark mode.** The page follows the light or dark setting of your system automatically. A switch in the top bar lets you force light or dark instead; your browser remembers the choice.
 

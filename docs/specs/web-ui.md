@@ -195,3 +195,25 @@ The top bar of every UI page MUST offer a switch with three choices: System (fol
 **Code:** `internal/webui/templates/layout.html`, `internal/webui/static/phorga.css`, `internal/webui/i18n_ui.go`
 **Tests:** `internal/webui/usability_test.go#TestThemeSwitchIsRendered`
 **Notes:** The switch behavior itself runs in the browser and is checked manually. The Go test covers the markup, the translations and the CSS override selectors.
+
+### WEB-014 Live progress of running jobs
+**Status:** implemented
+
+For a running job, the status page (WEB-011) MUST show under the "running" badge what the run is doing right now:
+
+- the phase, from the message catalogs (WEB-005): counting files, organizing files (organizer), scanning files, comparing files, applying actions (duplicate detection)
+- once the amount of work is known: `<done> / <total> (<percent> %)` and a progress bar
+- how long the run has been going
+
+Before working, each run MUST count the supported files without opening them, so the total is known. The progress MUST come from the job itself while it runs, MUST be kept in memory only (never written to disk, also not in a dry run), and MUST disappear when the run ends. It is updated by the table's normal refresh every 10 s. A job that is not running shows no progress.
+
+- **WHEN** a duplicate detection run has scanned 1,500 of 7,402 files for 3 minutes, in German
+  **THEN** the state column shows `Dateien prüfen: 1500 / 7402 (20 %)`, a progress bar and `läuft seit 3m0s`
+- **WHEN** the run is still counting
+  **THEN** only the phase is shown, without numbers or bar
+- **WHEN** the run ends (finished or stopped, RUN-001)
+  **THEN** its progress is removed and the status page shows the last result as before
+
+**Code:** `internal/runstatus/runstatus.go`, `internal/metadata/metadata.go`, `internal/organizer/organizer.go`, `internal/dedup/dedup.go`, `cmd/phorga/main.go`, `internal/webui/status.go`, `internal/webui/templates/status.html`, `internal/webui/i18n_ui.go`, `internal/webui/static/phorga.css`
+**Tests:** `internal/runstatus/progress_test.go#TestProgressIsKeptInMemoryOnly`, `internal/runstatus/progress_test.go#TestReportReachesReporterInContext`, `internal/metadata/count_test.go#TestCountSupported`, `internal/dedup/progress_test.go#TestDedup_ReportsProgress`, `internal/organizer/progress_test.go#TestOrganize_ReportsProgress`, `internal/webui/usability_test.go#TestStatusTableShowsProgress`, `cmd/phorga/status_test.go#TestProgressIsShownWhileRunningAndClearedAfter`
+**Notes:** Jobs report through the run's `context.Context` (`runstatus.Report`), the same way they receive the stop request (RUN-001), so `organizer.Run` and `dedup.Run` need no extra parameter. Counting walks the folders once more; on a local disk this took a few milliseconds for 7,950 files.

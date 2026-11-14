@@ -16,6 +16,7 @@ import (
 	"github.com/zedage/phorga/internal/config"
 	"github.com/zedage/phorga/internal/fileops"
 	"github.com/zedage/phorga/internal/metadata"
+	"github.com/zedage/phorga/internal/runstatus"
 )
 
 const maxHammingDistance = 5
@@ -56,10 +57,17 @@ func Run(ctx context.Context, job config.DuplicateDetection) RunResult {
 		"dryRun", job.DryRun,
 	)
 
+	// Count first, so progress can show "x of y" (WEB-014).
+	runstatus.Report(ctx, runstatus.PhaseCounting, 0, 0)
+	total := 0
+	for _, src := range job.Sources {
+		total += metadata.CountSupported(ctx, src)
+	}
+
 	// Scan all sources
 	var files []fileInfo
 	for _, src := range job.Sources {
-		files = scanSource(ctx, src, job.DetectionMode, files, &result)
+		files = scanSource(ctx, src, job.DetectionMode, files, total, &result)
 	}
 	result.TotalFiles = len(files)
 	if ctx.Err() != nil {
@@ -67,14 +75,18 @@ func Run(ctx context.Context, job config.DuplicateDetection) RunResult {
 	}
 
 	// Find duplicates
-	duplicates := findDuplicates(files, job.DetectionMode)
+	duplicates := findDuplicates(ctx, files, job.DetectionMode)
+	if ctx.Err() != nil {
+		return canceled(result)
+	}
 	result.DuplicatesPair = len(duplicates)
 
 	// Apply actions
-	for _, pair := range duplicates {
+	for i, pair := range duplicates {
 		if ctx.Err() != nil {
 			return canceled(result)
 		}
+		runstatus.Report(ctx, runstatus.PhaseActing, i, len(duplicates))
 		if err := applyAction(job, pair, &result); err != nil {
 			slog.Error("failed to apply duplicate action", "file", pair.duplicate.Path, "error", err)
 			result.Errors++
@@ -110,7 +122,7 @@ type duplicatePair struct {
 
 // scanSource appends the supported files below srcPath to files. It stops
 // when ctx is cancelled and logs its progress every progressEvery files.
-func scanSource(ctx context.Context, srcPath string, detectionMode string, files []fileInfo, result *RunResult) []fileInfo {
+func scanSource(ctx context.Context, srcPath string, detectionMode string, files []fileInfo, total int, result *RunResult) []fileInfo {
 	filepath.WalkDir(srcPath, func(path string, d fs.DirEntry, err error) error {
 		if ctx.Err() != nil {
 			return filepath.SkipAll
@@ -161,6 +173,7 @@ func scanSource(ctx context.Context, srcPath string, detectionMode string, files
 		}
 
 		files = append(files, fi)
+		runstatus.Report(ctx, runstatus.PhaseScanning, len(files), total)
 		if len(files)%progressEvery == 0 {
 			slog.Info("duplicate detection scan progress", "scannedFiles", len(files), "source", srcPath)
 		}
@@ -190,7 +203,7 @@ func computePHash(path string) (*goimagehash.ImageHash, error) {
 	return hash, nil
 }
 
-func findDuplicates(files []fileInfo, detectionMode string) []duplicatePair {
+func findDuplicates(ctx context.Context, files []fileInfo, detectionMode string) []duplicatePair {
 	var pairs []duplicatePair
 
 	// Each file is reported as a duplicate at most once, against the first
@@ -198,6 +211,10 @@ func findDuplicates(files []fileInfo, detectionMode string) []duplicatePair {
 	// N matching files this yields N-1 pairs sharing one canonical (DUP-004).
 	isDup := make([]bool, len(files))
 	for i := 0; i < len(files); i++ {
+		if ctx.Err() != nil {
+			return nil
+		}
+		runstatus.Report(ctx, runstatus.PhaseComparing, i, len(files))
 		if isDup[i] {
 			continue
 		}

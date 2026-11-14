@@ -13,6 +13,7 @@ import (
 	"github.com/zedage/phorga/internal/config"
 	"github.com/zedage/phorga/internal/fileops"
 	"github.com/zedage/phorga/internal/metadata"
+	"github.com/zedage/phorga/internal/runstatus"
 	"github.com/zedage/phorga/internal/state"
 )
 
@@ -47,6 +48,11 @@ func Run(ctx context.Context, profile config.OrganizerProfile, source config.Org
 		"dryRun", profile.DryRun,
 	)
 
+	// Count first, so progress can show "x of y" (WEB-014).
+	runstatus.Report(ctx, runstatus.PhaseCounting, 0, 0)
+	total := metadata.CountSupported(ctx, source.Path)
+	visited := 0
+
 	savedAt := 0
 	err := filepath.WalkDir(source.Path, func(path string, d fs.DirEntry, err error) error {
 		if ctx.Err() != nil {
@@ -66,6 +72,8 @@ func Run(ctx context.Context, profile config.OrganizerProfile, source config.Org
 		if !metadata.IsSupported(path) {
 			return nil
 		}
+		visited++
+		defer func() { runstatus.Report(ctx, runstatus.PhaseProcessing, visited, total) }()
 
 		// Check state for already-processed files
 		info, statErr := d.Info()

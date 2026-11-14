@@ -30,6 +30,13 @@ var templateFuncs = template.FuncMap{
 	},
 	"asset": assetURL,
 	"fid":   fieldID,
+	"percent": func(done, total int) int {
+		if total <= 0 {
+			return 0
+		}
+		return done * 100 / total
+	},
+	"since": func(t time.Time) time.Duration { return time.Since(t).Round(time.Second) },
 	"has":   contains,
 	"lines": func(values []string) string { return strings.Join(values, "\n") },
 	"fmtTime": func(ts time.Time) string {
