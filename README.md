@@ -152,6 +152,7 @@ The web UI shows the next three run times while you type.
 |---|---|---|
 | `org-<target>-<source>.state.json` | organizer, one per source | Files already handled, so later runs skip them. Never written in a dry run. |
 | `run-status.json` | all jobs | Last result of each job for the status page. Dry runs are not stored. |
+| `dedup-cache.json` | duplicate detection, shared by all jobs | Fingerprints (pHash or EXIF date) of unchanged files, so later runs only read new or changed files. Written in dry runs too; it never touches a photo. Delete it to force a full scan. |
 
 All files are written atomically. Deleting a state file makes the organizer look at all files of that source again (already organized files are recognized as duplicates).
 
