@@ -1,9 +1,12 @@
 package webui
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"html/template"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -25,6 +28,7 @@ var templateFuncs = template.FuncMap{
 		}
 		return m, nil
 	},
+	"asset": assetURL,
 	"fid":   fieldID,
 	"has":   contains,
 	"lines": func(values []string) string { return strings.Join(values, "\n") },
@@ -55,4 +59,22 @@ func contains(values []string, v string) bool {
 		}
 	}
 	return false
+}
+
+var assetVersions sync.Map // name -> "?v=<hash>"
+
+// assetURL returns the URL of an embedded static file with a short content
+// hash, so browsers fetch a new version after an update even though static
+// assets are cached (WEB-009).
+func assetURL(name string) string {
+	if v, ok := assetVersions.Load(name); ok {
+		return "/ui/static/" + name + v.(string)
+	}
+	version := ""
+	if data, err := staticFS.ReadFile("static/" + name); err == nil {
+		sum := sha256.Sum256(data)
+		version = "?v=" + hex.EncodeToString(sum[:])[:10]
+	}
+	assetVersions.Store(name, version)
+	return "/ui/static/" + name + version
 }

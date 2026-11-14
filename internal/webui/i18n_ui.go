@@ -7,6 +7,10 @@ var uiMessages = map[string]map[string]string{
 	"en": {
 		"nav_config":                "Configuration",
 		"nav_status":                "Status",
+		"theme_label":               "Theme",
+		"theme_auto":                "System",
+		"theme_light":               "Light",
+		"theme_dark":                "Dark",
 		"restart_hint":              "Saved changes take effect after Phorga is restarted.",
 		"unknown_value":             "unknown",
 		"not_set":                   "— not set —",
@@ -70,6 +74,10 @@ var uiMessages = map[string]map[string]string{
 	"de": {
 		"nav_config":                "Konfiguration",
 		"nav_status":                "Status",
+		"theme_label":               "Design",
+		"theme_auto":                "System",
+		"theme_light":               "Hell",
+		"theme_dark":                "Dunkel",
 		"restart_hint":              "Gespeicherte Änderungen werden nach einem Neustart von Phorga wirksam.",
 		"unknown_value":             "unbekannt",
 		"not_set":                   "— nicht gesetzt —",
@@ -133,6 +141,10 @@ var uiMessages = map[string]map[string]string{
 	"it": {
 		"nav_config":                "Configurazione",
 		"nav_status":                "Stato",
+		"theme_label":               "Tema",
+		"theme_auto":                "Sistema",
+		"theme_light":               "Chiaro",
+		"theme_dark":                "Scuro",
 		"restart_hint":              "Le modifiche salvate diventano effettive dopo il riavvio di Phorga.",
 		"unknown_value":             "sconosciuto",
 		"not_set":                   "— non impostato —",
@@ -196,6 +208,10 @@ var uiMessages = map[string]map[string]string{
 	"fr": {
 		"nav_config":                "Configuration",
 		"nav_status":                "Statut",
+		"theme_label":               "Thème",
+		"theme_auto":                "Système",
+		"theme_light":               "Clair",
+		"theme_dark":                "Sombre",
 		"restart_hint":              "Les modifications enregistrées prennent effet après le redémarrage de Phorga.",
 		"unknown_value":             "inconnu",
 		"not_set":                   "— non défini —",

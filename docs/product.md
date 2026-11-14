@@ -73,6 +73,8 @@ The page is meant to be usable without knowing the config format:
 - **Folder picker.** A "Browse…" button and suggestions while typing, so you can pick folders on the NAS instead of typing paths. For safety it only shows folders below the locations you list in `webUI.browseRoots`, and it never changes anything. Without that list, it is off ([ADR-0013](decisions/0013-folder-picker-limited-to-browse-roots.md)).
 - **Status page.** For every job: when it runs next, whether it is running right now, and what the last run did (files processed, duplicates found, errors). It refreshes by itself. The last results survive a restart. Dry runs are shown but not stored ([ADR-0014](decisions/0014-persisted-run-status-without-dry-runs.md)).
 
+- **Light and dark mode.** The page follows the light or dark setting of your system automatically. A switch in the top bar lets you force light or dark instead; your browser remembers the choice.
+
 The page works without internet access. The UI has no login. It is meant for your own computer or home network only, and by default it is reachable only from the same machine ([ADR-0008](decisions/0008-built-in-server-rendered-web-ui.md)).
 
 Exact rules: [specs/web-ui.md](specs/web-ui.md)

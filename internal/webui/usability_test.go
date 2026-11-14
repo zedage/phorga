@@ -178,6 +178,39 @@ func TestHTMXIsServedFromBinary(t *testing.T) {
 		if strings.Contains(body, "unpkg.com") || !strings.Contains(body, `src="/ui/static/htmx.min.js"`) {
 			t.Errorf("%s must load htmx from /ui/static", page)
 		}
+		if strings.Contains(body, `href="http`) || strings.Contains(body, `src="http`) {
+			t.Errorf("%s must not load assets from external hosts", page)
+		}
+	}
+}
+
+// Spec: WEB-012
+func TestThemeFollowsSystemColorScheme(t *testing.T) {
+	s := newTestServer(t)
+	for _, page := range []string{"/ui", "/ui/status"} {
+		body := get(t, s, page).Body.String()
+		if !strings.Contains(body, `<meta name="color-scheme" content="light dark">`) {
+			t.Errorf("%s must declare color-scheme light dark", page)
+		}
+		if !strings.Contains(body, `href="/ui/static/phorga.css?v=`) {
+			t.Errorf("%s must load the embedded stylesheet", page)
+		}
+	}
+	resp := get(t, s, "/ui/static/phorga.css")
+	if resp.Code != http.StatusOK {
+		t.Fatalf("stylesheet: got %d", resp.Code)
+	}
+	if ct := resp.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/css") {
+		t.Errorf("stylesheet Content-Type = %q, want text/css", ct)
+	}
+	if resp.Header().Get("Cache-Control") == "" {
+		t.Error("expected a Cache-Control header on the stylesheet")
+	}
+	css := resp.Body.String()
+	for _, want := range []string{"color-scheme: light dark", "@media (prefers-color-scheme: dark)"} {
+		if !strings.Contains(css, want) {
+			t.Errorf("stylesheet must contain %q", want)
+		}
 	}
 }
 
@@ -228,5 +261,43 @@ func TestStatusPageWithoutSource(t *testing.T) {
 	}
 	if code := postForm(t, newTestServer(t), "/ui/status", nil, false).Code; code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405, got %d", code)
+	}
+}
+
+// Spec: WEB-013
+func TestThemeSwitchIsRendered(t *testing.T) {
+	s := newTestServer(t)
+	labels := map[string][]string{
+		"en": {"System", "Light", "Dark"},
+		"de": {"System", "Hell", "Dunkel"},
+		"it": {"Sistema", "Chiaro", "Scuro"},
+		"fr": {"Système", "Clair", "Sombre"},
+	}
+	for lang, want := range labels {
+		for _, page := range []string{"/ui", "/ui/status"} {
+			body := get(t, s, page+"?lang="+lang).Body.String()
+			for _, choice := range []string{"auto", "light", "dark"} {
+				if !strings.Contains(body, `data-theme-set="`+choice+`"`) {
+					t.Errorf("%s %s: missing theme choice %q", lang, page, choice)
+				}
+			}
+			for _, label := range want {
+				if !strings.Contains(body, `aria-label="`+label+`"`) {
+					t.Errorf("%s %s: missing translated label %q", lang, page, label)
+				}
+			}
+			if strings.Contains(body, ">theme_") || strings.Contains(body, `"theme_`) {
+				t.Errorf("%s %s: untranslated theme key", lang, page)
+			}
+			if !strings.Contains(body, "localStorage.getItem('phorga-theme')") {
+				t.Errorf("%s %s: stored theme must be applied in <head>", lang, page)
+			}
+		}
+	}
+	css := get(t, s, "/ui/static/phorga.css").Body.String()
+	for _, sel := range []string{`:root[data-theme="dark"]`, `:root:not([data-theme="light"])`, `:root[data-theme="light"]`} {
+		if !strings.Contains(css, sel) {
+			t.Errorf("stylesheet must contain selector %s", sel)
+		}
 	}
 }

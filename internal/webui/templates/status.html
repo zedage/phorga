@@ -4,8 +4,8 @@
 <html lang="{{.Lang}}">
 {{template "head" (dict "Title" (call .T "status_title"))}}
 <body>
-  <header>
-    {{template "nav" (dict "T" .T "Active" "status")}}
+  {{template "nav" (dict "T" .T "Active" "status")}}
+  <header class="page-head">
     <h1>{{call .T "status_heading"}}</h1>
     <p class="notice">{{call .T "status_intro"}}</p>
   </header>

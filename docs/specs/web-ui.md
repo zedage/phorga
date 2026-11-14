@@ -121,12 +121,12 @@ Previews MUST NOT write anything. When validate or save (WEB-003, WEB-004) finds
 ### WEB-009 Embedded assets
 **Status:** implemented
 
-HTMX (1.9.12) MUST be embedded in the binary and served from `/ui/static/htmx.min.js` with a `Cache-Control` header. UI pages MUST NOT load scripts or styles from external hosts.
+HTMX (1.9.12) and the stylesheet MUST be embedded in the binary and served from `/ui/static/htmx.min.js` and `/ui/static/phorga.css` with a `Cache-Control` header. UI pages MUST NOT load scripts, styles or fonts from external hosts.
 
 - **WHEN** `/ui` or `/ui/status` is rendered
   **THEN** it loads `/ui/static/htmx.min.js` and contains no `unpkg.com` reference
 
-**Code:** `internal/webui/server.go`, `internal/webui/static/htmx.min.js`, `internal/webui/templates/layout.html`
+**Code:** `internal/webui/server.go`, `internal/webui/static/htmx.min.js`, `internal/webui/static/phorga.css`, `internal/webui/templates/layout.html`
 **Tests:** `internal/webui/usability_test.go#TestHTMXIsServedFromBinary`
 
 ### WEB-010 Folder picker
@@ -168,3 +168,30 @@ The last result of each job MUST be recorded after every run. Results of non-dry
 **Code:** `internal/runstatus/runstatus.go`, `internal/webui/status.go`, `internal/webui/templates/status.html`, `internal/scheduler/scheduler.go`, `internal/fileops/fileops.go`, `cmd/phorga/main.go`
 **Tests:** `internal/runstatus/runstatus_test.go#TestFinishPersistsAndReloads`, `internal/runstatus/runstatus_test.go#TestDryRunIsNotWritten`, `internal/runstatus/runstatus_test.go#TestWriteErrorDoesNotPanic`, `internal/scheduler/scheduler_test.go#TestNextAndRunning`, `internal/webui/usability_test.go#TestStatusTableShowsJobs`, `internal/webui/usability_test.go#TestStatusPageWithoutSource`, `cmd/phorga/status_test.go#TestStatusBoardReportsRecordedRun`, `cmd/phorga/status_test.go#TestRun_StatusPageIsServed`
 **Notes:** See [ADR-0014](../decisions/0014-persisted-run-status-without-dry-runs.md).
+
+### WEB-012 Theme follows system color scheme
+**Status:** implemented
+
+By default, all UI pages MUST follow the light or dark setting of the operating system or browser. A manual override is possible (WEB-013). Pages MUST declare `<meta name="color-scheme" content="light dark">` and load the embedded stylesheet (WEB-009). The stylesheet MUST define its colors as custom properties, declare `color-scheme: light dark` so native controls follow the theme, and override the colors in `@media (prefers-color-scheme: dark)`. Text and status colors (errors, success, badges) MUST stay readable in both themes.
+
+- **WHEN** the system uses a dark theme and `/ui` or `/ui/status` is opened
+  **THEN** the page, form controls and folder picker dialog are shown in dark colors
+- **WHEN** `/ui/static/phorga.css` is requested
+  **THEN** it answers 200 with `text/css` and contains a `prefers-color-scheme: dark` block
+
+**Code:** `internal/webui/static/phorga.css`, `internal/webui/templates/layout.html`
+**Tests:** `internal/webui/usability_test.go#TestThemeFollowsSystemColorScheme`
+
+### WEB-013 Manual light/dark switch
+**Status:** implemented
+
+The top bar of every UI page MUST offer a switch with three choices: System (follow WEB-012), Light and Dark. The labels MUST come from the message catalogs (WEB-005). The choice MUST be stored in the browser only (`localStorage` key `phorga-theme`), so it never reaches the server or the config file, and it MUST be applied before the first paint, so a stored choice does not flicker. A forced choice sets `data-theme="light"` or `data-theme="dark"` on `<html>`, and the stylesheet MUST let that win over `prefers-color-scheme`. "System" removes the attribute and the stored value. Without JavaScript, the switch is hidden and the page follows the system setting.
+
+- **WHEN** the system is dark and the user picks Light
+  **THEN** the page turns light at once and stays light on reload and on the other UI page
+- **WHEN** the user picks System again
+  **THEN** the stored value is removed and the page follows the system setting
+
+**Code:** `internal/webui/templates/layout.html`, `internal/webui/static/phorga.css`, `internal/webui/i18n_ui.go`
+**Tests:** `internal/webui/usability_test.go#TestThemeSwitchIsRendered`
+**Notes:** The switch behavior itself runs in the browser and is checked manually. The Go test covers the markup, the translations and the CSS override selectors.

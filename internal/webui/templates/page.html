@@ -3,20 +3,21 @@
 <html lang="{{.Data.Lang}}">
 {{template "head" (dict "Title" (call .T "page_title"))}}
 <body>
-  <header>
-    {{template "nav" (dict "T" .T "Active" "config")}}
+  {{template "nav" (dict "T" .T "Active" "config")}}
+  <header class="page-head">
     <h1>{{call .T "heading"}}</h1>
     <p class="notice">{{call .T "intro"}}</p>
     <p class="muted">{{call .T "private_notice"}}</p>
   </header>
   <main>
-    <div class="card">
+    <div class="card config-info">
       <strong>{{call .T "loaded_config"}}:</strong> <code>{{.Data.ConfigPath}}</code>
       <div class="muted">{{call .T "restart_hint"}}</div>
     </div>
     <div id="feedback">{{template "flash" .}}</div>
-    <form method="post" action="/ui/save" class="card">
+    <form method="post" action="/ui/save" class="config-form">
       <input type="hidden" name="lang" value="{{.Data.Lang}}">
+      <section class="card">
       <div class="grid">
         <div>
           <label for="languageSelect">{{call .T "language"}}</label>
@@ -29,6 +30,7 @@
         </div>
         {{template "field" (dict "R" . "Name" "stateDir" "Label" "state_dir" "Value" .Data.Form.StateDir "Help" "state_dir" "Kind" "path")}}
       </div>
+      </section>
 
       <section class="card">
         <h2>{{call .T "webui_section"}}</h2>
@@ -48,7 +50,7 @@
       <section class="card">
         <h2>{{call .T "organizer_section"}}</h2>
         {{range $i, $org := .Data.Form.Organizer}}
-        <div class="card">
+        <div class="panel">
           <h3>{{call $.T "organizer_profile"}} {{$i}}</h3>
           <div class="grid">
             {{template "checkbox" (dict "R" $ "Name" (printf "organizer.%d.dryRun" $i) "Label" "dry_run" "Value" $org.DryRun "Help" "dry_run")}}
@@ -59,7 +61,7 @@
           </div>
           <input type="hidden" name="organizer.{{$i}}.sourceCount" value="{{len $org.Sources}}">
           {{range $j, $src := $org.Sources}}
-          <div class="card">
+          <div class="panel">
             <h4>{{call $.T "source"}} {{$j}}</h4>
             <div class="grid">
               {{template "field" (dict "R" $ "Name" (printf "organizer.%d.sources.%d.path" $i $j) "Label" "path" "Value" $src.Path "Help" "source_path" "Kind" "path")}}
@@ -80,7 +82,7 @@
       <section class="card">
         <h2>{{call .T "duplicate_section"}}</h2>
         {{range $i, $dd := .Data.Form.DuplicateDetection}}
-        <div class="card">
+        <div class="panel">
           <h3>{{call $.T "duplicate_job"}} {{$i}}</h3>
           <div class="grid">
             {{template "checkbox" (dict "R" $ "Name" (printf "duplicateDetection.%d.enabled" $i) "Label" "enabled" "Value" $dd.Enabled "Help" "dedup_enabled")}}

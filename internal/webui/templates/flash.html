@@ -1,5 +1,5 @@
 {{define "flash"}}
-{{with .Data.Flash}}
+{{with .Data.Flash}}{{if .Title}}
 <div class="flash {{.Level}}">
   <strong>{{.Title}}</strong>
   {{if .Message}}<div>{{.Message}}</div>{{end}}
@@ -9,6 +9,6 @@
   </ul>
   {{end}}
 </div>
-{{end}}
+{{end}}{{end}}
 {{end}}
 
