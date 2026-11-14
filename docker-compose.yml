@@ -1,6 +1,8 @@
 services:
   phorga:
-    build: .
+    # Image from Docker Hub (amd64 + arm64, built after every merge to main).
+    # To build from source instead, replace this line with: build: .
+    image: mnrd001/phorga:latest
     container_name: phorga
     restart: unless-stopped
     # Run as your NAS user instead of root, so organized files belong to you.
@@ -13,6 +15,8 @@ services:
     #   - "127.0.0.1:8080:8080"
     volumes:
       - ./config.yaml:/config/config.yaml:ro
+      # Read-only is fine for mode: copy. For mode: move, remove ":ro",
+      # otherwise Phorga cannot delete the source files.
       - /path/to/photos/incoming:/photos/incoming:ro
       - /path/to/photos/organized:/photos/organized
       - /path/to/photos/duplicates:/photos/duplicates

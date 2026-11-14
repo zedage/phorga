@@ -351,6 +351,7 @@ app --> ntfy : HTTP POST
 @enduml
 ----
 
+* Image: `mnrd001/phorga` on Docker Hub, multi-arch (`linux/amd64`, `linux/arm64`), tags `latest` and `sha-<commit>`. Built and pushed by `.github/workflows/docker.yml` after every merge to `main`, only after build, vet and test pass. Go cross-compiles in the build stage; QEMU is only needed for the arm64 runtime stage.
 * Base image: `alpine:3.20`
 * State volume: `/data/state`
 * Config mount: `/config/config.yaml` (read-only)
