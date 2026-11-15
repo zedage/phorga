@@ -131,6 +131,7 @@ package "cmd/phorga" {
 
 package "internal" {
   [config]
+  [exclude]
   [scheduler]
   [organizer]
   [dedup]
@@ -157,6 +158,10 @@ package "internal" {
 [organizer] --> [state]
 [dedup] --> [metadata]
 [dedup] --> [fileops]
+[organizer] --> [exclude]
+[dedup] --> [exclude]
+[metadata] --> [exclude]
+[config] --> [exclude]
 [scheduler] --> [organizer]
 [scheduler] --> [dedup]
 @enduml
@@ -171,6 +176,9 @@ package "internal" {
 
 | `config`
 | YAML/JSON loading, defaults, fail-fast validation.
+
+| `exclude`
+| Decides which entries below a source are skipped: the fixed system and hidden entries (`@eaDir`, `#recycle`, `#snapshot`, dot-names) and the user's `exclude` patterns. Used by the organizer, duplicate detection and the file count, and by `config` to validate patterns (ADR-0016).
 
 | `scheduler`
 | Cron wrapper with overlap prevention (TryLock per job). Also reports the next run and running state per job, and computes next run times for the UI preview.
@@ -210,7 +218,7 @@ package "internal" {
 start
 :Cron triggers source run;
 :Load state from JSON;
-:Walk source directory recursively;
+:Walk source directory recursively,\nskipping system, hidden and excluded entries;
 repeat
   :Next supported media file;
   if (Already in state?) then (yes)
@@ -244,6 +252,37 @@ stop
 
 [plantuml, runtime-dedup, svg]
 ----
+@startuml
+start
+:Cron triggers dedup job;
+:Count supported files (for progress);
+:Scan all sources recursively,\nskipping system, hidden and excluded entries;
+repeat
+  :Next supported file;
+  if (Unchanged and in cache?) then (yes)
+    :Take pHash / EXIF date from cache;
+  else (no)
+    :Compute pHash or EXIF date;
+    :Store in cache;
+  endif
+repeat while (more files?)
+:Prune vanished entries, save cache;
+:Compare all pairs (O(n²));
+:Collect duplicate pairs;
+repeat
+  :Next duplicate pair;
+  if (dryRun?) then (yes)
+    :Log planned action;
+  else (no)
+    :Apply action (moveToFolder / skip);
+  endif
+repeat while (more pairs?)
+:Send ntfy notification;
+stop
+@enduml
+----
+
+Files skipped by the fixed list or the job's `exclude` patterns (DUP-013, ADR-0016) are not scanned and not compared. Their cache entries are pruned like those of vanished files.
 
 === Shutdown
 
@@ -442,6 +481,9 @@ Decisions are recorded as ADRs in link:../decisions/README.md[docs/decisions]. T
 
 | link:../decisions/0015-dedup-fingerprint-cache-written-in-dry-runs.md[0015]
 | Shared fingerprint cache for duplicate detection, also written in dry runs
+
+| link:../decisions/0016-fixed-skip-list-and-simple-exclude-patterns.md[0016]
+| Fixed skip list for NAS system and hidden folders; simple per-source exclude patterns
 |===
 
 == 10. Risks and Technical Debt

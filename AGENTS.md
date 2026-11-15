@@ -31,6 +31,7 @@ internal/
   config/            load (YAML/JSON), defaults, validate, resolve path, save
   organizer/         organizer run: walk sources, resolve date, transfer, duplicates
   dedup/             duplicate detection run: scan, pHash/metadata compare, act
+  exclude/           which entries below a source are skipped (fixed NAS/hidden list + exclude patterns)
   metadata/          date extraction (EXIF → filename → path → mtime), targetStructure tokens
   fileops/           atomic copy/move, random suffixes
   state/             JSON state per profile target and source (resume)

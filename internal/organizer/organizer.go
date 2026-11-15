@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/zedage/phorga/internal/config"
+	"github.com/zedage/phorga/internal/exclude"
 	"github.com/zedage/phorga/internal/fileops"
 	"github.com/zedage/phorga/internal/metadata"
 	"github.com/zedage/phorga/internal/runstatus"
@@ -50,7 +51,8 @@ func Run(ctx context.Context, profile config.OrganizerProfile, source config.Org
 
 	// Count first, so progress can show "x of y" (WEB-014).
 	runstatus.Report(ctx, runstatus.PhaseCounting, 0, 0)
-	total := metadata.CountSupported(ctx, source.Path)
+	ex := exclude.New(source.Exclude)
+	total := metadata.CountSupported(ctx, source.Path, ex)
 	visited := 0
 
 	savedAt := 0
@@ -58,6 +60,14 @@ func Run(ctx context.Context, profile config.OrganizerProfile, source config.Org
 		if ctx.Err() != nil {
 			result.Canceled = true
 			return filepath.SkipAll
+		}
+		// System, hidden and excluded entries (ORG-022, ORG-023).
+		if d != nil && ex.Skip(source.Path, path, d.IsDir()) {
+			if d.IsDir() {
+				slog.Info("skipping folder", "path", path)
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if err != nil {
 			slog.Error("error accessing path", "path", path, "error", err)

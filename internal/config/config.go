@@ -33,6 +33,9 @@ type OrganizerSource struct {
 	Mode       string              `yaml:"mode" json:"mode"` // "move" or "copy"
 	Duplicates *OrganizerDuplicate `yaml:"duplicates,omitempty" json:"duplicates,omitempty"`
 	Schedule   string              `yaml:"schedule" json:"schedule"`
+	// Exclude lists patterns of entries below Path that are skipped
+	// (ORG-023, CFG-007).
+	Exclude []string `yaml:"exclude,omitempty" json:"exclude,omitempty"`
 }
 
 // OrganizerDuplicate configures lightweight duplicate handling during organization.
@@ -49,10 +52,13 @@ type DuplicateAction struct {
 
 // DuplicateDetection defines an independent duplicate detection job.
 type DuplicateDetection struct {
-	Enabled       bool            `yaml:"enabled" json:"enabled"`
-	DryRun        bool            `yaml:"dryRun" json:"dryRun"`
-	Schedule      string          `yaml:"schedule" json:"schedule"`
-	Sources       []string        `yaml:"sources" json:"sources"`
+	Enabled  bool     `yaml:"enabled" json:"enabled"`
+	DryRun   bool     `yaml:"dryRun" json:"dryRun"`
+	Schedule string   `yaml:"schedule" json:"schedule"`
+	Sources  []string `yaml:"sources" json:"sources"`
+	// Exclude lists patterns of entries below each source that are skipped
+	// (DUP-013, CFG-007).
+	Exclude       []string        `yaml:"exclude,omitempty" json:"exclude,omitempty"`
 	DetectionMode string          `yaml:"detectionMode" json:"detectionMode"` // "content" or "metadata"
 	Action        DuplicateAction `yaml:"action" json:"action"`
 	Ntfy          *NtfyConfig     `yaml:"ntfy,omitempty" json:"ntfy,omitempty"`

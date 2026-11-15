@@ -154,6 +154,8 @@ func TestFieldForProblem(t *testing.T) {
 		"duplicateDetection[0].action.method must be 'moveToFolder' or 'skip'":        "duplicateDetection.0.actionMethod",
 		"duplicateDetection[0].schedule: invalid cron expression":                     "duplicateDetection.0.schedule",
 		"webUI.browseRoots[3] 'x' does not exist":                                     "webUI.browseRoots",
+		"organizer[0].sources[1].exclude[2] is not a valid pattern, got '[a'":         "organizer.0.sources.1.exclude",
+		"duplicateDetection[0].exclude[0] must be relative to the source":             "duplicateDetection.0.exclude",
 		"separatePath is required when saving to a separate file":                     "separatePath",
 	}
 	for problem, want := range cases {

@@ -77,6 +77,7 @@ type organizerSourceForm struct {
 	DetectionMode     string
 	ActionMethod      string
 	DuplicateFolder   string
+	Exclude           []string
 }
 
 type duplicateDetectionForm struct {
@@ -84,6 +85,7 @@ type duplicateDetectionForm struct {
 	DryRun          bool
 	Schedule        string
 	Sources         []string
+	Exclude         []string
 	DetectionMode   string
 	ActionMethod    string
 	DuplicateFolder string
@@ -123,6 +125,7 @@ func newFormFromConfig(cfg *config.Config) configForm {
 				Path:     source.Path,
 				Mode:     source.Mode,
 				Schedule: source.Schedule,
+				Exclude:  append([]string(nil), source.Exclude...),
 			}
 			if source.Duplicates != nil {
 				src.DuplicatesEnabled = true
@@ -142,6 +145,7 @@ func newFormFromConfig(cfg *config.Config) configForm {
 			DryRun:          dd.DryRun,
 			Schedule:        dd.Schedule,
 			Sources:         append([]string(nil), dd.Sources...),
+			Exclude:         append([]string(nil), dd.Exclude...),
 			DetectionMode:   dd.DetectionMode,
 			ActionMethod:    dd.Action.Method,
 			DuplicateFolder: dd.Action.DuplicateFolder,
@@ -165,7 +169,7 @@ func parseForm(r *http.Request) (configForm, error) {
 		SaveTarget:   strings.TrimSpace(r.FormValue("saveTarget")),
 		SeparatePath: strings.TrimSpace(r.FormValue("separatePath")),
 		WebUI: webUIForm{
-			Enabled: r.FormValue("webUI.enabled") != "",
+			Enabled:     r.FormValue("webUI.enabled") != "",
 			Address:     strings.TrimSpace(r.FormValue("webUI.address")),
 			BrowseRoots: splitLines(r.FormValue("webUI.browseRoots")),
 		},
@@ -197,6 +201,7 @@ func parseForm(r *http.Request) (configForm, error) {
 				DetectionMode:     strings.TrimSpace(r.FormValue(srcPrefix + ".detectionMode")),
 				ActionMethod:      strings.TrimSpace(r.FormValue(srcPrefix + ".actionMethod")),
 				DuplicateFolder:   strings.TrimSpace(r.FormValue(srcPrefix + ".duplicateFolder")),
+				Exclude:           splitLines(r.FormValue(srcPrefix + ".exclude")),
 			}
 			profile.Sources = append(profile.Sources, source)
 		}
@@ -217,6 +222,7 @@ func parseForm(r *http.Request) (configForm, error) {
 			DryRun:          r.FormValue(prefix+".dryRun") != "",
 			Schedule:        strings.TrimSpace(r.FormValue(prefix + ".schedule")),
 			Sources:         sources,
+			Exclude:         splitLines(r.FormValue(prefix + ".exclude")),
 			DetectionMode:   strings.TrimSpace(r.FormValue(prefix + ".detectionMode")),
 			ActionMethod:    strings.TrimSpace(r.FormValue(prefix + ".actionMethod")),
 			DuplicateFolder: strings.TrimSpace(r.FormValue(prefix + ".duplicateFolder")),
@@ -257,6 +263,7 @@ func (f configForm) toConfig() *config.Config {
 				Path:     strings.TrimSpace(source.Path),
 				Mode:     strings.TrimSpace(source.Mode),
 				Schedule: strings.TrimSpace(source.Schedule),
+				Exclude:  nonEmptyLines(source.Exclude),
 			}
 			if source.DuplicatesEnabled || source.DetectionMode != "" || source.ActionMethod != "" || source.DuplicateFolder != "" {
 				src.Duplicates = &config.OrganizerDuplicate{
@@ -278,6 +285,7 @@ func (f configForm) toConfig() *config.Config {
 			DryRun:        dd.DryRun,
 			Schedule:      strings.TrimSpace(dd.Schedule),
 			Sources:       make([]string, 0, len(dd.Sources)),
+			Exclude:       nonEmptyLines(dd.Exclude),
 			DetectionMode: strings.TrimSpace(dd.DetectionMode),
 			Action: config.DuplicateAction{
 				Method:          strings.TrimSpace(dd.ActionMethod),
@@ -315,6 +323,21 @@ func splitLines(value string) []string {
 	return lines
 }
 
+// nonEmptyLines trims each entry and drops empty ones; no entries gives nil.
+func nonEmptyLines(list []string) []string {
+	var out []string
+	for _, s := range list {
+		if s = strings.TrimSpace(s); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// listField matches list values edited in one textarea; problems with any
+// entry belong to the whole field.
+var listField = regexp.MustCompile(`^(.*\.(?:exclude|browseRoots))\.\d+$`)
+
 var problemPath = regexp.MustCompile(`^[A-Za-z]+(?:\[\d+\])?(?:\.[A-Za-z]+(?:\[\d+\])?)*`)
 var problemIndex = regexp.MustCompile(`\[(\d+)\]`)
 
@@ -343,6 +366,9 @@ func fieldForProblem(problem string) string {
 	}
 	if strings.HasPrefix(name, "webUI.browseRoots") {
 		return "webUI.browseRoots"
+	}
+	if m := listField.FindStringSubmatch(name); m != nil {
+		return m[1]
 	}
 	return name
 }

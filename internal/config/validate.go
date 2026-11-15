@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/robfig/cron/v3"
+	"github.com/zedage/phorga/internal/exclude"
 )
 
 // validModes lists accepted source modes.
@@ -194,6 +195,19 @@ func validateOrganizerSource(prefix string, src OrganizerSource) []string {
 		errs = append(errs, validateOrganizerDuplicate(dupPrefix, *src.Duplicates)...)
 	}
 
+	errs = append(errs, validateExclude(prefix, src.Exclude)...)
+
+	return errs
+}
+
+// validateExclude reports each unusable exclude pattern (CFG-007).
+func validateExclude(prefix string, patterns []string) []string {
+	var errs []string
+	for i, p := range patterns {
+		if err := exclude.Validate(p); err != nil {
+			errs = append(errs, fmt.Sprintf("%s.exclude[%d] %v, got '%s'", prefix, i, err, p))
+		}
+	}
 	return errs
 }
 
@@ -227,6 +241,8 @@ func validateDuplicateDetection(prefix string, dd DuplicateDetection) []string {
 	if len(dd.Sources) == 0 {
 		errs = append(errs, fmt.Sprintf("%s.sources must have at least one entry", prefix))
 	}
+
+	errs = append(errs, validateExclude(prefix, dd.Exclude)...)
 
 	if !validDedupModes[dd.DetectionMode] {
 		errs = append(errs, fmt.Sprintf("%s.detectionMode must be 'content' or 'metadata', got '%s'", prefix, dd.DetectionMode))

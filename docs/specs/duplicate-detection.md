@@ -165,3 +165,17 @@ The system MUST remember what a scan computed for each file, so later runs do no
 **Code:** `internal/dedup/cache.go`, `internal/dedup/dedup.go`, `cmd/phorga/main.go`
 **Tests:** `internal/dedup/cache_test.go#TestCache_SecondRunUsesCache`, `internal/dedup/cache_test.go#TestCache_MetadataModeUsesCache`, `internal/dedup/cache_test.go#TestCache_ChangedFileIsRecomputed`, `internal/dedup/cache_test.go#TestCache_PersistsAndReloads`, `internal/dedup/cache_test.go#TestCache_DryRunWritesCacheButNoPhoto`, `internal/dedup/cache_test.go#TestCache_RemembersUndecodableFiles`, `internal/dedup/cache_test.go#TestCache_PruneKeepsOtherJobsEntries`, `internal/dedup/cache_test.go#TestCache_CorruptFileStartsFresh`, `internal/dedup/cache_test.go#TestCache_InterruptedRunKeepsComputedFingerprints`, `internal/dedup/cache_test.go#TestCache_SharedByConcurrentJobs`
 **Notes:** See [ADR-0015](../decisions/0015-dedup-fingerprint-cache-written-in-dry-runs.md). Deleting `dedup-cache.json` forces a full scan, e.g. after editing photos with a tool that keeps the modification time.
+
+### DUP-013 Skipped folders and exclude list
+**Status:** implemented
+
+The scan MUST skip the fixed system and hidden entries of ORG-022, and the entries matching the job's optional `duplicateDetection[].exclude` list, with the matching rules of ORG-023. A relative pattern matches against the path below each of the job's sources. Skipped files are not scanned, not compared, not counted and never acted on. After a complete scan, their cache entries are removed like those of vanished files (DUP-012).
+
+- **WHEN** a source holds `IMG_1234.JPG` and its thumbnail `@eaDir/IMG_1234.JPG/SYNO_PHOTO_THUMB_SM.jpg`, the mode is `content` and the method is `moveToFolder`
+  **THEN** no pair is reported and `IMG_1234.JPG` stays in place
+- **WHEN** an earlier scan cached the thumbnail and the job runs again
+  **THEN** the thumbnail's cache entry is removed
+
+**Code:** `internal/dedup/dedup.go`, `internal/exclude/exclude.go`, `internal/metadata/metadata.go`
+**Tests:** `internal/dedup/exclude_test.go#TestDedup_SynologyThumbnailIsNotADuplicate`, `internal/dedup/exclude_test.go#TestDedup_ExcludePatternsSkipFiles`, `internal/dedup/exclude_test.go#TestDedup_ExcludedFilesLeaveTheCache`
+**Notes:** Without this, a thumbnail is found before its original (`@` sorts before letters), becomes the kept file, and the real photo is moved as the duplicate (DUP-004). See [ADR-0016](../decisions/0016-fixed-skip-list-and-simple-exclude-patterns.md). The cache test removes the entry through an `exclude` pattern; the fixed list uses the same pruning path.

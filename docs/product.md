@@ -40,6 +40,8 @@ The organizer takes files from one or more **source** folders and sorts them int
 
 **Schedules.** Every source has its own schedule in cron format, for example "every night at 2:00". A run never overlaps with itself.
 
+**Folders that are not photos.** A NAS keeps hidden folders inside your photo shares: Synology stores thumbnails in `@eaDir`, deleted files in `#recycle` and snapshots in `#snapshot`. Phorga always skips these, and every file or folder whose name starts with a dot. You can leave out more with an `exclude` list per source, e.g. `Screenshots` or `2019/Scans`. Each skipped folder appears once in the log ([ADR-0016](decisions/0016-fixed-skip-list-and-simple-exclude-patterns.md)).
+
 Exact rules: [specs/organizer.md](specs/organizer.md)
 
 ## Duplicate detection
@@ -52,6 +54,8 @@ Two modes:
 - **metadata** is faster. It treats files as duplicates when they have the same size and the same EXIF capture date. Files without EXIF are never matched this way, so no false matches come from copy dates.
 
 **It remembers what it has seen.** The first run reads every file, which takes a while on a large library. Phorga keeps each file's fingerprint in a cache, so later runs only read new or changed files and take seconds instead of minutes. Dry runs fill the cache too; it never touches your photos ([ADR-0015](decisions/0015-dedup-fingerprint-cache-written-in-dry-runs.md)).
+
+It skips the same system and hidden folders as the organizer, and has its own `exclude` list. Without this, a Synology thumbnail would look like a copy of its photo, and the real photo could be moved away as the duplicate.
 
 If several copies of the same picture are found, the first one stays and all others count as its duplicates. Found duplicates are either moved to a duplicates folder or just reported. Nothing is deleted. A dry run shows the results without touching anything.
 

@@ -313,3 +313,50 @@ When Phorga shuts down (RUN-001), a running organizer run MUST stop before it st
 
 **Code:** `internal/organizer/organizer.go`
 **Tests:** `internal/organizer/cancel_test.go#TestOrganize_StopsWhenCancelled`, `internal/organizer/cancel_test.go#TestOrganize_CancelledBeforeStartChangesNothing`
+
+### ORG-022 System and hidden folders are always skipped
+**Status:** implemented
+
+While walking a source, the system MUST skip these entries and everything below them, without opening, counting or logging each file:
+
+- folders named exactly `@eaDir` (Synology thumbnails and index data), `#recycle` (share recycle bin) and `#snapshot` (Btrfs snapshots), as DSM writes them
+- every file or folder whose name starts with `.` (e.g. `.thumbnails`, `.Trash-1000`, macOS `._IMG_1234.jpg`)
+
+The rule applies only to entries **below** the source path. A source path that itself is or contains such a name (e.g. `/photos/.import`) is still walked. The list is fixed and cannot be turned off. Skipped entries are not errors. Each skipped folder MUST be logged once at info level (`skipping folder`, with its path). The count for the progress display (WEB-014) skips the same entries, so they never appear in "x of y".
+
+- **WHEN** a source holds `IMG_1234.JPG` and `@eaDir/IMG_1234.JPG/SYNO_PHOTO_THUMB_SM.jpg`
+  **THEN** only `IMG_1234.JPG` is organized, and the run reports 1 file and 0 errors
+- **WHEN** a source holds `._IMG_1234.jpg` next to `IMG_1234.jpg`
+  **THEN** only `IMG_1234.jpg` is organized
+- **WHEN** the source path is `/photos/.import` and holds `a.jpg`
+  **THEN** `a.jpg` is organized
+
+**Code:** `internal/exclude/exclude.go`, `internal/organizer/organizer.go`, `internal/metadata/metadata.go`
+**Tests:** `internal/exclude/exclude_test.go#TestSkip_FixedEntries`, `internal/exclude/exclude_test.go#TestSkip_RootIsNeverSkipped`, `internal/organizer/exclude_test.go#TestOrganize_SkipsSystemAndHiddenEntries`, `internal/organizer/exclude_test.go#TestOrganize_HiddenSourceRootIsWalked`, `internal/metadata/count_test.go#TestCountSupported_SkipsExcludedEntries`
+**Notes:** Found in a dry run on a Synology: `@eaDir` thumbnails were organized like photos. Duplicate detection uses the same rule (DUP-013). See [ADR-0016](../decisions/0016-fixed-skip-list-and-simple-exclude-patterns.md). The log line is not covered by a test.
+
+### ORG-023 Exclude list per source
+**Status:** implemented
+
+`organizer[].sources[].exclude` is an optional list of patterns (CFG-007). Entries below the source that match a pattern MUST be skipped like the fixed list (ORG-022): not opened, not counted, not an error, one log line per skipped folder. A matching folder is skipped with everything below it.
+
+Matching rules:
+
+- A pattern **without** `/` matches the **name** of any file or folder at any depth, e.g. `Screenshots`, `*.tmp`, `*_edited.jpg`.
+- A pattern **with** `/` matches the **path relative to the source root**, e.g. `2019/Scans` or `*/WhatsApp`. A leading `/` is not allowed; a trailing `/` matches folders only.
+- Wildcards follow Go's `path.Match`: `*`, `?`, `[abc]`. `*` never crosses a `/`. There is no `**`.
+- Matching ignores case.
+- `exclude` adds to the fixed list (ORG-022); it cannot re-include a fixed entry.
+
+- **WHEN** `exclude: [Screenshots]` and the source holds `2024/Screenshots/a.png` and `2024/b.jpg`
+  **THEN** only `2024/b.jpg` is organized
+- **WHEN** `exclude: ["*_edited.jpg"]` and the source holds `a.jpg` and `a_edited.jpg`
+  **THEN** only `a.jpg` is organized
+- **WHEN** `exclude: [2019/Scans]` and the source holds `2019/Scans/x.jpg` and `2020/Scans/y.jpg`
+  **THEN** only `2020/Scans/y.jpg` is organized
+- **WHEN** `exclude: [screenshots]` and the source holds `Screenshots/a.png`
+  **THEN** `a.png` is skipped
+
+**Code:** `internal/exclude/exclude.go`, `internal/organizer/organizer.go`, `internal/metadata/metadata.go`
+**Tests:** `internal/exclude/exclude_test.go#TestSkip_Patterns`, `internal/organizer/exclude_test.go#TestOrganize_ExcludePatterns`, `internal/metadata/count_test.go#TestCountSupported_SkipsExcludedEntries`
+**Notes:** Decided 2026-11-15: per source and per job (no global list), the simple name-or-path syntax, case ignored, one info line per skipped folder, see [ADR-0016](../decisions/0016-fixed-skip-list-and-simple-exclude-patterns.md). A `target`, `fallbackFolder` or `duplicateFolder` inside a source is not skipped automatically; that is left for a separate change.
