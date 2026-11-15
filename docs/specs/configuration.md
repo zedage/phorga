@@ -89,3 +89,17 @@ The running process MUST keep using the configuration it loaded at startup. Chan
 **Code:** `internal/config/config.go`, `internal/config/validate.go`, `internal/config/saver.go`, `internal/webui/model.go`
 **Tests:** `internal/config/browseroots_test.go#TestValidateBrowseRoots`, `internal/config/browseroots_test.go#TestSaveAndLoadKeepsBrowseRoots`
 **Notes:** See [ADR-0013](../decisions/0013-folder-picker-limited-to-browse-roots.md).
+
+### CFG-007 Exclude patterns (`exclude`)
+**Status:** implemented
+
+`organizer[].sources[].exclude` and `duplicateDetection[].exclude` are optional lists of patterns (ORG-023, DUP-013). They have no default. Validation (CFG-002) MUST report each entry that is empty, starts with `/`, contains a `..` segment, or is not a valid `path.Match` pattern, with its path, e.g. `organizer[0].sources[1].exclude[2]`. The values MUST survive a save and load round trip (CFG-004). They are editable in the web UI as one pattern per line, like `browseRoots` (CFG-006).
+
+- **WHEN** `exclude: ["[abc"]`
+  **THEN** validation reports `organizer[0].sources[0].exclude[0] is not a valid pattern`
+- **WHEN** `exclude: [/photos/tmp]`
+  **THEN** validation reports `duplicateDetection[0].exclude[0] must be relative to the source`
+
+**Code:** `internal/config/config.go`, `internal/config/validate.go`, `internal/config/saver.go`, `internal/exclude/exclude.go`, `internal/webui/model.go`, `internal/webui/templates/partials.html`
+**Tests:** `internal/exclude/exclude_test.go#TestValidate`, `internal/config/exclude_test.go#TestValidateExclude`, `internal/config/exclude_test.go#TestSaveAndLoadKeepsExclude`, `internal/webui/exclude_test.go#TestExcludeIsEditableOnePatternPerLine`, `internal/webui/exclude_test.go#TestInvalidExcludeShowsFieldError`
+**Notes:** See [ADR-0016](../decisions/0016-fixed-skip-list-and-simple-exclude-patterns.md).

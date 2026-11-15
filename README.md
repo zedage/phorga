@@ -107,6 +107,7 @@ Relative paths are resolved against the working directory. In Docker, use the pa
 | `path` | path | yes | – | Folder to read from, including all subfolders. |
 | `mode` | `move` \| `copy` | yes | – | `move` deletes the source file after a verified copy; `copy` leaves it in place. |
 | `schedule` | cron | yes | – | When this source runs, see [Schedules](#schedules). |
+| `exclude` | list of patterns | no | – | Files and folders below `path` to leave out, see [Skipped and excluded folders](#skipped-and-excluded-folders). |
 | `duplicates` | object | no | – | What to do when a file with the same name already exists in the target. Without it, such files are skipped and logged. |
 | `duplicates.detectionMode` | text | yes, if `duplicates` | – | When an existing file counts as the same: `filename` (same name), `filedate` (same modification time), `exif` (same EXIF capture date; files without EXIF never match). Combine with `+` (all must match) or `\|` (any may match), not both. If it doesn't match, the file is kept with a random suffix. |
 | `duplicates.action.method` | `replace` \| `addSuffix` \| `moveToFolder` \| `skip` | yes, if `duplicates` | – | `replace` overwrites the existing file; `addSuffix` keeps both (`photo-a3f9.jpg`); `moveToFolder` puts the new file into `duplicateFolder`; `skip` leaves it in the source. |
@@ -118,6 +119,7 @@ Relative paths are resolved against the working directory. In Docker, use the pa
 |---|---|---|---|---|
 | `enabled` | bool | no | `false` | Only enabled jobs are scheduled. Disabled jobs are still validated. |
 | `sources` | list of paths | yes, ≥ 1 | – | Folders to compare, including all subfolders. Duplicates are found across all of them. |
+| `exclude` | list of patterns | no | – | Files and folders below each source to leave out, see [Skipped and excluded folders](#skipped-and-excluded-folders). |
 | `schedule` | cron | yes | – | When the job runs, see [Schedules](#schedules). |
 | `detectionMode` | `content` \| `metadata` | yes | – | `content` compares what images look like (perceptual hash; JPEG and PNG only); `metadata` compares file size and EXIF capture date (much faster; files without EXIF never match). |
 | `action.method` | `moveToFolder` \| `skip` | yes | – | `moveToFolder` moves each duplicate into `duplicateFolder` (the first file found stays); `skip` only logs it. Nothing is ever deleted. |
@@ -132,6 +134,27 @@ Relative paths are resolved against the working directory. In Docker, use the pa
 | `enabled` | bool | no | `false` | Start the web UI together with Phorga (also possible with `--web-ui`). |
 | `address` | `host:port` | no | `127.0.0.1:8080` | Listen address. In Docker use `0.0.0.0:8080` and publish the port on `127.0.0.1` only. |
 | `browseRoots` | list of absolute paths | no | – | Folders the folder picker may show. Each must exist. Without it, the picker is off. |
+
+### Skipped and excluded folders
+
+Both features always skip these entries below a source, with everything inside them:
+
+- `@eaDir` (Synology thumbnails), `#recycle` (recycle bin) and `#snapshot` (Btrfs snapshots). DSM hides them in File Station, but Phorga would see them.
+- Every file or folder whose name starts with `.`, e.g. `.thumbnails` or macOS `._IMG_1234.jpg` files.
+
+This cannot be turned off. A source path that itself contains such a name (e.g. `/photos/.import`) still works.
+
+`exclude` adds your own patterns, one per entry. Case is ignored.
+
+| Pattern | Leaves out |
+|---|---|
+| `Screenshots` | every file or folder named `Screenshots`, at any depth |
+| `*_edited.jpg` | every file whose name matches, at any depth |
+| `2019/Scans` | exactly this path below the source |
+| `*/WhatsApp` | `WhatsApp` one level below the source |
+| `Export/` | folders named `Export` only (trailing `/`) |
+
+Wildcards: `*` (any characters except `/`), `?` (one character), `[abc]`. There is no `**` and no way to re-include something. Each skipped folder is logged once as `skipping folder`.
 
 ### Schedules
 
@@ -299,6 +322,7 @@ Reset to original state at any time by re-running the generate command. See [`da
 cmd/phorga/         Main entry point
 internal/
   config/                YAML/JSON parsing, validation
+  exclude/               Skipped system folders and exclude patterns
   organizer/             Date-based organization engine
   dedup/                 Duplicate detection engine
   metadata/              EXIF, filename & path date extraction, target path resolution

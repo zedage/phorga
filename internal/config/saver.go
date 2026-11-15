@@ -67,6 +67,7 @@ func normalizedCopy(cfg *Config) *Config {
 			clone.Organizer[i].Ntfy = &ntfy
 		}
 		for j := range clone.Organizer[i].Sources {
+			clone.Organizer[i].Sources[j].Exclude = copyList(cfg.Organizer[i].Sources[j].Exclude)
 			if cfg.Organizer[i].Sources[j].Duplicates != nil {
 				dup := *cfg.Organizer[i].Sources[j].Duplicates
 				clone.Organizer[i].Sources[j].Duplicates = &dup
@@ -76,6 +77,7 @@ func normalizedCopy(cfg *Config) *Config {
 
 	for i := range clone.DuplicateDetection {
 		clone.DuplicateDetection[i].Sources = append([]string(nil), cfg.DuplicateDetection[i].Sources...)
+		clone.DuplicateDetection[i].Exclude = copyList(cfg.DuplicateDetection[i].Exclude)
 		if cfg.DuplicateDetection[i].Ntfy != nil {
 			ntfy := *cfg.DuplicateDetection[i].Ntfy
 			clone.DuplicateDetection[i].Ntfy = &ntfy
@@ -84,6 +86,15 @@ func normalizedCopy(cfg *Config) *Config {
 
 	applyDefaults(&clone)
 	return &clone
+}
+
+// copyList copies an optional list; an empty list becomes nil, so it is
+// left out of the saved file.
+func copyList(list []string) []string {
+	if len(list) == 0 {
+		return nil
+	}
+	return append([]string(nil), list...)
 }
 
 func writeFileAtomic(path string, data []byte, perm os.FileMode) error {

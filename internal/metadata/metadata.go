@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/rwcarlsen/goexif/exif"
+	"github.com/zedage/phorga/internal/exclude"
 )
 
 // filenameDatePatterns matches common date patterns in filenames.
@@ -55,13 +56,20 @@ func IsSupported(path string) bool {
 }
 
 // CountSupported counts the supported media files below root without
-// opening them, so a run can show "x of y" (WEB-014). Unreadable entries are
-// skipped; it stops early when ctx is cancelled.
-func CountSupported(ctx context.Context, root string) int {
+// opening them, so a run can show "x of y" (WEB-014). Entries that ex skips
+// (ORG-022, ORG-023) and unreadable entries are not counted; it stops early
+// when ctx is cancelled.
+func CountSupported(ctx context.Context, root string, ex *exclude.Matcher) int {
 	n := 0
 	filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if ctx.Err() != nil {
 			return filepath.SkipAll
+		}
+		if d != nil && ex.Skip(root, path, d.IsDir()) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if err == nil && !d.IsDir() && IsSupported(path) {
 			n++

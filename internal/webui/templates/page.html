@@ -71,6 +71,7 @@
               {{template "field" (dict "R" $ "Name" (printf "organizer.%d.sources.%d.detectionMode" $i $j) "Label" "detection_mode" "Value" $src.DetectionMode "Help" "org_detection_mode" "Kind" "text")}}
               {{template "select" (dict "R" $ "Name" (printf "organizer.%d.sources.%d.actionMethod" $i $j) "Label" "action_method" "Value" $src.ActionMethod "Help" "org_action_method" "Options" $.Data.Choices.OrgMethods)}}
               {{template "field" (dict "R" $ "Name" (printf "organizer.%d.sources.%d.duplicateFolder" $i $j) "Label" "duplicate_folder" "Value" $src.DuplicateFolder "Help" "duplicate_folder" "Kind" "path")}}
+              {{template "exclude" (dict "R" $ "Name" (printf "organizer.%d.sources.%d.exclude" $i $j) "Value" $src.Exclude)}}
             </div>
           </div>
           {{end}}
@@ -101,6 +102,9 @@
             {{end}}
           </div>
           <div class="field-error" id="err-{{fid (printf "duplicateDetection.%d.sources" $i)}}">{{call $.FErr (printf "duplicateDetection.%d.sources" $i)}}</div>
+          <div class="grid">
+            {{template "exclude" (dict "R" $ "Name" (printf "duplicateDetection.%d.exclude" $i) "Value" $dd.Exclude)}}
+          </div>
         </div>
         {{end}}
       </section>

@@ -178,6 +178,7 @@ func validFormValues(cfg *config.Config, saveTarget string, separatePath string)
 			values.Set(srcPrefix+".detectionMode", src.DetectionMode)
 			values.Set(srcPrefix+".actionMethod", src.ActionMethod)
 			values.Set(srcPrefix+".duplicateFolder", src.DuplicateFolder)
+			values.Set(srcPrefix+".exclude", strings.Join(src.Exclude, "\n"))
 		}
 	}
 	values.Set("duplicateDetectionCount", strconv.Itoa(len(form.DuplicateDetection)))
@@ -194,6 +195,7 @@ func validFormValues(cfg *config.Config, saveTarget string, separatePath string)
 		values.Set(prefix+".actionMethod", dd.ActionMethod)
 		values.Set(prefix+".duplicateFolder", dd.DuplicateFolder)
 		values.Set(prefix+".ntfyURL", dd.NtfyURL)
+		values.Set(prefix+".exclude", strings.Join(dd.Exclude, "\n"))
 		values.Set(prefix+".sourceCount", strconv.Itoa(len(dd.Sources)))
 		for j, source := range dd.Sources {
 			values.Set(prefix+".sources."+strconv.Itoa(j), source)

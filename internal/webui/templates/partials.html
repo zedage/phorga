@@ -50,6 +50,16 @@
 </div>
 {{end}}
 
+{{/* Exclude patterns, one per line (ORG-023, DUP-013, CFG-007). Expects R, Name and Value ([]string). */}}
+{{define "exclude"}}
+<div>
+  <label for="{{fid .Name}}">{{call .R.T "exclude_label"}}</label>
+  <textarea id="{{fid .Name}}" name="{{.Name}}" rows="3" aria-describedby="{{fid .Name}}-help">{{lines .Value}}</textarea>
+  <small class="help" id="{{fid .Name}}-help">{{call .R.T "help_exclude"}}</small>
+  <div class="field-error" id="err-{{fid .Name}}">{{call .R.FErr .Name}}</div>
+</div>
+{{end}}
+
 {{/* Out-of-band field errors for HTMX validate/save responses (WEB-008). */}}
 {{define "fieldErrorsOOB"}}{{range $name, $msgs := .Data.FieldErrors}}
 <div class="field-error" id="err-{{fid $name}}" hx-swap-oob="true">{{call $.FErr $name}}</div>{{end}}

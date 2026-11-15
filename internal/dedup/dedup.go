@@ -15,6 +15,7 @@ import (
 
 	"github.com/corona10/goimagehash"
 	"github.com/zedage/phorga/internal/config"
+	"github.com/zedage/phorga/internal/exclude"
 	"github.com/zedage/phorga/internal/fileops"
 	"github.com/zedage/phorga/internal/metadata"
 	"github.com/zedage/phorga/internal/runstatus"
@@ -70,13 +71,14 @@ func RunWithCache(ctx context.Context, job config.DuplicateDetection, cache *Cac
 
 	// Count first, so progress can show "x of y" (WEB-014).
 	runstatus.Report(ctx, runstatus.PhaseCounting, 0, 0)
+	ex := exclude.New(job.Exclude)
 	total := 0
 	for _, src := range job.Sources {
-		total += metadata.CountSupported(ctx, src)
+		total += metadata.CountSupported(ctx, src, ex)
 	}
 
 	// Scan all sources
-	sc := &scanner{ctx: ctx, mode: job.DetectionMode, cache: cache, total: total, result: &result}
+	sc := &scanner{ctx: ctx, mode: job.DetectionMode, cache: cache, exclude: ex, total: total, result: &result}
 	for _, src := range job.Sources {
 		sc.scan(src)
 	}
@@ -151,6 +153,7 @@ type scanner struct {
 	ctx      context.Context
 	mode     string
 	cache    *Cache
+	exclude  *exclude.Matcher // skipped entries (DUP-013)
 	total    int
 	result   *RunResult
 	files    []fileInfo
@@ -169,6 +172,14 @@ func (sc *scanner) scan(srcPath string) {
 	filepath.WalkDir(srcPath, func(path string, d fs.DirEntry, err error) error {
 		if ctx.Err() != nil {
 			return filepath.SkipAll
+		}
+		// System, hidden and excluded entries (DUP-013).
+		if d != nil && sc.exclude.Skip(srcPath, path, d.IsDir()) {
+			if d.IsDir() {
+				slog.Info("skipping folder", "path", path)
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if err != nil {
 			slog.Error("error accessing path", "path", path, "error", err)

@@ -32,6 +32,12 @@ organizer:
     sources:
       - path: /path/to/photos1
         mode: move # move or copy
+        # Optional: leave these out (case ignored). @eaDir, #recycle, #snapshot
+        # and hidden (.name) entries are always skipped.
+        # exclude:
+        #   - Screenshots      # a name, at any depth
+        #   - "*_edited.jpg"   # a file name pattern
+        #   - 2019/Scans       # a path relative to this source
         duplicates:
           detectionMode: filename # filename, filedate, exif (EXIF date only); use '+' (AND) or '|' (OR), not mixed
           action:
@@ -56,6 +62,8 @@ duplicateDetection:
     sources:
       - /path/to/photos1
       - /path/to/photos2
+    # exclude: # optional, same patterns as for organizer sources
+    #   - Export
     detectionMode: content # content (pHash) | metadata (size + EXIF date; files without EXIF never match)
     action:
       method: moveToFolder # moveToFolder | skip
