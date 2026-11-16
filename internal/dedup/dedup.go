@@ -40,12 +40,16 @@ type RunResult struct {
 	// CacheHits is the number of files whose fingerprint came from the
 	// cache instead of being computed (DUP-012).
 	CacheHits int
+	// DetailsComputed is the number of detail fingerprints computed (not
+	// taken from the cache) for pHash candidates in content mode (DUP-014).
+	DetailsComputed int
 }
 
 // fileInfo stores gathered metadata about a scanned file.
 type fileInfo struct {
 	Path     string
 	Size     int64
+	Mtime    time.Time
 	ExifDate time.Time
 	PHash    *goimagehash.ImageHash
 }
@@ -102,8 +106,14 @@ func RunWithCache(ctx context.Context, job config.DuplicateDetection, cache *Cac
 		return canceled(result)
 	}
 
-	// Find duplicates
-	duplicates := findDuplicates(ctx, files, job.DetectionMode)
+	// Find duplicates. In content mode, pHash candidates are confirmed by
+	// the detail check (DUP-014); its fingerprints go into the cache too.
+	v := newVerifier(ctx, cache, &result)
+	duplicates := findDuplicates(ctx, files, job.DetectionMode, v)
+	result.DetailsComputed = v.computed
+	if v.computed > 0 {
+		cache.Save()
+	}
 	if ctx.Err() != nil {
 		return canceled(result)
 	}
@@ -124,6 +134,7 @@ func RunWithCache(ctx context.Context, job config.DuplicateDetection, cache *Cac
 	slog.Info("duplicate detection run complete",
 		"totalFiles", result.TotalFiles,
 		"duplicates", result.DuplicatesPair,
+		"detailsComputed", result.DetailsComputed,
 		"actions", result.ActionsApplied,
 		"errors", result.Errors,
 	)
@@ -203,8 +214,9 @@ func (sc *scanner) scan(srcPath string) {
 		}
 
 		fi := fileInfo{
-			Path: path,
-			Size: info.Size(),
+			Path:  path,
+			Size:  info.Size(),
+			Mtime: info.ModTime(),
 		}
 		if sc.fromCache(&fi, info.ModTime()) {
 			result.CacheHits++
@@ -316,7 +328,10 @@ func computePHash(path string) (*goimagehash.ImageHash, error) {
 	return hash, nil
 }
 
-func findDuplicates(ctx context.Context, files []fileInfo, detectionMode string) []duplicatePair {
+// findDuplicates compares all files pairwise. In content mode, v confirms
+// each pHash match with the detail check (DUP-014); v may be nil in other
+// modes.
+func findDuplicates(ctx context.Context, files []fileInfo, detectionMode string, v *verifier) []duplicatePair {
 	var pairs []duplicatePair
 
 	// Each file is reported as a duplicate at most once, against the first
@@ -335,13 +350,23 @@ func findDuplicates(ctx context.Context, files []fileInfo, detectionMode string)
 			if isDup[j] {
 				continue
 			}
-			if isDuplicate(files[i], files[j], detectionMode) {
-				pairs = append(pairs, duplicatePair{
-					canonical: files[i],
-					duplicate: files[j],
-				})
-				isDup[j] = true
+			if !isDuplicate(files[i], files[j], detectionMode) {
+				continue
 			}
+			if detectionMode == "content" {
+				// Decoding takes time, so check for shutdown before each one.
+				if ctx.Err() != nil {
+					return nil
+				}
+				if !v.same(files[i], files[j]) {
+					continue
+				}
+			}
+			pairs = append(pairs, duplicatePair{
+				canonical: files[i],
+				duplicate: files[j],
+			})
+			isDup[j] = true
 		}
 	}
 

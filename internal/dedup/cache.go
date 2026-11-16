@@ -32,6 +32,9 @@ type cacheEntry struct {
 	// be decoded (videos, HEIC, RAW), so it is not tried again.
 	PHash   *uint64 `json:"phash,omitempty"`
 	NoPHash bool    `json:"noPhash,omitempty"`
+	// content mode: the detail fingerprint (a small grayscale thumbnail),
+	// only for files that were ever a pHash candidate (DUP-014).
+	Detail []byte `json:"detail,omitempty"`
 
 	// metadata mode: the EXIF capture date, or NoExif when there is none.
 	ExifDate *time.Time `json:"exifDate,omitempty"`

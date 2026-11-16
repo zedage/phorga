@@ -187,7 +187,7 @@ package "internal" {
 | Recursive source scanning, date resolution, copy/move, lightweight duplicate handling.
 
 | `dedup`
-| Independent duplicate detection (metadata or perceptual hash), cross-source matching. One shared fingerprint cache (`<stateDir>/dedup-cache.json`) keeps pHash/EXIF results of unchanged files between runs (ADR-0015).
+| Independent duplicate detection (metadata, or perceptual hash confirmed by a detail check), cross-source matching. One shared fingerprint cache (`<stateDir>/dedup-cache.json`) keeps pHash/EXIF results and the detail fingerprints of candidates for unchanged files between runs (ADR-0015, ADR-0017).
 
 | `metadata`
 | EXIF extraction (goexif), filename/path date parsing, file type detection, target path token resolution.
@@ -267,7 +267,11 @@ repeat
   endif
 repeat while (more files?)
 :Prune vanished entries, save cache;
-:Compare all pairs (O(n²));
+:Compare all pairs (O(n²)) by pHash;
+if (content mode?) then (yes)
+  :Confirm each pHash candidate by its detail
+fingerprint (from cache or computed and cached);
+endif
 :Collect duplicate pairs;
 repeat
   :Next duplicate pair;
@@ -347,7 +351,11 @@ start
 :Scan all sources recursively;
 :Take metadata or pHash from the cache, or compute and cache it;
 :Save cache, prune vanished files;
-:Compare all pairs (O(n²));
+:Compare all pairs (O(n²)) by pHash;
+if (content mode?) then (yes)
+  :Confirm each pHash candidate by its detail
+fingerprint (from cache or computed and cached);
+endif
 :Collect duplicate pairs;
 repeat
   :Next duplicate pair;
@@ -484,6 +492,9 @@ Decisions are recorded as ADRs in link:../decisions/README.md[docs/decisions]. T
 
 | link:../decisions/0016-fixed-skip-list-and-simple-exclude-patterns.md[0016]
 | Fixed skip list for NAS system and hidden folders; simple per-source exclude patterns
+
+| link:../decisions/0017-detail-check-after-phash.md[0017]
+| Content mode confirms pHash candidates with a tile-wise detail check
 |===
 
 == 10. Risks and Technical Debt
@@ -498,7 +509,7 @@ Decisions are recorded as ADRs in link:../decisions/README.md[docs/decisions]. T
 
 | pHash memory on NAS
 | Memory spikes when hashing many large images
-| Sequential processing, one image at a time.
+| Sequential processing, one image at a time. The detail check keeps one 4 KB thumbnail per candidate in memory during a run.
 
 | goexif RAW format gaps
 | Some RAW files may lack EXIF support
@@ -533,7 +544,10 @@ Decisions are recorded as ADRs in link:../decisions/README.md[docs/decisions]. T
 | Perceptual hash — a fingerprint of visual image content.
 
 | Hamming Distance
-| Number of differing bits between two hashes. ≤ 5 = duplicate in V1.
+| Number of differing bits between two hashes. ≤ 5 = duplicate candidate in content mode.
+
+| Detail fingerprint
+| 64×64 grayscale thumbnail of a pHash candidate. Two candidates are duplicates only when no tile of it differs in more than 12 % of its brightness steps (DUP-014).
 
 | targetStructure
 | Path template with multilingual tokens. Supports English (`{year}`, `{month}`, `{day}`), German (`{jahr}`, `{monat}`, `{tag}`), French (`{année}`, `{mois}`, `{jour}`), and Italian (`{anno}`, `{mese}`, `{giorno}`). Tokens are case-sensitive for output formatting (e.g., `{monat}` → february, `{Monat}` → Februar, `{MONAT}` → FEBRUAR).

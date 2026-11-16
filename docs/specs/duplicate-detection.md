@@ -36,16 +36,18 @@ With `detectionMode: metadata`, two files MUST count as duplicates when they hav
 ### DUP-003 Content mode (perceptual hash)
 **Status:** implemented
 
-With `detectionMode: content`, the system MUST compute a perceptual hash (pHash) per image. Two images MUST count as duplicates when the Hamming distance of their hashes is **≤ 5**. The threshold is fixed and not configurable. Files that cannot be decoded as images (e.g. videos, HEIC, RAW) are skipped for content comparison.
+With `detectionMode: content`, the system MUST compute a perceptual hash (pHash) per image. Two images with a Hamming distance of **≤ 5** are duplicate *candidates*; they count as duplicates only when the detail check (DUP-014) confirms them. The threshold is fixed and not configurable. Files that cannot be decoded as images (e.g. videos, HEIC, RAW) are skipped for content comparison.
 
 - **WHEN** two images are visually identical but have different names
+  **THEN** they are duplicates
+- **WHEN** an image and a resized, re-compressed copy of it are scanned
   **THEN** they are duplicates
 - **WHEN** two images differ visibly (distance > 5)
   **THEN** they are not duplicates
 
 **Code:** `internal/dedup/dedup.go`
-**Tests:** `internal/dedup/dedup_test.go#TestDedup_ContentMode_IdenticalImages`, `internal/dedup/dedup_test.go#TestDedup_ContentMode_DifferentImages`
-**Notes:** The old spec said "≤ 8". The code (`maxHammingDistance = 5`) and the arc42 glossary say 5, so the spec now matches the code. See [ADR-0004](../decisions/0004-perceptual-hash-for-content-dedup.md).
+**Tests:** `internal/dedup/dedup_test.go#TestDedup_ContentMode_IdenticalImages`, `internal/dedup/dedup_test.go#TestDedup_ContentMode_DifferentImages`, `internal/dedup/detail_test.go#TestDedup_ContentMode_ResizedRecompressedCopyIsADuplicate`
+**Notes:** The old spec said "≤ 8". The code (`maxHammingDistance = 5`) and the arc42 glossary say 5, so the spec now matches the code. See [ADR-0004](../decisions/0004-perceptual-hash-for-content-dedup.md). Until 2026-11, a pHash match alone was enough, so burst shots counted as duplicates, see DUP-014.
 
 ### DUP-004 Cross-source matching
 **Status:** implemented
@@ -145,7 +147,7 @@ The system MUST remember what a scan computed for each file, so later runs do no
 
 - The cache is one file, `<stateDir>/dedup-cache.json`, shared by all duplicate detection jobs. It is separate from the organizer's state files.
 - An entry is keyed by path and is valid only while the file's size and modification time are unchanged. A changed file MUST be computed again.
-- `content` mode stores the perceptual hash, or the fact that the file cannot be decoded (e.g. videos, HEIC). `metadata` mode stores the EXIF date, or the fact that there is none. Read errors MUST NOT be cached.
+- `content` mode stores the perceptual hash, or the fact that the file cannot be decoded (e.g. videos, HEIC), and the detail fingerprint of files that were a pHash candidate (DUP-014). `metadata` mode stores the EXIF date, or the fact that there is none. Read errors MUST NOT be cached.
 - The cache MUST be saved atomically every 500 newly computed files and at the end of each scan, also when the run was stopped (DUP-010), and also in dry runs (DUP-007).
 - After a complete scan, entries below the job's own sources whose files are gone MUST be removed. Entries of other folders MUST be kept.
 - Jobs running at the same time MUST NOT lose each other's entries.
@@ -163,7 +165,7 @@ The system MUST remember what a scan computed for each file, so later runs do no
   **THEN** its entry is removed, and the entries of job B's folders stay
 
 **Code:** `internal/dedup/cache.go`, `internal/dedup/dedup.go`, `cmd/phorga/main.go`
-**Tests:** `internal/dedup/cache_test.go#TestCache_SecondRunUsesCache`, `internal/dedup/cache_test.go#TestCache_MetadataModeUsesCache`, `internal/dedup/cache_test.go#TestCache_ChangedFileIsRecomputed`, `internal/dedup/cache_test.go#TestCache_PersistsAndReloads`, `internal/dedup/cache_test.go#TestCache_DryRunWritesCacheButNoPhoto`, `internal/dedup/cache_test.go#TestCache_RemembersUndecodableFiles`, `internal/dedup/cache_test.go#TestCache_PruneKeepsOtherJobsEntries`, `internal/dedup/cache_test.go#TestCache_CorruptFileStartsFresh`, `internal/dedup/cache_test.go#TestCache_InterruptedRunKeepsComputedFingerprints`, `internal/dedup/cache_test.go#TestCache_SharedByConcurrentJobs`
+**Tests:** `internal/dedup/cache_test.go#TestCache_SecondRunUsesCache`, `internal/dedup/detail_test.go#TestCache_DetailFingerprintsAreCached`, `internal/dedup/cache_test.go#TestCache_MetadataModeUsesCache`, `internal/dedup/cache_test.go#TestCache_ChangedFileIsRecomputed`, `internal/dedup/cache_test.go#TestCache_PersistsAndReloads`, `internal/dedup/cache_test.go#TestCache_DryRunWritesCacheButNoPhoto`, `internal/dedup/cache_test.go#TestCache_RemembersUndecodableFiles`, `internal/dedup/cache_test.go#TestCache_PruneKeepsOtherJobsEntries`, `internal/dedup/cache_test.go#TestCache_CorruptFileStartsFresh`, `internal/dedup/cache_test.go#TestCache_InterruptedRunKeepsComputedFingerprints`, `internal/dedup/cache_test.go#TestCache_SharedByConcurrentJobs`
 **Notes:** See [ADR-0015](../decisions/0015-dedup-fingerprint-cache-written-in-dry-runs.md). Deleting `dedup-cache.json` forces a full scan, e.g. after editing photos with a tool that keeps the modification time.
 
 ### DUP-013 Skipped folders and exclude list
@@ -179,3 +181,26 @@ The scan MUST skip the fixed system and hidden entries of ORG-022, and the entri
 **Code:** `internal/dedup/dedup.go`, `internal/exclude/exclude.go`, `internal/metadata/metadata.go`
 **Tests:** `internal/dedup/exclude_test.go#TestDedup_SynologyThumbnailIsNotADuplicate`, `internal/dedup/exclude_test.go#TestDedup_ExcludePatternsSkipFiles`, `internal/dedup/exclude_test.go#TestDedup_ExcludedFilesLeaveTheCache`
 **Notes:** Without this, a thumbnail is found before its original (`@` sorts before letters), becomes the kept file, and the real photo is moved as the duplicate (DUP-004). See [ADR-0016](../decisions/0016-fixed-skip-list-and-simple-exclude-patterns.md). The cache test removes the entry through an `exclude` pattern; the fixed list uses the same pruning path.
+
+### DUP-014 Detail check for content candidates
+**Status:** implemented
+
+In `content` mode, every pair that passes the pHash stage (DUP-003) MUST pass a detail check before it counts as a duplicate:
+
+- Each candidate image is scaled to a 64×64 grayscale thumbnail (its detail fingerprint).
+- The thumbnail is split into 16×16 tiles. For each tile, the system counts the neighbouring pixel pairs whose brightness step goes in a different direction in the two images. Pairs that are nearly flat in both images are ignored.
+- The pair is a duplicate only when no tile has more than **12 %** flipped steps. The threshold is fixed and not configurable.
+- Re-encoded, resized and brightness- or gamma-edited copies MUST still count as duplicates. Burst shots in which a part of the picture changed (a face, closed eyes, a person who moved) MUST NOT.
+- A candidate whose fingerprint cannot be computed is logged, counted as an error, and never a duplicate.
+- The check reads only candidate images; their fingerprints are cached (DUP-012). The run checks for shutdown before each image it reads (DUP-010).
+
+- **WHEN** two burst shots have a pHash distance ≤ 5 but differ in one small area
+  **THEN** they are not duplicates
+- **WHEN** a copy of an image was made brighter (gamma 0.8)
+  **THEN** it is a duplicate of the original
+- **WHEN** a library with candidates was scanned once and nothing changed
+  **THEN** the next run computes no detail fingerprint
+
+**Code:** `internal/dedup/verify.go`, `internal/dedup/dedup.go`, `internal/dedup/cache.go`
+**Tests:** `internal/dedup/detail_test.go#TestDedup_ContentMode_BurstShotWithLocalChangeIsNotADuplicate`, `internal/dedup/detail_test.go#TestDedup_ContentMode_BrightnessEditedCopyIsADuplicate`, `internal/dedup/detail_test.go#TestDedup_ContentMode_ResizedRecompressedCopyIsADuplicate`, `internal/dedup/detail_test.go#TestCache_DetailFingerprintsAreCached`, `internal/dedup/detail_test.go#TestDetailDiff_TileThatDiffersDecides`
+**Notes:** pHash alone sees only the coarse layout, so burst shots of the same scene reached distance 0–4. Measured on real photos: copies ≤ 0.07, burst shots ≥ 0.22. See [ADR-0017](../decisions/0017-detail-check-after-phash.md). Very small changes (a few pixels in a large group photo) can stay below the threshold.

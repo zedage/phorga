@@ -121,7 +121,7 @@ Relative paths are resolved against the working directory. In Docker, use the pa
 | `sources` | list of paths | yes, ≥ 1 | – | Folders to compare, including all subfolders. Duplicates are found across all of them. |
 | `exclude` | list of patterns | no | – | Files and folders below each source to leave out, see [Skipped and excluded folders](#skipped-and-excluded-folders). |
 | `schedule` | cron | yes | – | When the job runs, see [Schedules](#schedules). |
-| `detectionMode` | `content` \| `metadata` | yes | – | `content` compares what images look like (perceptual hash; JPEG and PNG only); `metadata` compares file size and EXIF capture date (much faster; files without EXIF never match). |
+| `detectionMode` | `content` \| `metadata` | yes | – | `content` compares what images look like (perceptual hash, then an area-by-area check so burst shots don't match; JPEG and PNG only); `metadata` compares file size and EXIF capture date (much faster; files without EXIF never match). |
 | `action.method` | `moveToFolder` \| `skip` | yes | – | `moveToFolder` moves each duplicate into `duplicateFolder` (the first file found stays); `skip` only logs it. Nothing is ever deleted. |
 | `action.duplicateFolder` | path | for `moveToFolder` | – | Folder for duplicates. Existing files there are never overwritten. |
 | `dryRun` | bool | no | `false` | Only log what would be done. No photo is moved. |
@@ -175,7 +175,7 @@ The web UI shows the next three run times while you type.
 |---|---|---|
 | `org-<target>-<source>.state.json` | organizer, one per source | Files already handled, so later runs skip them. Never written in a dry run. |
 | `run-status.json` | all jobs | Last result of each job for the status page. Dry runs are not stored. |
-| `dedup-cache.json` | duplicate detection, shared by all jobs | Fingerprints (pHash or EXIF date) of unchanged files, so later runs only read new or changed files. Written in dry runs too; it never touches a photo. Delete it to force a full scan. |
+| `dedup-cache.json` | duplicate detection, shared by all jobs | Fingerprints (pHash or EXIF date, plus a small thumbnail for look-alike candidates) of unchanged files, so later runs only read new or changed files. Written in dry runs too; it never touches a photo. Delete it to force a full scan. |
 
 All files are written atomically. Deleting a state file makes the organizer look at all files of that source again (already organized files are recognized as duplicates).
 
