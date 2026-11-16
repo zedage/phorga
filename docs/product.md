@@ -50,7 +50,7 @@ Duplicate detection is a **separate feature** with its own folders, schedule and
 
 Two modes:
 
-- **content** compares what the images look like (a "perceptual hash"), so re-saved or resized copies are found too ([ADR-0004](decisions/0004-perceptual-hash-for-content-dedup.md)). This works for images, not for videos.
+- **content** compares what the images look like (a "perceptual hash"), so re-saved or resized copies are found too ([ADR-0004](decisions/0004-perceptual-hash-for-content-dedup.md)). Images that look alike are then compared area by area, so burst shots where someone blinked or moved are *not* treated as duplicates, while brightened or re-compressed copies still are ([ADR-0017](decisions/0017-detail-check-after-phash.md)). This works for images, not for videos.
 - **metadata** is faster. It treats files as duplicates when they have the same size and the same EXIF capture date. Files without EXIF are never matched this way, so no false matches come from copy dates.
 
 **It remembers what it has seen.** The first run reads every file, which takes a while on a large library. Phorga keeps each file's fingerprint in a cache, so later runs only read new or changed files and take seconds instead of minutes. Dry runs fill the cache too; it never touches your photos ([ADR-0015](decisions/0015-dedup-fingerprint-cache-written-in-dry-runs.md)).
