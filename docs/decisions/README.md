@@ -21,6 +21,7 @@ Short records of decisions that shaped Phorga: what was decided, why, and what i
 | [0015](0015-dedup-fingerprint-cache-written-in-dry-runs.md) | Fingerprint cache for duplicate detection, written in dry runs too | 2026-11-14 | accepted |
 | [0016](0016-fixed-skip-list-and-simple-exclude-patterns.md) | Fixed skip list for system folders, simple exclude patterns | 2026-11-15 | accepted |
 | [0017](0017-detail-check-after-phash.md) | Detail check after the pHash match in content mode | 2026-11-16 | accepted |
+| [0018](0018-keep-highest-resolution-duplicate.md) | Keep the highest-resolution file of a duplicate group | 2026-11-17 | accepted |
 
 ## Writing a new ADR
 

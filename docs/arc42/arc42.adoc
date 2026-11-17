@@ -187,7 +187,7 @@ package "internal" {
 | Recursive source scanning, date resolution, copy/move, lightweight duplicate handling.
 
 | `dedup`
-| Independent duplicate detection (metadata, or perceptual hash confirmed by a detail check), cross-source matching. One shared fingerprint cache (`<stateDir>/dedup-cache.json`) keeps pHash/EXIF results and the detail fingerprints of candidates for unchanged files between runs (ADR-0015, ADR-0017).
+| Independent duplicate detection (metadata, or perceptual hash confirmed by a detail check), cross-source matching. One shared fingerprint cache (`<stateDir>/dedup-cache.json`) keeps pHash/EXIF results, the detail fingerprints of candidates and the resolution of group members for unchanged files between runs (ADR-0015, ADR-0017). Each duplicate group keeps its highest-resolution file (ADR-0018).
 
 | `metadata`
 | EXIF extraction (goexif), filename/path date parsing, file type detection, target path token resolution.
@@ -272,7 +272,9 @@ if (content mode?) then (yes)
   :Confirm each pHash candidate by its detail
 fingerprint (from cache or computed and cached);
 endif
-:Collect duplicate pairs;
+:Group matches; each group keeps the file with the
+most pixels (header, cached), then the larger one;
+:Collect duplicate pairs against the kept file;
 repeat
   :Next duplicate pair;
   if (dryRun?) then (yes)
@@ -356,7 +358,9 @@ if (content mode?) then (yes)
   :Confirm each pHash candidate by its detail
 fingerprint (from cache or computed and cached);
 endif
-:Collect duplicate pairs;
+:Group matches; each group keeps the file with the
+most pixels (header, cached), then the larger one;
+:Collect duplicate pairs against the kept file;
 repeat
   :Next duplicate pair;
   if (dryRun?) then (yes)
@@ -495,6 +499,9 @@ Decisions are recorded as ADRs in link:../decisions/README.md[docs/decisions]. T
 
 | link:../decisions/0017-detail-check-after-phash.md[0017]
 | Content mode confirms pHash candidates with a tile-wise detail check
+
+| link:../decisions/0018-keep-highest-resolution-duplicate.md[0018]
+| Each duplicate group keeps the file with the most pixels, then the larger one, then the first found
 |===
 
 == 10. Risks and Technical Debt
