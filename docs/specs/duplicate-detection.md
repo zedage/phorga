@@ -52,16 +52,30 @@ With `detectionMode: content`, the system MUST compute a perceptual hash (pHash)
 ### DUP-004 Cross-source matching
 **Status:** implemented
 
-Every file of every source in a job MUST be compared with every other file. The file found first (in source order, then walk order) is kept as the original. Each other file MUST be reported as a duplicate **at most once**, against the first earlier non-duplicate file it matches. A group of N matching files therefore yields N-1 pairs that share one original.
+Every file of every source in a job MUST be compared with every other file. Matches form groups: the first file found (in source order, then walk order) that is not yet in a group starts one, and every later file not yet in a group that matches it joins. Each file MUST belong to at most one group.
 
-- **WHEN** `/photos1/img.jpg` and `/photos2/copy.jpg` are duplicates
+From each group, exactly one file is kept as the original, chosen in this order:
+
+1. the image with the **most pixels** (width × height, read from the image header),
+2. on a tie, the **larger file**,
+3. on a tie, the file **found first**.
+
+A file whose resolution cannot be read counts as 0 pixels. Every other file of the group MUST be reported as a duplicate exactly once, against the kept original. A group of N files therefore yields N-1 pairs that share one original.
+
+- **WHEN** `/photos1/img.jpg` and `/photos2/copy.jpg` are identical duplicates
   **THEN** the pair is reported and `/photos2/copy.jpg` is treated as the duplicate
+- **WHEN** `2022/09/IMG-20220920-WA0004.jpg` (a 256×192 WhatsApp copy, found first) and `2022/09/IMG20220920182841.jpg` (the 512×384 camera original) are duplicates
+  **THEN** the camera original is kept and the WhatsApp copy is the duplicate
+- **WHEN** two duplicates have the same resolution and `a.jpg` (found first) is smaller than `b.jpg`
+  **THEN** `b.jpg` is kept and `a.jpg` is the duplicate
 - **WHEN** three sources each contain the same image and the method is `moveToFolder`
   **THEN** 2 pairs are reported, 2 files are moved, the first stays in place, and there are 0 errors
+- **WHEN** three sources contain the same image and the largest resolution is in the second source
+  **THEN** 2 pairs are reported, both against the file in the second source, which stays in place
 
-**Code:** `internal/dedup/dedup.go`
-**Tests:** `internal/dedup/dedup_test.go#TestDedup_CrossSource`, `internal/dedup/actions_test.go#TestDedup_GroupOfThree_MovesTwoWithoutErrors`
-**Notes:** Comparison is pairwise O(n²), see arc42 §10. Until 2026-11, groups of 3+ produced every pair (A-B, A-C, B-C), and moving the already-moved file counted as an error. That is now fixed.
+**Code:** `internal/dedup/dedup.go`, `internal/dedup/keep.go`
+**Tests:** `internal/dedup/dedup_test.go#TestDedup_CrossSource`, `internal/dedup/actions_test.go#TestDedup_GroupOfThree_MovesTwoWithoutErrors`, `internal/dedup/keep_test.go#TestDedup_KeepsCameraOriginalOverWhatsAppCopy`, `internal/dedup/keep_test.go#TestDedup_SameResolutionKeepsLargerFile`, `internal/dedup/keep_test.go#TestDedup_GroupOfThree_KeepsHighestResolution`
+**Notes:** Comparison is pairwise O(n²), see arc42 §10. Until 2026-11, groups of 3+ produced every pair (A-B, A-C, B-C), and moving the already-moved file counted as an error. That is now fixed. Until 2026-11, the file found first was always kept. Because `IMG-2022…` sorts before `IMG2022…`, a real run moved 740 camera originals and kept their WhatsApp copies. See [ADR-0018](../decisions/0018-keep-highest-resolution-duplicate.md). In content mode, the kept file and a duplicate were each matched against the file that started the group, not necessarily against each other.
 
 ### DUP-005 Action `moveToFolder`
 **Status:** implemented
@@ -147,7 +161,7 @@ The system MUST remember what a scan computed for each file, so later runs do no
 
 - The cache is one file, `<stateDir>/dedup-cache.json`, shared by all duplicate detection jobs. It is separate from the organizer's state files.
 - An entry is keyed by path and is valid only while the file's size and modification time are unchanged. A changed file MUST be computed again.
-- `content` mode stores the perceptual hash, or the fact that the file cannot be decoded (e.g. videos, HEIC), and the detail fingerprint of files that were a pHash candidate (DUP-014). `metadata` mode stores the EXIF date, or the fact that there is none. Read errors MUST NOT be cached.
+- `content` mode stores the perceptual hash, or the fact that the file cannot be decoded (e.g. videos, HEIC), and the detail fingerprint of files that were a pHash candidate (DUP-014). Both modes store the image resolution of files that were in a duplicate group (DUP-004). `metadata` mode stores the EXIF date, or the fact that there is none. Read errors MUST NOT be cached.
 - The cache MUST be saved atomically every 500 newly computed files and at the end of each scan, also when the run was stopped (DUP-010), and also in dry runs (DUP-007).
 - After a complete scan, entries below the job's own sources whose files are gone MUST be removed. Entries of other folders MUST be kept.
 - Jobs running at the same time MUST NOT lose each other's entries.
@@ -164,8 +178,8 @@ The system MUST remember what a scan computed for each file, so later runs do no
 - **WHEN** a file of job A is deleted and job A runs again
   **THEN** its entry is removed, and the entries of job B's folders stay
 
-**Code:** `internal/dedup/cache.go`, `internal/dedup/dedup.go`, `cmd/phorga/main.go`
-**Tests:** `internal/dedup/cache_test.go#TestCache_SecondRunUsesCache`, `internal/dedup/detail_test.go#TestCache_DetailFingerprintsAreCached`, `internal/dedup/cache_test.go#TestCache_MetadataModeUsesCache`, `internal/dedup/cache_test.go#TestCache_ChangedFileIsRecomputed`, `internal/dedup/cache_test.go#TestCache_PersistsAndReloads`, `internal/dedup/cache_test.go#TestCache_DryRunWritesCacheButNoPhoto`, `internal/dedup/cache_test.go#TestCache_RemembersUndecodableFiles`, `internal/dedup/cache_test.go#TestCache_PruneKeepsOtherJobsEntries`, `internal/dedup/cache_test.go#TestCache_CorruptFileStartsFresh`, `internal/dedup/cache_test.go#TestCache_InterruptedRunKeepsComputedFingerprints`, `internal/dedup/cache_test.go#TestCache_SharedByConcurrentJobs`
+**Code:** `internal/dedup/cache.go`, `internal/dedup/dedup.go`, `internal/dedup/keep.go`, `cmd/phorga/main.go`
+**Tests:** `internal/dedup/cache_test.go#TestCache_SecondRunUsesCache`, `internal/dedup/detail_test.go#TestCache_DetailFingerprintsAreCached`, `internal/dedup/cache_test.go#TestCache_MetadataModeUsesCache`, `internal/dedup/cache_test.go#TestCache_ChangedFileIsRecomputed`, `internal/dedup/cache_test.go#TestCache_PersistsAndReloads`, `internal/dedup/cache_test.go#TestCache_DryRunWritesCacheButNoPhoto`, `internal/dedup/cache_test.go#TestCache_RemembersUndecodableFiles`, `internal/dedup/cache_test.go#TestCache_PruneKeepsOtherJobsEntries`, `internal/dedup/cache_test.go#TestCache_CorruptFileStartsFresh`, `internal/dedup/cache_test.go#TestCache_InterruptedRunKeepsComputedFingerprints`, `internal/dedup/cache_test.go#TestCache_SharedByConcurrentJobs`, `internal/dedup/keep_test.go#TestCache_StoresResolutionOfGroupFiles`
 **Notes:** See [ADR-0015](../decisions/0015-dedup-fingerprint-cache-written-in-dry-runs.md). Deleting `dedup-cache.json` forces a full scan, e.g. after editing photos with a tool that keeps the modification time.
 
 ### DUP-013 Skipped folders and exclude list

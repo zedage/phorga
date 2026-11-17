@@ -36,6 +36,11 @@ type cacheEntry struct {
 	// only for files that were ever a pHash candidate (DUP-014).
 	Detail []byte `json:"detail,omitempty"`
 
+	// both modes: the image resolution, only for files that were ever in a
+	// duplicate group, to choose the file to keep (DUP-004).
+	Width  int `json:"width,omitempty"`
+	Height int `json:"height,omitempty"`
+
 	// metadata mode: the EXIF capture date, or NoExif when there is none.
 	ExifDate *time.Time `json:"exifDate,omitempty"`
 	NoExif   bool       `json:"noExif,omitempty"`

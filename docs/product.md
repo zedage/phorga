@@ -57,7 +57,7 @@ Two modes:
 
 It skips the same system and hidden folders as the organizer, and has its own `exclude` list. Without this, a Synology thumbnail would look like a copy of its photo, and the real photo could be moved away as the duplicate.
 
-If several copies of the same picture are found, the first one stays and all others count as its duplicates. Found duplicates are either moved to a duplicates folder or just reported. Nothing is deleted. A dry run shows the results without touching anything.
+If several copies of the same picture are found, the best one stays and all others count as its duplicates. Best means the most pixels, then the larger file. So a camera photo stays and the small copy WhatsApp made of it is the duplicate, whatever the files are called ([ADR-0018](decisions/0018-keep-highest-resolution-duplicate.md)). Found duplicates are either moved to a duplicates folder or just reported. Nothing is deleted. A dry run shows the results without touching anything.
 
 Exact rules: [specs/duplicate-detection.md](specs/duplicate-detection.md)
 

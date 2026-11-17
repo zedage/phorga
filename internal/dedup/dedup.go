@@ -109,9 +109,10 @@ func RunWithCache(ctx context.Context, job config.DuplicateDetection, cache *Cac
 	// Find duplicates. In content mode, pHash candidates are confirmed by
 	// the detail check (DUP-014); its fingerprints go into the cache too.
 	v := newVerifier(ctx, cache, &result)
-	duplicates := findDuplicates(ctx, files, job.DetectionMode, v)
+	// Each group keeps its best file (DUP-004); resolutions are cached too.
+	duplicates := findDuplicates(ctx, files, job.DetectionMode, v, newKeeper(cache))
 	result.DetailsComputed = v.computed
-	if v.computed > 0 {
+	if len(duplicates) > 0 || v.computed > 0 {
 		cache.Save()
 	}
 	if ctx.Err() != nil {
@@ -330,24 +331,25 @@ func computePHash(path string) (*goimagehash.ImageHash, error) {
 
 // findDuplicates compares all files pairwise. In content mode, v confirms
 // each pHash match with the detail check (DUP-014); v may be nil in other
-// modes.
-func findDuplicates(ctx context.Context, files []fileInfo, detectionMode string, v *verifier) []duplicatePair {
+// modes. k chooses the file each group keeps.
+func findDuplicates(ctx context.Context, files []fileInfo, detectionMode string, v *verifier, k *keeper) []duplicatePair {
 	var pairs []duplicatePair
 
-	// Each file is reported as a duplicate at most once, against the first
-	// earlier file it matches that is not itself a duplicate. For a group of
-	// N matching files this yields N-1 pairs sharing one canonical (DUP-004).
-	isDup := make([]bool, len(files))
+	// The first file not yet in a group starts one; every later file not
+	// yet in a group that matches it joins. Each group keeps its best file
+	// and yields N-1 pairs against it (DUP-004).
+	inGroup := make([]bool, len(files))
 	for i := 0; i < len(files); i++ {
 		if ctx.Err() != nil {
 			return nil
 		}
 		runstatus.Report(ctx, runstatus.PhaseComparing, i, len(files))
-		if isDup[i] {
+		if inGroup[i] {
 			continue
 		}
+		group := []int{i}
 		for j := i + 1; j < len(files); j++ {
-			if isDup[j] {
+			if inGroup[j] {
 				continue
 			}
 			if !isDuplicate(files[i], files[j], detectionMode) {
@@ -362,11 +364,17 @@ func findDuplicates(ctx context.Context, files []fileInfo, detectionMode string,
 					continue
 				}
 			}
-			pairs = append(pairs, duplicatePair{
-				canonical: files[i],
-				duplicate: files[j],
-			})
-			isDup[j] = true
+			group = append(group, j)
+			inGroup[j] = true
+		}
+		if len(group) == 1 {
+			continue
+		}
+		keep := k.best(files, group)
+		for _, g := range group {
+			if g != keep {
+				pairs = append(pairs, duplicatePair{canonical: files[keep], duplicate: files[g]})
+			}
 		}
 	}
 

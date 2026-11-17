@@ -122,7 +122,7 @@ Relative paths are resolved against the working directory. In Docker, use the pa
 | `exclude` | list of patterns | no | – | Files and folders below each source to leave out, see [Skipped and excluded folders](#skipped-and-excluded-folders). |
 | `schedule` | cron | yes | – | When the job runs, see [Schedules](#schedules). |
 | `detectionMode` | `content` \| `metadata` | yes | – | `content` compares what images look like (perceptual hash, then an area-by-area check so burst shots don't match; JPEG and PNG only); `metadata` compares file size and EXIF capture date (much faster; files without EXIF never match). |
-| `action.method` | `moveToFolder` \| `skip` | yes | – | `moveToFolder` moves each duplicate into `duplicateFolder` (the first file found stays); `skip` only logs it. Nothing is ever deleted. |
+| `action.method` | `moveToFolder` \| `skip` | yes | – | `moveToFolder` moves each duplicate into `duplicateFolder` (the file with the most pixels stays, then the larger one, then the first found); `skip` only logs it. Nothing is ever deleted. |
 | `action.duplicateFolder` | path | for `moveToFolder` | – | Folder for duplicates. Existing files there are never overwritten. |
 | `dryRun` | bool | no | `false` | Only log what would be done. No photo is moved. |
 | `ntfy.url` | URL | no | – | ntfy topic URL for a summary after every run. |
@@ -288,7 +288,7 @@ targetStructure: "{year}/{monthNumber}_{Monat}"              # 2024/03_März
 
 - **HEIC and video dates** come from the filename, the folder or the modification time. Phorga reads capture dates only from EXIF in JPEG and TIFF-based RAW files.
 - **Content duplicate detection** compares JPEG and PNG only. HEIC, RAW and videos never match. The first run decodes every image, which takes long on a large library; later runs only read new or changed files, thanks to the cache in `<stateDir>/dedup-cache.json`.
-- **Content duplicate detection keeps the first file it finds**, not the best one, and very similar shots (bursts) can count as duplicates. Duplicates are only moved to `duplicateFolder`, never deleted, so review that folder before you delete anything.
+- **Duplicate detection keeps the file with the most pixels**, then the larger file. An upscaled or enlarged copy therefore beats its original. Duplicates are only moved to `duplicateFolder`, never deleted, so review that folder before you delete anything.
 - **Other file types stay in the source without a log line**, for example DNG, GIF, WebP, TIFF, AVI, M4V, 3GP and sidecars (XMP, AAE). The photo and the video of a Live Photo can land in different folders.
 - **Organizer duplicates with `detectionMode: filename` and `method: replace`** overwrite a different photo that happens to have the same name. Prefer `filename+exif` with `skip` or `moveToFolder`.
 - **The container runs as root by default**, so new files on the NAS belong to root. Set `user: "<uid>:<gid>"` in `docker-compose.yml` to change that.
