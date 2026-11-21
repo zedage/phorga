@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // Save writes the configuration to disk using the format inferred from the target file extension.
