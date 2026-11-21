@@ -41,7 +41,7 @@ func TestPickerListsOnlyVisibleSubfolders(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.Code)
 	}
 	body := resp.Body.String()
-	for _, want := range []string{"📁 albums", "📁 archive", "Select this folder"} {
+	for _, want := range []string{"<span>albums</span>", "<span>archive</span>", "Select this folder"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("listing missing %q:\n%s", want, body)
 		}
@@ -57,7 +57,7 @@ func TestPickerListsOnlyVisibleSubfolders(t *testing.T) {
 	}
 
 	sub := get(t, s, listURL("path", filepath.Join(root, "albums"))).Body.String()
-	if !strings.Contains(sub, "📁 2024") || !strings.Contains(sub, "↑ Up") {
+	if !strings.Contains(sub, "<span>2024</span>") || !strings.Contains(sub, `aria-label="Up"`) {
 		t.Errorf("sub-folder listing missing entries or up button:\n%s", sub)
 	}
 
@@ -102,7 +102,7 @@ func TestPickerStartsAtNearestAllowedFolder(t *testing.T) {
 
 	notYet := filepath.Join(root, "albums", "2025", "new")
 	body := get(t, s, listURL("start", notYet)).Body.String()
-	if !strings.Contains(body, filepath.Join(root, "albums")) || !strings.Contains(body, "📁 2024") {
+	if !strings.Contains(body, filepath.Join(root, "albums")) || !strings.Contains(body, "<span>2024</span>") {
 		t.Errorf("start at a missing folder must open its nearest existing parent:\n%s", body)
 	}
 

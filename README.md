@@ -185,13 +185,14 @@ All files are written atomically. Deleting a state file makes the organizer look
 Phorga can expose a small built-in configuration UI from the same process that runs the scheduler.
 
 - Server-rendered HTML with HTMX-compatible validation/save endpoints. HTMX and the stylesheet are embedded in the binary, so no internet access is needed. Light/dark mode follows the system setting, with a manual switch in the top bar.
-- UI localization: German, English, Italian, French
+- UI localization: German, English, Italian, French, switchable from the top bar of every page
 - Displays the currently loaded effective configuration values
 - Dropdowns for fields with fixed values, and a help text under every field
 - Live previews: the folder a `targetStructure` produces (for 15 March 2024), and the next 3 runs of each cron `schedule`
 - Validation errors are shown next to the field they belong to
 - Folder picker ("Browse…" dialog and autocomplete) for all path fields, limited to `webUI.browseRoots`
-- Status page (`/ui/status`): next run, running state and last result of every job, refreshed every 10 s
+- Configuration page grouped into sections (general, web UI, organizer profiles with their sources, duplicate detection jobs, save target) with a sidebar to jump between them
+- Status page (`/ui/status`): summary of running/waiting/idle jobs, then next run, running state and last result of every job, refreshed every 10 s
 - Saves either back to the active config file or to a separate config file
 
 Enable it in config:

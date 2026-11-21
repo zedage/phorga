@@ -78,11 +78,12 @@ For people who prefer not to edit YAML, Phorga can show a small **configuration 
 
 The page is meant to be usable without knowing the config format:
 
+- **Clear structure.** Settings are grouped into sections (general, web UI, organizer profiles, duplicate detection, where to save), with a sidebar to jump between them. Each profile, source and job is a card whose header sums it up, e.g. the source folder, `copy` or `move`, and its schedule. The language can be switched in the top bar.
 - **Dropdowns** for settings with fixed choices, such as `copy`/`move`, and a short **help text** under every field.
 - **Live previews.** While you type a folder structure such as `{year}/{month}`, you see the folder it produces for an example date. While you type a schedule, you see its next three run times.
 - **Errors next to the field.** "Validate" marks each wrong field directly, not only in a list at the top.
 - **Folder picker.** A "Browse…" button and suggestions while typing, so you can pick folders on the NAS instead of typing paths. For safety it only shows folders below the locations you list in `webUI.browseRoots`, and it never changes anything. Without that list, it is off ([ADR-0013](decisions/0013-folder-picker-limited-to-browse-roots.md)).
-- **Status page.** For every job: when it runs next, whether it is running right now or waiting for another job, and what the last run did (files processed, duplicates found, errors). While a job runs, you see what it is doing, for example "Scanning files: 1500 / 7402 (20 %)" with a progress bar and how long it has been running. It refreshes by itself every 10 seconds. The last results survive a restart. Dry runs are shown but not stored ([ADR-0014](decisions/0014-persisted-run-status-without-dry-runs.md)).
+- **Status page.** At the top, how many jobs are running, waiting or idle. Then, for every job: when it runs next, whether it is running right now or waiting for another job, and what the last run did (files processed, duplicates found, errors). While a job runs, you see what it is doing, for example "Scanning files: 1500 / 7402 (20 %)" with a progress bar and how long it has been running. It refreshes by itself every 10 seconds. The last results survive a restart. Dry runs are shown but not stored ([ADR-0014](decisions/0014-persisted-run-status-without-dry-runs.md)).
 
 - **Light and dark mode.** The page follows the light or dark setting of your system automatically. A switch in the top bar lets you force light or dark instead; your browser remembers the choice.
 

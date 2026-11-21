@@ -239,7 +239,7 @@ func TestStatusTableShowsJobs(t *testing.T) {
 	body := get(t, s, "/ui/status/table").Body.String()
 	for _, want := range []string{
 		"/in → /out", "2026-11-12 02:00:00", "running", "2026-11-11 02:00:00", "3s",
-		"7 processed · 1 skipped · 0 errors", "dry run", "Duplicate detection", "not run yet",
+		"<strong>7</strong> processed", "<strong>1</strong> skipped", "<strong>0</strong> errors", "dry run", "Duplicate detection", "not run yet",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("status table missing %q:\n%s", want, body)
@@ -352,6 +352,52 @@ func TestStatusTableShowsWaitingJob(t *testing.T) {
 		body := get(t, s, "/ui/status/table?lang="+lang).Body.String()
 		if !strings.Contains(body, `<span class="badge waiting">`+want+`</span>`) {
 			t.Errorf("%s: status table missing the waiting badge:\n%s", lang, body)
+		}
+	}
+}
+
+// Spec: WEB-011
+func TestStatusSummaryCountsEachJobOnce(t *testing.T) {
+	jobs := fakeStatus{
+		{Name: "a", Kind: "organizer", Running: true, Waiting: true},
+		{Name: "b", Kind: "dedup", Waiting: true},
+		{Name: "c", Kind: "dedup"},
+		{Name: "d", Kind: "organizer"},
+	}
+	got := statusData{Available: true, Jobs: jobs}.Counts()
+	if want := (statusCounts{Total: 4, Running: 1, Waiting: 1, Idle: 2}); got != want {
+		t.Fatalf("Counts() = %+v, want %+v", got, want)
+	}
+
+	s, err := New(Options{Address: "127.0.0.1:0", ConfigPath: sampleConfigPath(), Config: sampleConfig(), Status: jobs})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := get(t, s, "/ui/status/table?lang=de").Body.String()
+	for _, want := range []string{
+		`<span class="stat-value">4</span><span class="stat-label">Jobs</span>`,
+		`<span class="stat-value">1</span><span class="stat-label">Laufend</span>`,
+		`<span class="stat-value">2</span><span class="stat-label">Bereit</span>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("summary missing %q", want)
+		}
+	}
+}
+
+// Spec: WEB-005
+func TestLanguagePickerOnEveryPage(t *testing.T) {
+	s := newTestServer(t)
+	for _, page := range []string{"/ui", "/ui/status"} {
+		body := get(t, s, page+"?lang=it").Body.String()
+		if !strings.Contains(body, `<select id="languageSelect"`) {
+			t.Errorf("%s: missing language picker", page)
+		}
+		if !strings.Contains(body, `<option value="it" selected>Italiano</option>`) {
+			t.Errorf("%s: current language must be selected", page)
+		}
+		if strings.Contains(body, `<option value="en" selected>`) {
+			t.Errorf("%s: only the current language may be selected", page)
 		}
 	}
 }

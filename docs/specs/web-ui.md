@@ -61,15 +61,17 @@ On success it MUST report the written path and send the header `HX-Trigger: {"co
 ### WEB-005 Localization (de, en, it, fr)
 **Status:** implemented
 
-All UI text MUST come from server-side message catalogs for `de`, `en`, `it` and `fr`. The language is chosen from (1) the `lang` query/form parameter, (2) the `phorga_lang` cookie, (3) `Accept-Language`, or (4) English as the default. The chosen language is stored in the `phorga_lang` cookie. A missing key falls back to English, then to the key itself.
+All UI text MUST come from server-side message catalogs for `de`, `en`, `it` and `fr`. The language is chosen from (1) the `lang` query/form parameter, (2) the `phorga_lang` cookie, (3) `Accept-Language`, or (4) English as the default. The chosen language is stored in the `phorga_lang` cookie. A missing key falls back to English, then to the key itself. The top bar of every UI page MUST offer a language picker with the current language selected; choosing another one reloads the page with `?lang=<code>`.
 
 - **WHEN** `/ui?lang=fr` is requested
   **THEN** the heading is `Configuration Web Phorga`
 - **WHEN** `/ui?lang=es` is requested
   **THEN** the English UI is shown
+- **WHEN** `/ui/status?lang=it` is requested
+  **THEN** the top bar shows the language picker with `Italiano` selected
 
-**Code:** `internal/webui/i18n.go`, `internal/webui/server.go`
-**Tests:** `internal/webui/server_test.go#TestLocalizationUsesRequestedLanguageAndFallback`
+**Code:** `internal/webui/i18n.go`, `internal/webui/server.go`, `internal/webui/templates/layout.html`
+**Tests:** `internal/webui/server_test.go#TestLocalizationUsesRequestedLanguageAndFallback`, `internal/webui/usability_test.go#TestLanguagePickerOnEveryPage`
 
 ### WEB-006 Local/private use only
 **Status:** implemented
@@ -156,7 +158,7 @@ When `browseRoots` is not set, the picker controls MUST be hidden and both endpo
 ### WEB-011 Status page
 **Status:** implemented
 
-`GET /ui/status` MUST show one row per registered job (each organizer source, each enabled dedup job) with: kind and label (`<source> → <target>`, or the dedup sources), cron schedule, next planned run, running/waiting/idle ("waiting for another job" while the job is due but another job runs, RUN-002), and the last run's start, duration, counters and a dry-run badge. Jobs that have not run show "not run yet". The table MUST refresh itself every 10 s from `GET /ui/status/table` (fragment). Both endpoints answer `405` for other methods.
+`GET /ui/status` MUST show one row per registered job (each organizer source, each enabled dedup job) with: kind and label (`<source> → <target>`, or the dedup sources), cron schedule, next planned run, running/waiting/idle ("waiting for another job" while the job is due but another job runs, RUN-002), and the last run's start, duration, counters and a dry-run badge. Jobs that have not run show "not run yet". Above the table, the page MUST show how many jobs there are and how many are running, waiting and idle, counting each job once (running before waiting). The table and the summary MUST refresh themselves every 10 s from `GET /ui/status/table` (fragment). Both endpoints answer `405` for other methods.
 
 The last result of each job MUST be recorded after every run. Results of non-dry runs MUST be persisted atomically in `<stateDir>/run-status.json` and loaded at startup. Results of dry runs MUST be kept in memory only, so a dry run never writes a file. A failure to write the status file MUST be logged and never fail the job.
 
@@ -166,9 +168,11 @@ The last result of each job MUST be recorded after every run. Results of non-dry
   **THEN** the page shows it with a "dry run" badge, and `run-status.json` is not created or changed
 - **WHEN** a dedup job is due while an organizer run is busy
   **THEN** its row shows "waiting for another job"
+- **WHEN** one job runs, one waits and two are idle
+  **THEN** the summary shows 4 jobs, 1 running, 1 waiting and 2 idle
 
 **Code:** `internal/runstatus/runstatus.go`, `internal/webui/status.go`, `internal/webui/templates/status.html`, `internal/scheduler/scheduler.go`, `internal/fileops/fileops.go`, `cmd/phorga/main.go`
-**Tests:** `internal/runstatus/runstatus_test.go#TestFinishPersistsAndReloads`, `internal/runstatus/runstatus_test.go#TestDryRunIsNotWritten`, `internal/runstatus/runstatus_test.go#TestWriteErrorDoesNotPanic`, `internal/scheduler/scheduler_test.go#TestNextAndRunning`, `internal/webui/usability_test.go#TestStatusTableShowsJobs`, `internal/webui/usability_test.go#TestStatusTableShowsWaitingJob`, `internal/webui/usability_test.go#TestStatusPageWithoutSource`, `cmd/phorga/status_test.go#TestStatusBoardReportsRecordedRun`, `cmd/phorga/status_test.go#TestRun_StatusPageIsServed`
+**Tests:** `internal/runstatus/runstatus_test.go#TestFinishPersistsAndReloads`, `internal/runstatus/runstatus_test.go#TestDryRunIsNotWritten`, `internal/runstatus/runstatus_test.go#TestWriteErrorDoesNotPanic`, `internal/scheduler/scheduler_test.go#TestNextAndRunning`, `internal/webui/usability_test.go#TestStatusTableShowsJobs`, `internal/webui/usability_test.go#TestStatusTableShowsWaitingJob`, `internal/webui/usability_test.go#TestStatusPageWithoutSource`, `internal/webui/usability_test.go#TestStatusSummaryCountsEachJobOnce`, `cmd/phorga/status_test.go#TestStatusBoardReportsRecordedRun`, `cmd/phorga/status_test.go#TestRun_StatusPageIsServed`
 **Notes:** See [ADR-0014](../decisions/0014-persisted-run-status-without-dry-runs.md).
 
 ### WEB-012 Theme follows system color scheme
