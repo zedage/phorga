@@ -52,7 +52,7 @@ With `detectionMode: content`, the system MUST compute a perceptual hash (pHash)
 ### DUP-004 Cross-source matching
 **Status:** implemented
 
-Every file of every source in a job MUST be compared with every other file. Matches form groups: the first file found (in source order, then walk order) that is not yet in a group starts one, and every later file not yet in a group that matches it joins. Each file MUST belong to at most one group.
+Every file of every source in a job MUST be matched against every other file. Matches form groups: the first file found (in source order, then walk order) that is not yet in a group starts one, and every later file not yet in a group that matches it joins. Each file MUST belong to at most one group.
 
 From each group, exactly one file is kept as the original, chosen in this order:
 
@@ -74,8 +74,14 @@ A file whose resolution cannot be read counts as 0 pixels. Every other file of t
   **THEN** 2 pairs are reported, both against the file in the second source, which stays in place
 
 **Code:** `internal/dedup/dedup.go`, `internal/dedup/keep.go`
-**Tests:** `internal/dedup/dedup_test.go#TestDedup_CrossSource`, `internal/dedup/actions_test.go#TestDedup_GroupOfThree_MovesTwoWithoutErrors`, `internal/dedup/keep_test.go#TestDedup_KeepsCameraOriginalOverWhatsAppCopy`, `internal/dedup/keep_test.go#TestDedup_SameResolutionKeepsLargerFile`, `internal/dedup/keep_test.go#TestDedup_GroupOfThree_KeepsHighestResolution`
-**Notes:** Comparison is pairwise O(n²), see arc42 §10. Until 2026-11, groups of 3+ produced every pair (A-B, A-C, B-C), and moving the already-moved file counted as an error. That is now fixed. Until 2026-11, the file found first was always kept. Because `IMG-2022…` sorts before `IMG2022…`, a real run moved 740 camera originals and kept their WhatsApp copies. See [ADR-0018](../decisions/0018-keep-highest-resolution-duplicate.md). In content mode, the kept file and a duplicate were each matched against the file that started the group, not necessarily against each other.
+**Tests:** `internal/dedup/dedup_test.go#TestDedup_CrossSource`, `internal/dedup/actions_test.go#TestDedup_GroupOfThree_MovesTwoWithoutErrors`, `internal/dedup/keep_test.go#TestDedup_KeepsCameraOriginalOverWhatsAppCopy`, `internal/dedup/keep_test.go#TestDedup_SameResolutionKeepsLargerFile`, `internal/dedup/keep_test.go#TestDedup_GroupOfThree_KeepsHighestResolution`, `internal/dedup/index_test.go#TestHashIndex_FindsExactlyThePairwiseMatches`, `internal/dedup/index_test.go#TestMetadataIndex_FindsExactlyThePairwiseMatches`
+
+The matching MUST NOT compare every pair: an index MUST find each file's candidates, and it MUST find exactly the files a pairwise comparison would find, so the groups do not change. Metadata mode groups files by (size, capture date). Content mode uses multi-index hashing: the 64-bit hash is split into 6 chunks, and since two hashes within distance 5 share at least one unchanged chunk, only files that share a chunk are compared.
+
+- **WHEN** 100,000 pHashes are matched
+  **THEN** it takes well under a second (benchmark `BenchmarkFindDuplicates_Content100k`: about 0.1 s on an Apple M-series laptop, against roughly 5 billion comparisons pairwise)
+
+**Notes:** Until 2026-11, comparison was pairwise O(n²). A BK-tree was tried first and was slower than pairwise at this distance limit. Until 2026-11, groups of 3+ produced every pair (A-B, A-C, B-C), and moving the already-moved file counted as an error. That is now fixed. Until 2026-11, the file found first was always kept. Because `IMG-2022…` sorts before `IMG2022…`, a real run moved 740 camera originals and kept their WhatsApp copies. See [ADR-0018](../decisions/0018-keep-highest-resolution-duplicate.md). In content mode, the kept file and a duplicate were each matched against the file that started the group, not necessarily against each other.
 
 ### DUP-005 Action `moveToFolder`
 **Status:** implemented

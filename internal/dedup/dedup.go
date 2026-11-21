@@ -329,11 +329,13 @@ func computePHash(path string) (*goimagehash.ImageHash, error) {
 	return hash, nil
 }
 
-// findDuplicates compares all files pairwise. In content mode, v confirms
-// each pHash match with the detail check (DUP-014); v may be nil in other
-// modes. k chooses the file each group keeps.
+// findDuplicates groups matching files. An index finds the candidates of
+// each file, so the run does not compare every pair (DUP-004). In content
+// mode, v confirms each pHash match with the detail check (DUP-014); v may
+// be nil in other modes. k chooses the file each group keeps.
 func findDuplicates(ctx context.Context, files []fileInfo, detectionMode string, v *verifier, k *keeper) []duplicatePair {
 	var pairs []duplicatePair
+	idx := newMatchIndex(files, detectionMode)
 
 	// The first file not yet in a group starts one; every later file not
 	// yet in a group that matches it joins. Each group keeps its best file
@@ -348,11 +350,8 @@ func findDuplicates(ctx context.Context, files []fileInfo, detectionMode string,
 			continue
 		}
 		group := []int{i}
-		for j := i + 1; j < len(files); j++ {
-			if inGroup[j] {
-				continue
-			}
-			if !isDuplicate(files[i], files[j], detectionMode) {
+		for _, j := range idx.candidates(i) {
+			if inGroup[j] || !isDuplicate(files[i], files[j], detectionMode) {
 				continue
 			}
 			if detectionMode == "content" {
