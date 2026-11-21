@@ -2,6 +2,7 @@ package metadata
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -10,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rwcarlsen/goexif/exif"
 	"github.com/zedage/phorga/internal/exclude"
 )
 
@@ -80,12 +80,25 @@ func CountSupported(ctx context.Context, root string, ex *exclude.Matcher) int {
 }
 
 // ExtractDate attempts to extract the capture date from a media file.
-// Fallback order: EXIF DateTimeOriginal → filename date → source path date → file modification time.
-// Returns the resolved date and the method used ("exif", "filename", "path", "mtime").
+// Fallback order: embedded capture date → filename date → source path date →
+// file modification time (ORG-002).
+// Returns the resolved date and the method used ("exif", "quicktime",
+// "filename", "path", "mtime").
 func ExtractDate(path string) (time.Time, string, error) {
-	// Try EXIF first
-	if t, err := ExtractEXIFDate(path); err == nil {
-		return t, "exif", nil
+	return ResolveDate(path, true)
+}
+
+// ErrNoDate is returned by ResolveDate when no date source succeeded.
+var ErrNoDate = errors.New("no date found")
+
+// ResolveDate is ExtractDate with the modification time as last step only
+// when useModTime is set (organizer ignoreModTime, ORG-002). Without it, a
+// file with no embedded, filename or path date returns ErrNoDate.
+func ResolveDate(path string, useModTime bool) (time.Time, string, error) {
+	// Embedded metadata first: EXIF (JPEG, TIFF-based RAW, HEIC) or the
+	// QuickTime creation time (MP4, MOV).
+	if t, method, err := extractEmbeddedDate(path); err == nil {
+		return t, method, nil
 	}
 
 	// Try filename-based date extraction
@@ -96,6 +109,10 @@ func ExtractDate(path string) (time.Time, string, error) {
 	// Try source path-based date extraction (e.g. /photos/2019/07/video.mp4)
 	if t, err := extractPathDate(path); err == nil {
 		return t, "path", nil
+	}
+
+	if !useModTime {
+		return time.Time{}, "", fmt.Errorf("%w: %s", ErrNoDate, filepath.Base(path))
 	}
 
 	// Fallback to file modification time
@@ -250,26 +267,4 @@ func extractPathDate(path string) (time.Time, error) {
 	}
 
 	return time.Time{}, fmt.Errorf("no date found in path: %s", dir)
-}
-
-// ExtractEXIFDate reads only the EXIF capture date (DateTimeOriginal, falling
-// back to DateTime). Unlike ExtractDate it never uses filename, path or mtime.
-func ExtractEXIFDate(path string) (time.Time, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return time.Time{}, err
-	}
-	defer f.Close()
-
-	x, err := exif.Decode(f)
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	t, err := x.DateTime()
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	return t, nil
 }

@@ -19,12 +19,16 @@ type WebUIConfig struct {
 
 // OrganizerProfile defines a single organizer target with its sources.
 type OrganizerProfile struct {
-	DryRun          bool              `yaml:"dryRun" json:"dryRun"`
-	Ntfy            *NtfyConfig       `yaml:"ntfy,omitempty" json:"ntfy,omitempty"`
-	Target          string            `yaml:"target" json:"target"`
-	TargetStructure string            `yaml:"targetStructure" json:"targetStructure"`
-	FallbackFolder  string            `yaml:"fallbackFolder,omitempty" json:"fallbackFolder,omitempty"`
-	Sources         []OrganizerSource `yaml:"sources" json:"sources"`
+	DryRun          bool        `yaml:"dryRun" json:"dryRun"`
+	Ntfy            *NtfyConfig `yaml:"ntfy,omitempty" json:"ntfy,omitempty"`
+	Target          string      `yaml:"target" json:"target"`
+	TargetStructure string      `yaml:"targetStructure" json:"targetStructure"`
+	FallbackFolder  string      `yaml:"fallbackFolder,omitempty" json:"fallbackFolder,omitempty"`
+	// IgnoreModTime leaves out the modification time as the last date
+	// source, so files without a real date go to FallbackFolder or are
+	// skipped (ORG-002, ORG-003).
+	IgnoreModTime bool              `yaml:"ignoreModTime,omitempty" json:"ignoreModTime,omitempty"`
+	Sources       []OrganizerSource `yaml:"sources" json:"sources"`
 }
 
 // OrganizerSource defines a single source directory for the organizer.

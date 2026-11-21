@@ -1,10 +1,17 @@
 package dedup
 
 import (
+	"context"
+	"encoding/json"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/zedage/phorga/internal/config"
+	"github.com/zedage/phorga/internal/testutil"
 )
 
 // bruteForceCandidates is the pairwise comparison the index replaces.
@@ -92,5 +99,45 @@ func BenchmarkFindDuplicates_Content100k(b *testing.B) {
 		for i := range files {
 			idx.candidates(i)
 		}
+	}
+}
+
+// Spec: DUP-012, DUP-002
+func TestCache_OldNoDateEntriesAreRecomputed(t *testing.T) {
+	src := t.TempDir()
+	taken := time.Date(2023, 8, 19, 17, 42, 10, 0, time.UTC)
+	a := testutil.WriteHEIC(t, src, "a.heic", taken, false)
+	testutil.WriteHEIC(t, src, "b.heic", taken, true) // same size, same date
+
+	// A cache written by an older Phorga, which could not read HEIC dates.
+	cachePath := filepath.Join(t.TempDir(), CacheFileName)
+	old := map[string]map[string]any{}
+	for _, p := range []string{a, filepath.Join(src, "b.heic")} {
+		info, err := os.Stat(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		old[p] = map[string]any{"size": info.Size(), "mtime": info.ModTime(), "noExif": true}
+	}
+	data, _ := json.Marshal(old)
+	if err := os.WriteFile(cachePath, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cache := LoadCache(cachePath)
+	job := config.DuplicateDetection{Sources: []string{src}, DetectionMode: "metadata", Action: config.DuplicateAction{Method: "skip"}}
+	first := RunWithCache(context.Background(), job, cache)
+	if first.CacheHits != 0 {
+		t.Errorf("old 'no date' entries must not be used, hits = %d", first.CacheHits)
+	}
+
+	second := RunWithCache(context.Background(), job, cache)
+	if second.CacheHits != 2 {
+		t.Errorf("new entries must be used, hits = %d", second.CacheHits)
+	}
+	sizeA, _ := os.Stat(a)
+	sizeB, _ := os.Stat(filepath.Join(src, "b.heic"))
+	if sizeA.Size() == sizeB.Size() && first.DuplicatesPair != 1 {
+		t.Errorf("pairs = %d, want 1", first.DuplicatesPair)
 	}
 }

@@ -58,6 +58,7 @@
             {{template "field" (dict "R" $ "Name" (printf "organizer.%d.target" $i) "Label" "target" "Value" $org.Target "Help" "target" "Kind" "path")}}
             {{template "field" (dict "R" $ "Name" (printf "organizer.%d.targetStructure" $i) "Label" "target_structure" "Value" $org.TargetStructure "Help" "target_structure" "Kind" "structure")}}
             {{template "field" (dict "R" $ "Name" (printf "organizer.%d.fallbackFolder" $i) "Label" "fallback_folder" "Value" $org.FallbackFolder "Help" "fallback_folder" "Kind" "path")}}
+            {{template "checkbox" (dict "R" $ "Name" (printf "organizer.%d.ignoreModTime" $i) "Label" "ignore_mod_time" "Value" $org.IgnoreModTime "Help" "ignore_mod_time")}}
           </div>
           <input type="hidden" name="organizer.{{$i}}.sourceCount" value="{{len $org.Sources}}">
           {{range $j, $src := $org.Sources}}

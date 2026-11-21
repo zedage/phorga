@@ -108,7 +108,7 @@ func TestHandleNoDate_FallbackNeverOverwrites(t *testing.T) {
 
 	for _, content := range []string{"first", "second"} {
 		src := createTestFile(t, t.TempDir(), "nodate.jpg", content)
-		if err := handleNoDate(profile, source, src, mustStat(t, src), state.New(), &RunResult{}); err != nil {
+		if err := newJob(profile, source, state.New(), &RunResult{}).handleNoDate(src, mustStat(t, src)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -128,7 +128,7 @@ func TestHandleNoDate_CopyIsRemembered(t *testing.T) {
 	info := mustStat(t, src)
 	st := state.New()
 
-	if err := handleNoDate(profile, source, src, info, st, &RunResult{}); err != nil {
+	if err := newJob(profile, source, st, &RunResult{}).handleNoDate(src, info); err != nil {
 		t.Fatal(err)
 	}
 	if !st.IsProcessed(src, info.Size(), info.ModTime()) {

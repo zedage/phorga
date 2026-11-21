@@ -166,6 +166,9 @@ func validFormValues(cfg *config.Config, saveTarget string, separatePath string)
 		values.Set(prefix+".target", org.Target)
 		values.Set(prefix+".targetStructure", org.TargetStructure)
 		values.Set(prefix+".fallbackFolder", org.FallbackFolder)
+		if org.IgnoreModTime {
+			values.Set(prefix+".ignoreModTime", "on")
+		}
 		values.Set(prefix+".sourceCount", strconv.Itoa(len(org.Sources)))
 		for j, src := range org.Sources {
 			srcPrefix := prefix + ".sources." + strconv.Itoa(j)

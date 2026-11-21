@@ -28,7 +28,7 @@ The whole configuration MUST be validated at startup. On any problem, the proces
 Rules:
 - `organizer[]`: `target` required; `targetStructure` must contain only known tokens (ORG-009); at least one source
 - `organizer[].sources[]`: `path` required; `mode` ∈ {`move`, `copy`}; `schedule` must be a valid 5-field cron expression
-- `organizer[].sources[].duplicates`: `detectionMode` uses only `filename`/`filedate`/`exif`, without mixing `+` and `|`; `action.method` ∈ {`replace`, `addSuffix`, `moveToFolder`, `skip`}; `duplicateFolder` is required for `moveToFolder`
+- `organizer[].sources[].duplicates`: `detectionMode` uses only `filename`/`filedate`/`exif`, without mixing `+` and `|`; `action.method` ∈ {`replace`, `addSuffix`, `moveToFolder`, `skip`}; `duplicateFolder` is required for `moveToFolder`; `replace` is rejected when `detectionMode` would match on the filename alone (`filename`, or any `|` expression containing `filename`), see ORG-012
 - `duplicateDetection[]`: `schedule` required and valid; at least one source; `detectionMode` ∈ {`content`, `metadata`}; `action.method` ∈ {`moveToFolder`, `skip`}; `duplicateFolder` is required for `moveToFolder`
 - `webUI` (when `enabled`): `address` is required and must be in `host:port` form
 - An empty config (no organizer, no duplicate detection) is invalid
@@ -37,9 +37,11 @@ Rules:
   **THEN** startup fails with `organizer[0].target is required`
 - **WHEN** a `schedule` is `every day`
   **THEN** startup fails and names the invalid expression
+- **WHEN** an organizer source has `detectionMode: filename` and `action.method: replace`
+  **THEN** startup fails with `organizer[0].sources[0].duplicates.action.method 'replace' needs a detectionMode that compares filedate or exif …`
 
-**Code:** `internal/config/validate.go`, `cmd/phorga/main.go`
-**Tests:** `internal/config/config_test.go#TestValidateValid`, `internal/config/config_test.go#TestValidateMissingTarget`, `internal/config/config_test.go#TestValidateInvalidMode`, `internal/config/config_test.go#TestValidateInvalidCron`, `internal/config/config_test.go#TestValidateInvalidTargetToken`, `internal/config/config_test.go#TestValidateMoveToFolderRequiresDuplicateFolder`, `internal/config/config_test.go#TestValidateMixedOperators`, `internal/config/config_test.go#TestValidateDuplicateDetection`, `internal/config/config_test.go#TestValidateEmptyConfig`, `internal/config/config_test.go#TestValidateWebUIRequiresAddressWhenEnabled`, `internal/config/config_test.go#TestValidateProblemsReturnsIndividualMessages`, `cmd/phorga/main_test.go#TestRun_InvalidConfigExitsNonZero`
+**Code:** `internal/config/validate.go`, `internal/config/detection.go`, `cmd/phorga/main.go`
+**Tests:** `internal/config/detection_test.go#TestValidateReplaceNeedsMoreThanTheFilename`, `internal/config/detection_test.go#TestParseDetectionMode`, `internal/config/config_test.go#TestValidateValid`, `internal/config/config_test.go#TestValidateMissingTarget`, `internal/config/config_test.go#TestValidateInvalidMode`, `internal/config/config_test.go#TestValidateInvalidCron`, `internal/config/config_test.go#TestValidateInvalidTargetToken`, `internal/config/config_test.go#TestValidateMoveToFolderRequiresDuplicateFolder`, `internal/config/config_test.go#TestValidateMixedOperators`, `internal/config/config_test.go#TestValidateDuplicateDetection`, `internal/config/config_test.go#TestValidateEmptyConfig`, `internal/config/config_test.go#TestValidateWebUIRequiresAddressWhenEnabled`, `internal/config/config_test.go#TestValidateProblemsReturnsIndividualMessages`, `cmd/phorga/main_test.go#TestRun_InvalidConfigExitsNonZero`
 
 ### CFG-003 Config path resolution
 **Status:** implemented

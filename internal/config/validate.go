@@ -214,12 +214,18 @@ func validateExclude(prefix string, patterns []string) []string {
 func validateOrganizerDuplicate(prefix string, dup OrganizerDuplicate) []string {
 	var errs []string
 
-	if err := validateDetectionMode(dup.DetectionMode, []string{"filename", "filedate", "exif"}); err != nil {
+	expr, err := ParseDetectionMode(dup.DetectionMode)
+	if err != nil {
 		errs = append(errs, fmt.Sprintf("%s.detectionMode: %v", prefix, err))
 	}
 
 	if !validOrgDupMethods[dup.Action.Method] {
 		errs = append(errs, fmt.Sprintf("%s.action.method must be one of replace, addSuffix, moveToFolder, skip; got '%s'", prefix, dup.Action.Method))
+	}
+
+	// replace would overwrite any different photo that only shares the name.
+	if err == nil && dup.Action.Method == "replace" && expr.MatchesOnFilenameAlone() {
+		errs = append(errs, fmt.Sprintf("%s.action.method 'replace' needs a detectionMode that compares filedate or exif; with '%s' it would overwrite every different photo with the same name", prefix, dup.DetectionMode))
 	}
 
 	if dup.Action.Method == "moveToFolder" && dup.Action.DuplicateFolder == "" {
@@ -301,39 +307,6 @@ func validateTargetStructure(structure string) error {
 			return fmt.Errorf("unknown token '{%s}'; valid tokens: year/jahr/année/anno, month/monat/mois/mese, monthWithName, day/tag/jour/giorno, monthNumber, dayNumber", token)
 		}
 		rest = rest[start+end+1:]
-	}
-	return nil
-}
-
-// validateDetectionMode checks if a detection mode expression uses valid fields and operators.
-// Ensures only + or | is used, not both mixed.
-func validateDetectionMode(mode string, validFields []string) error {
-	if mode == "" {
-		return fmt.Errorf("detectionMode is required")
-	}
-
-	hasPlus := strings.Contains(mode, "+")
-	hasPipe := strings.Contains(mode, "|")
-	if hasPlus && hasPipe {
-		return fmt.Errorf("mixing '+' and '|' operators is not supported in '%s'", mode)
-	}
-
-	sep := "+"
-	if hasPipe {
-		sep = "|"
-	}
-
-	fields := strings.Split(mode, sep)
-	validSet := make(map[string]bool, len(validFields))
-	for _, f := range validFields {
-		validSet[f] = true
-	}
-
-	for _, field := range fields {
-		field = strings.TrimSpace(field)
-		if !validSet[field] {
-			return fmt.Errorf("unknown detection field '%s'; valid fields: %s", field, strings.Join(validFields, ", "))
-		}
 	}
 	return nil
 }

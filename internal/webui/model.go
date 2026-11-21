@@ -66,6 +66,7 @@ type organizerProfileForm struct {
 	Target          string
 	TargetStructure string
 	FallbackFolder  string
+	IgnoreModTime   bool
 	Sources         []organizerSourceForm
 }
 
@@ -115,6 +116,7 @@ func newFormFromConfig(cfg *config.Config) configForm {
 			Target:          profile.Target,
 			TargetStructure: profile.TargetStructure,
 			FallbackFolder:  profile.FallbackFolder,
+			IgnoreModTime:   profile.IgnoreModTime,
 			Sources:         make([]organizerSourceForm, 0, len(profile.Sources)),
 		}
 		if profile.Ntfy != nil {
@@ -188,6 +190,7 @@ func parseForm(r *http.Request) (configForm, error) {
 			Target:          strings.TrimSpace(r.FormValue(prefix + ".target")),
 			TargetStructure: strings.TrimSpace(r.FormValue(prefix + ".targetStructure")),
 			FallbackFolder:  strings.TrimSpace(r.FormValue(prefix + ".fallbackFolder")),
+			IgnoreModTime:   r.FormValue(prefix+".ignoreModTime") != "",
 		}
 		sourceCount := parseCount(r.FormValue(prefix + ".sourceCount"))
 		profile.Sources = make([]organizerSourceForm, 0, sourceCount)
@@ -253,6 +256,7 @@ func (f configForm) toConfig() *config.Config {
 			Target:          strings.TrimSpace(profile.Target),
 			TargetStructure: strings.TrimSpace(profile.TargetStructure),
 			FallbackFolder:  strings.TrimSpace(profile.FallbackFolder),
+			IgnoreModTime:   profile.IgnoreModTime,
 			Sources:         make([]config.OrganizerSource, 0, len(profile.Sources)),
 		}
 		if profile.NtfyURL != "" {

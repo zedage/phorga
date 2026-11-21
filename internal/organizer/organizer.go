@@ -2,6 +2,7 @@ package organizer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -36,11 +37,38 @@ type RunResult struct {
 	Canceled bool
 }
 
+// job holds what one organizer run works with.
+type job struct {
+	profile config.OrganizerProfile
+	source  config.OrganizerSource
+	// detect is the parsed duplicates.detectionMode (ORG-011); only set
+	// when the source has a duplicates block.
+	detect config.DetectionExpr
+	st     *state.State
+	result *RunResult
+}
+
+// newJob prepares a run. The configuration was validated at startup, so a
+// detectionMode that does not parse only happens in tests; it then matches
+// nothing.
+func newJob(profile config.OrganizerProfile, source config.OrganizerSource, st *state.State, result *RunResult) *job {
+	j := &job{profile: profile, source: source, st: st, result: result}
+	if source.Duplicates != nil {
+		if expr, err := config.ParseDetectionMode(source.Duplicates.DetectionMode); err == nil {
+			j.detect = expr
+		} else {
+			slog.Error("invalid duplicates.detectionMode, no file counts as a duplicate", "source", source.Path, "error", err)
+		}
+	}
+	return j
+}
+
 // Run executes the organizer for a single source against a profile. When ctx
 // is cancelled, it stops before the next file, saves the state and returns
 // with Canceled set (ORG-021).
 func Run(ctx context.Context, profile config.OrganizerProfile, source config.OrganizerSource, st *state.State, statePath string) RunResult {
 	result := RunResult{DryRun: profile.DryRun}
+	j := newJob(profile, source, st, &result)
 
 	slog.Info("organizer run starting",
 		"source", source.Path,
@@ -98,7 +126,7 @@ func Run(ctx context.Context, profile config.OrganizerProfile, source config.Org
 			return nil
 		}
 
-		if err := processFile(profile, source, path, info, st, &result); err != nil {
+		if err := j.processFile(path, info); err != nil {
 			slog.Error("failed to process file", "path", path, "error", err)
 			result.Errors++
 		}
@@ -139,170 +167,177 @@ func Run(ctx context.Context, profile config.OrganizerProfile, source config.Org
 	return result
 }
 
-func processFile(profile config.OrganizerProfile, source config.OrganizerSource, path string, info fs.FileInfo, st *state.State, result *RunResult) error {
-	// Extract date
-	date, method, err := metadata.ExtractDate(path)
+func (j *job) processFile(path string, info fs.FileInfo) error {
+	// Resolve the date; the mtime step is left out with ignoreModTime
+	// (ORG-002).
+	date, method, err := metadata.ResolveDate(path, !j.profile.IgnoreModTime)
 	if err != nil {
-		// No date available
-		return handleNoDate(profile, source, path, info, st, result)
+		if errors.Is(err, metadata.ErrNoDate) {
+			return j.handleNoDate(path, info)
+		}
+		return err
 	}
 
 	slog.Debug("date resolved", "path", path, "date", date, "method", method)
 
 	// Build target path
-	subDir, err := metadata.ResolveTargetPath(profile.TargetStructure, date)
+	subDir, err := metadata.ResolveTargetPath(j.profile.TargetStructure, date)
 	if err != nil {
-		slog.Error("failed to resolve target path", "source", path, "error", err)
-		result.Errors++
-		return err
+		return fmt.Errorf("resolving target path: %w", err)
 	}
-	targetDir := filepath.Join(profile.Target, subDir)
+	targetDir := filepath.Join(j.profile.Target, subDir)
 	targetPath := filepath.Join(targetDir, filepath.Base(path))
 
-	// Check for duplicates at target
-	if _, statErr := os.Stat(targetPath); statErr == nil {
-		// File already exists at target — handle duplicate
-		return handleDuplicate(profile, source, path, targetPath, info, st, result, method)
+	if targetInfo, statErr := os.Stat(targetPath); statErr == nil {
+		// The file is already where it belongs, e.g. because the target is
+		// inside the source (ORG-024).
+		if os.SameFile(info, targetInfo) {
+			slog.Debug("file is already in place", "path", path)
+			if !j.profile.DryRun {
+				j.st.MarkProcessed(path, info.Size(), info.ModTime())
+			}
+			j.result.Skipped++
+			return nil
+		}
+		// Another file has this name at the target: handle a duplicate.
+		return j.handleDuplicate(path, targetPath, info, method)
 	}
 
 	// Execute copy/move
-	return executeTransfer(profile, source, path, targetPath, info, st, result, method)
+	return j.executeTransfer(path, targetPath, info, method, false)
 }
 
-func handleNoDate(profile config.OrganizerProfile, source config.OrganizerSource, path string, info fs.FileInfo, st *state.State, result *RunResult) error {
-	if profile.FallbackFolder != "" {
+func (j *job) handleNoDate(path string, info fs.FileInfo) error {
+	if j.profile.FallbackFolder != "" {
 		// Never overwrite a file that is already in the fallback folder (ORG-020).
-		targetPath := fileops.UniquePath(filepath.Join(profile.FallbackFolder, filepath.Base(path)))
+		targetPath := fileops.UniquePath(filepath.Join(j.profile.FallbackFolder, filepath.Base(path)))
 
-		if profile.DryRun {
-			slog.Info("[DRY-RUN] would transfer to fallback", "source", path, "target", targetPath, "mode", source.Mode)
-			result.Processed++
+		if j.profile.DryRun {
+			slog.Info("[DRY-RUN] would transfer to fallback", "source", path, "target", targetPath, "mode", j.source.Mode)
+			j.result.Processed++
 			return nil
 		}
 
-		if err := transferFile(source.Mode, path, targetPath); err != nil {
+		if err := transferFile(j.source.Mode, path, targetPath, false); err != nil {
 			return fmt.Errorf("transferring to fallback: %w", err)
 		}
 		// Remember the file, so copy mode does not copy it again on every run.
-		st.MarkProcessed(path, info.Size(), info.ModTime())
-		result.Processed++
+		j.st.MarkProcessed(path, info.Size(), info.ModTime())
+		j.result.Processed++
+		slog.Info("file transferred to fallback folder", "source", path, "target", targetPath, "mode", j.source.Mode)
 		return nil
 	}
 
 	slog.Warn("skipping file (no date, no fallbackFolder)", "path", path)
-	result.Skipped++
+	j.result.Skipped++
 	return nil
 }
 
-func handleDuplicate(profile config.OrganizerProfile, source config.OrganizerSource, srcPath, targetPath string, info fs.FileInfo, st *state.State, result *RunResult, dateMethod string) error {
-	if source.Duplicates == nil {
+func (j *job) handleDuplicate(srcPath, targetPath string, info fs.FileInfo, dateMethod string) error {
+	dup := j.source.Duplicates
+	if dup == nil {
 		// No duplicate config → skip
 		slog.Info("skipping duplicate (no duplicate config)", "source", srcPath, "target", targetPath)
-		result.Skipped++
+		j.result.Skipped++
 		return nil
 	}
 
-	if !isDuplicate(source.Duplicates.DetectionMode, srcPath, targetPath) {
+	if !isDuplicate(j.detect, srcPath, targetPath) {
 		// Not actually a duplicate by detection criteria — add suffix
-		targetPath = fileops.SuffixedPath(targetPath)
-		return executeTransfer(profile, source, srcPath, targetPath, info, st, result, dateMethod)
+		return j.executeTransfer(srcPath, fileops.SuffixedPath(targetPath), info, dateMethod, false)
 	}
 
-	method := source.Duplicates.Action.Method
+	method := dup.Action.Method
 
-	if profile.DryRun {
+	if j.profile.DryRun {
 		slog.Info("[DRY-RUN] duplicate detected", "source", srcPath, "target", targetPath, "action", method)
-		result.Processed++
+		j.result.Processed++
 		return nil
 	}
 
 	switch method {
 	case "replace":
-		return executeTransfer(profile, source, srcPath, targetPath, info, st, result, dateMethod)
+		return j.executeTransfer(srcPath, targetPath, info, dateMethod, true)
 	case "addSuffix":
-		newTarget := fileops.SuffixedPath(targetPath)
-		return executeTransfer(profile, source, srcPath, newTarget, info, st, result, dateMethod)
+		return j.executeTransfer(srcPath, fileops.SuffixedPath(targetPath), info, dateMethod, false)
 	case "moveToFolder":
 		// Never overwrite a file that is already in the duplicate folder (ORG-020).
-		dupTarget := fileops.UniquePath(filepath.Join(source.Duplicates.Action.DuplicateFolder, filepath.Base(srcPath)))
-		return executeTransfer(profile, source, srcPath, dupTarget, info, st, result, dateMethod)
+		dupTarget := fileops.UniquePath(filepath.Join(dup.Action.DuplicateFolder, filepath.Base(srcPath)))
+		return j.executeTransfer(srcPath, dupTarget, info, dateMethod, false)
 	case "skip":
 		slog.Info("skipping duplicate", "source", srcPath, "target", targetPath)
-		result.Skipped++
+		j.result.Skipped++
 		return nil
 	default:
 		return fmt.Errorf("unknown duplicate action method: %s", method)
 	}
 }
 
-func isDuplicate(detectionMode, srcPath, targetPath string) bool {
-	// Parse detection mode (+ = AND, | = OR)
-	isOr := strings.Contains(detectionMode, "|")
-	sep := "+"
-	if isOr {
-		sep = "|"
-	}
-	fields := strings.Split(detectionMode, sep)
-
-	results := make([]bool, len(fields))
-	for i, field := range fields {
-		field = strings.TrimSpace(field)
-		switch field {
-		case "filename":
-			results[i] = filepath.Base(srcPath) == filepath.Base(targetPath)
-		case "filedate":
-			srcInfo, err1 := os.Stat(srcPath)
-			tgtInfo, err2 := os.Stat(targetPath)
-			results[i] = err1 == nil && err2 == nil && srcInfo.ModTime().Equal(tgtInfo.ModTime())
-		case "exif":
-			// Only real EXIF dates count; files without EXIF never match (ORG-011).
-			srcDate, err1 := metadata.ExtractEXIFDate(srcPath)
-			tgtDate, err2 := metadata.ExtractEXIFDate(targetPath)
-			results[i] = err1 == nil && err2 == nil && srcDate.Equal(tgtDate)
-		default:
-			results[i] = false
-		}
-	}
-
-	if isOr {
-		for _, r := range results {
-			if r {
-				return true
-			}
-		}
+// isDuplicate evaluates a parsed detectionMode for a file and the file with
+// the same name at the target (ORG-011).
+func isDuplicate(expr config.DetectionExpr, srcPath, targetPath string) bool {
+	if len(expr.Fields) == 0 {
 		return false
 	}
-	// AND
-	for _, r := range results {
-		if !r {
+	for _, field := range expr.Fields {
+		match := fieldMatches(field, srcPath, targetPath)
+		if expr.Any && match {
+			return true
+		}
+		if !expr.Any && !match {
 			return false
 		}
 	}
-	return true
+	return !expr.Any
 }
 
-func executeTransfer(profile config.OrganizerProfile, source config.OrganizerSource, srcPath, targetPath string, info fs.FileInfo, st *state.State, result *RunResult, dateMethod string) error {
-	if profile.DryRun {
-		slog.Info("[DRY-RUN] would transfer", "source", srcPath, "target", targetPath, "mode", source.Mode, "dateMethod", dateMethod)
-		result.Processed++
+func fieldMatches(field, srcPath, targetPath string) bool {
+	switch field {
+	case "filename":
+		return filepath.Base(srcPath) == filepath.Base(targetPath)
+	case "filedate":
+		srcInfo, err1 := os.Stat(srcPath)
+		tgtInfo, err2 := os.Stat(targetPath)
+		return err1 == nil && err2 == nil && srcInfo.ModTime().Equal(tgtInfo.ModTime())
+	case "exif":
+		// Only embedded capture dates count; files without one never
+		// match (ORG-011).
+		srcDate, err1 := metadata.ExtractEmbeddedDate(srcPath)
+		tgtDate, err2 := metadata.ExtractEmbeddedDate(targetPath)
+		return err1 == nil && err2 == nil && srcDate.Equal(tgtDate)
+	default:
+		return false
+	}
+}
+
+func (j *job) executeTransfer(srcPath, targetPath string, info fs.FileInfo, dateMethod string, replace bool) error {
+	if j.profile.DryRun {
+		slog.Info("[DRY-RUN] would transfer", "source", srcPath, "target", targetPath, "mode", j.source.Mode, "dateMethod", dateMethod)
+		j.result.Processed++
 		return nil
 	}
 
-	if err := transferFile(source.Mode, srcPath, targetPath); err != nil {
+	if err := transferFile(j.source.Mode, srcPath, targetPath, replace); err != nil {
 		return err
 	}
 
-	st.MarkProcessed(srcPath, info.Size(), info.ModTime())
-	result.Processed++
-	slog.Info("file transferred", "source", srcPath, "target", targetPath, "mode", source.Mode, "dateMethod", dateMethod)
+	j.st.MarkProcessed(srcPath, info.Size(), info.ModTime())
+	j.result.Processed++
+	slog.Info("file transferred", "source", srcPath, "target", targetPath, "mode", j.source.Mode, "dateMethod", dateMethod)
 	return nil
 }
 
-func transferFile(mode, src, dst string) error {
-	switch mode {
-	case "move":
+// transferFile copies or moves src to dst. Only replace may overwrite an
+// existing dst (ORG-012, ORG-020).
+func transferFile(mode, src, dst string, replace bool) error {
+	switch {
+	case mode == "move" && replace:
+		return fileops.AtomicMoveReplace(src, dst)
+	case mode == "move":
 		return fileops.AtomicMove(src, dst)
-	case "copy":
+	case mode == "copy" && replace:
+		return fileops.AtomicCopyReplace(src, dst)
+	case mode == "copy":
 		return fileops.AtomicCopy(src, dst)
 	default:
 		return fmt.Errorf("unknown mode: %s", mode)

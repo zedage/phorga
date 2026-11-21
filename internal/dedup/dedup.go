@@ -256,7 +256,8 @@ func (sc *scanner) fromCache(fi *fileInfo, mtime time.Time) bool {
 			fi.ExifDate = *e.ExifDate
 			return true
 		}
-		return e.NoExif
+		// A "no date" from an older reader may be wrong now (DUP-012).
+		return e.NoExif && e.DateReader >= dateReaderVersion
 	}
 	return false
 }
@@ -267,8 +268,9 @@ func (sc *scanner) fromCache(fi *fileInfo, mtime time.Time) bool {
 func (sc *scanner) compute(fi *fileInfo, mtime time.Time) bool {
 	switch sc.mode {
 	case "metadata":
-		// Only real EXIF dates count; files without EXIF never match (DUP-002).
-		date, err := metadata.ExtractEXIFDate(fi.Path)
+		// Only embedded capture dates count; files without one never match
+		// (DUP-002).
+		date, err := metadata.ExtractEmbeddedDate(fi.Path)
 		var pathErr *fs.PathError
 		if errors.As(err, &pathErr) {
 			slog.Debug("unable to read file", "path", fi.Path, "error", err)
@@ -279,9 +281,9 @@ func (sc *scanner) compute(fi *fileInfo, mtime time.Time) bool {
 		}
 		sc.cache.update(fi.Path, fi.Size, mtime, func(e *cacheEntry) {
 			if err == nil {
-				e.ExifDate, e.NoExif = &date, false
+				e.ExifDate, e.NoExif, e.DateReader = &date, false, 0
 			} else {
-				e.ExifDate, e.NoExif = nil, true
+				e.ExifDate, e.NoExif, e.DateReader = nil, true, dateReaderVersion
 			}
 		})
 		return true

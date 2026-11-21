@@ -29,17 +29,17 @@ func TestExtractDate_EXIFBeforeFilename(t *testing.T) {
 }
 
 // Spec: ORG-011, DUP-002
-func TestExtractEXIFDate_IgnoresFilenameAndMtime(t *testing.T) {
+func TestExtractEmbeddedDate_IgnoresFilenameAndMtime(t *testing.T) {
 	dir := t.TempDir()
 	path := testutil.WriteJPEG(t, dir, "IMG_20240715_143000.jpg", grey)
 
-	if _, err := ExtractEXIFDate(path); err == nil {
+	if _, err := ExtractEmbeddedDate(path); err == nil {
 		t.Fatal("expected error for JPEG without EXIF, even though the filename contains a date")
 	}
 
 	exifDate := time.Date(2022, 1, 2, 3, 4, 5, 0, time.UTC)
 	withExif := testutil.WriteJPEGWithEXIF(t, dir, "photo.jpg", grey, exifDate)
-	got, err := ExtractEXIFDate(withExif)
+	got, err := ExtractEmbeddedDate(withExif)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
