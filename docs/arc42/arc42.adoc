@@ -16,7 +16,7 @@ It runs as a daemon inside a Docker container, organizing media files by date me
 * Docker-first deployment, multi-arch (amd64, arm64).
 * Optional push notifications via ntfy.sh.
 
-The product view is in link:../product.md[product.md]. The exact, testable requirements are in link:../specs/README.md[docs/specs] (IDs `ORG-*`, `DUP-*`, `CFG-*`, `NTF-*`, `WEB-*`). This document does not repeat them.
+The product view is in link:../product.md[product.md]. The exact, testable requirements are in link:../specs/README.md[docs/specs] (IDs `ORG-*`, `DUP-*`, `CFG-*`, `NTF-*`, `WEB-*`, `RUN-*`). This document does not repeat them; it covers structure, runtime flow and deployment.
 
 === Quality Goals
 
@@ -25,7 +25,7 @@ The product view is in link:../product.md[product.md]. The exact, testable requi
 | Goal | Description
 
 | Reliability
-| File operations are atomic (temp+rename). Single file failures do not abort runs.
+| File operations are atomic and never replace an existing file (hard-link publish). Jobs run one at a time. Single file failures do not abort runs.
 
 | Resumability
 | State is persisted; the daemon resumes where it left off after restarts.
@@ -35,19 +35,6 @@ The product view is in link:../product.md[product.md]. The exact, testable requi
 
 | Portability
 | Runs on Linux, macOS, Windows, and Synology NAS.
-|===
-
-=== Stakeholders
-
-[cols="1,2"]
-|===
-| Role | Concern
-
-| End User
-| Reliable, unattended photo organization on a NAS.
-
-| Developer
-| Clean package structure, testable code, easy local development.
 |===
 
 == 2. Constraints
@@ -112,9 +99,10 @@ pho --> ntfy : sends notifications
 
 == 4. Solution Strategy
 
-* *Single binary, optional local web UI*: Organizer and Duplicate Detection run as independent goroutine-based cron jobs within one process; the same process can optionally expose a configuration web UI.
+* *Single binary, optional local web UI*: Organizer and Duplicate Detection are independent cron jobs within one process, run one at a time (ADR-0020); the same process can optionally expose a configuration web UI.
 * *Cron-based scheduling*: Uses `robfig/cron/v3` for in-process scheduling. No external cron dependency.
-* *Atomic file operations*: All writes use temp-file + rename to prevent partial files on crash.
+* *Atomic, no-clobber file operations*: Media is written to a temp file and published with a hard link, which never replaces an existing file; moves within one volume are a link plus unlink (ADR-0006, ADR-0019).
+* *Own readers for container formats*: Capture dates of HEIC and MP4/MOV are read by small pure-Go box walkers (ADR-0021).
 * *JSON state files*: Simple, inspectable, corruption-tolerant state persistence.
 * *Structured logging*: JSON-formatted `slog` output for observability.
 
@@ -181,19 +169,19 @@ package "internal" {
 | Decides which entries below a source are skipped: the fixed system and hidden entries (`@eaDir`, `#recycle`, `#snapshot`, dot-names) and the user's `exclude` patterns. Used by the organizer, duplicate detection and the file count, and by `config` to validate patterns (ADR-0016).
 
 | `scheduler`
-| Cron wrapper with overlap prevention (TryLock per job). Also reports the next run and running state per job, and computes next run times for the UI preview.
+| Cron wrapper. A job never overlaps with itself (TryLock per job), and only one job runs at a time (a one-slot semaphore; due jobs wait, ADR-0020). Reports the next run and the running/waiting state per job, and computes next run times for the UI preview.
 
 | `organizer`
 | Recursive source scanning, date resolution, copy/move, lightweight duplicate handling.
 
 | `dedup`
-| Independent duplicate detection (metadata, or perceptual hash confirmed by a detail check), cross-source matching. One shared fingerprint cache (`<stateDir>/dedup-cache.json`) keeps pHash/EXIF results, the detail fingerprints of candidates and the resolution of group members for unchanged files between runs (ADR-0015, ADR-0017). Each duplicate group keeps its highest-resolution file (ADR-0018).
+| Independent duplicate detection (metadata, or perceptual hash confirmed by a detail check), cross-source matching through an index (metadata buckets, multi-index hashing for pHash) instead of comparing every pair. One shared fingerprint cache (`<stateDir>/dedup-cache.json`) keeps pHash/EXIF results, the detail fingerprints of candidates and the resolution of group members for unchanged files between runs (ADR-0015, ADR-0017). Each duplicate group keeps its highest-resolution file (ADR-0018).
 
 | `metadata`
-| EXIF extraction (goexif), filename/path date parsing, file type detection, target path token resolution.
+| Date resolution: embedded dates (EXIF via goexif; HEIC `Exif` item and MP4/MOV `mvhd` via its own ISO box reader, ADR-0021), filename and path dates; file type detection; target path token resolution.
 
 | `fileops`
-| Atomic copy/move, atomic byte writes, directory creation, suffix generation.
+| Atomic, no-clobber copy and move (hard-link publish, same-volume link moves, `…Replace` variants only for the organizer's `replace`), atomic writes of Phorga's own files, suffix generation (ADR-0019).
 
 | `state`
 | JSON state read/write with atomic saves and corruption recovery.
@@ -224,13 +212,19 @@ repeat
   if (Already in state?) then (yes)
     :Skip;
   else (no)
-    :Extract date (EXIF → filename → source path → mtime);
+    :Resolve date (embedded EXIF/HEIC/MP4 → filename
+→ source path → mtime unless ignoreModTime);
     if (Date found?) then (yes)
       :Resolve target path from template;
       if (Target exists?) then (yes)
-        :Handle duplicate (replace/suffix/move/skip);
+        if (Same file as the source?) then (yes)
+          :Skip, already in place;
+        else (no)
+          :Handle duplicate (replace/suffix/move/skip);
+        endif
       else (no)
-        :Atomic copy or move;
+        :Copy (temp file, verify, hard link)
+or move (link + unlink, or copy + delete);
       endif
     else (no)
       if (fallbackFolder set?) then (yes)
@@ -260,14 +254,15 @@ start
 repeat
   :Next supported file;
   if (Unchanged and in cache?) then (yes)
-    :Take pHash / EXIF date from cache;
+    :Take pHash / embedded date from cache;
   else (no)
-    :Compute pHash or EXIF date;
+    :Compute pHash or embedded date;
     :Store in cache;
   endif
 repeat while (more files?)
 :Prune vanished entries, save cache;
-:Compare all pairs (O(n²)) by pHash;
+:Build an index (metadata buckets or
+pHash chunk tables) and find each file's candidates;
 if (content mode?) then (yes)
   :Confirm each pHash candidate by its detail
 fingerprint (from cache or computed and cached);
@@ -292,7 +287,7 @@ Files skipped by the fixed list or the job's `exclude` patterns (DUP-013, ADR-00
 
 === Shutdown
 
-On SIGINT/SIGTERM, `run` returns and its deferred `Scheduler.Stop()` names the running jobs in the log, cancels the context that every job receives, stops cron from starting new runs, and waits for running jobs (logging every 10 s). The organizer and duplicate detection check the context between files (ORG-021, DUP-010). Cancelled runs are not recorded or notified. A second signal uses the OS default and terminates the process (RUN-001).
+On SIGINT/SIGTERM, `run` returns and its deferred `Scheduler.Stop()` names the running jobs in the log, cancels the context that every job receives, stops cron from starting new runs, and waits for running jobs (logging every 10 s). Jobs that wait for the job slot return without running (RUN-002). The organizer and duplicate detection check the context between files (ORG-021, DUP-010). Cancelled runs are not recorded or notified. A second signal uses the OS default and terminates the process (RUN-001).
 
 === Web UI Request
 
@@ -327,7 +322,8 @@ participant scheduler
 participant "job (main)" as job
 participant runstatus
 actor Browser
-scheduler -> job : run (TryLock, running = true)
+scheduler -> scheduler : TryLock (job), wait for the one job slot (waiting = true)
+scheduler -> job : run (running = true)
 job -> job : organizer.Run / dedup.Run
 loop per file (WEB-014)
   job -> runstatus : Report(ctx, phase, done, total) -> SetProgress (memory only)
@@ -341,36 +337,9 @@ else
 end
 Browser -> webui : GET /ui/status/table (every 10 s)
 webui -> job : StatusSource.Jobs()
-job -> scheduler : Next(name), Running(name)
+job -> scheduler : Next(name), Running(name), Waiting(name)
 job -> runstatus : Last(name), Progress(name)
 webui --> Browser : table fragment
-@enduml
-----
-@startuml
-start
-:Cron triggers dedup job;
-:Count supported files (for progress);
-:Scan all sources recursively;
-:Take metadata or pHash from the cache, or compute and cache it;
-:Save cache, prune vanished files;
-:Compare all pairs (O(n²)) by pHash;
-if (content mode?) then (yes)
-  :Confirm each pHash candidate by its detail
-fingerprint (from cache or computed and cached);
-endif
-:Group matches; each group keeps the file with the
-most pixels (header, cached), then the larger one;
-:Collect duplicate pairs against the kept file;
-repeat
-  :Next duplicate pair;
-  if (dryRun?) then (yes)
-    :Log planned action;
-  else (no)
-    :Apply action (moveToFolder / skip);
-  endif
-repeat while (more pairs?)
-:Send ntfy notification;
-stop
 @enduml
 ----
 
@@ -402,9 +371,10 @@ app --> ntfy : HTTP POST
 @enduml
 ----
 
-* Image: `mnrd001/phorga` on Docker Hub, multi-arch (`linux/amd64`, `linux/arm64`), tags `latest` and `sha-<commit>`. Built and pushed by `.github/workflows/docker.yml` after every merge to `main`, only after build, vet and test pass. Go cross-compiles in the build stage; QEMU is only needed for the arm64 runtime stage.
-* Base image: `alpine:3.20`
+* Image: `mnrd001/phorga` on Docker Hub, multi-arch (`linux/amd64`, `linux/arm64`), tags `latest` and `sha-<commit>`. Built and pushed by `.github/workflows/docker.yml` after every merge to `main`, only after build, vet and test pass. Go cross-compiles in the build stage, and the runtime stage has no `RUN` steps, so no emulation is needed.
+* Base image: `gcr.io/distroless/static-debian13:nonroot` (no shell; CA certificates and time zone data included). Runs as uid 65532 unless `user:` sets the NAS user. Images before 2026-11-21 ran as root on Alpine; their state volume belongs to root (README › Docker).
 * State volume: `/data/state`
+* Mount the common parent of source and target once (e.g. `/volume1/photos`) to get same-volume moves; Linux refuses hard links across mount points (ORG-025).
 * Config mount: `/config/config.yaml` (read-only)
 * Timezone via `TZ` environment variable.
 * Web UI (optional): listens on `0.0.0.0:8080` inside the container; the port is published on the host loopback only (`127.0.0.1:8080:8080`).
@@ -412,9 +382,9 @@ app --> ntfy : HTTP POST
 == 8. Crosscutting Concepts
 
 === Atomic File Operations
-All file writes use a temp-file in the target directory followed by `os.Rename`. Move mode deletes the source only after successful rename.
+Media copies go to a temp file in the target directory. It is flushed, its size is checked against the source (ORG-019), and it gets the source's modification time (ORG-018). It then gets its final name with a hard link, which fails if the name is taken, so an existing file is never replaced, even one written by another program in the meantime (ORG-020, ADR-0019). Without hard-link support, the code falls back to check + rename. Moves within one volume are a hard link plus unlink, without copying (ORG-025); otherwise a move is a verified copy plus delete. Only the organizer's `replace` uses rename over an existing file. A transfer onto the source file itself is refused (ORG-024).
 
-For media files, the temp file is flushed to disk and its size is compared with the source before the rename (ORG-019). It also gets the source's modification time (ORG-018). Destinations in `fallbackFolder` and `duplicateFolder` are never overwritten; a taken name gets a random suffix (ORG-020, DUP-005).
+Phorga's own files (state, cache, run status, config) are written with temp file + rename and replace their previous version.
 
 === Error Resilience
 * Single file errors are logged and skipped; the run continues.
@@ -433,13 +403,7 @@ For media files, the temp file is flushed to disk and its size is compared with 
 * All actions, skips, and errors are logged with context.
 
 === Configuration UI
-* Optional HTTP server in the main process.
-* Server-rendered templates with HTMX-compatible validation and save endpoints. HTMX and the stylesheet are embedded in the binary, so no internet access is needed. The theme follows the system light/dark setting (WEB-012); a top-bar switch can override it per browser (WEB-013).
-* Displays the currently loaded config and can save to the active file or a separate file.
-* Select fields and help texts, with allowed values taken from the validation rules. Live previews of `targetStructure` and cron schedules. Validation errors are shown next to their field.
-* Folder picker and autocomplete below `webUI.browseRoots` only. Paths are checked after symlink resolution, and the picker never writes. It is off when no roots are set.
-* Status page with the next run, running state and last result per job, refreshed every 10 s.
-* Intended for local/private use unless protected externally.
+An optional HTTP server in the main process renders templates with HTMX; all assets are embedded, so it works offline. It shows the loaded config, validates with the same rules as startup, and saves to the active or a separate file. It is meant for local/private use only. The behavior is specified in link:../specs/web-ui.md[web-ui.md].
 
 == 9. Architectural Decisions
 
@@ -502,6 +466,15 @@ Decisions are recorded as ADRs in link:../decisions/README.md[docs/decisions]. T
 
 | link:../decisions/0018-keep-highest-resolution-duplicate.md[0018]
 | Each duplicate group keeps the file with the most pixels, then the larger one, then the first found
+
+| link:../decisions/0019-no-clobber-transfers-with-hard-links.md[0019]
+| No-clobber transfers and same-volume moves with hard links
+
+| link:../decisions/0020-run-one-job-at-a-time.md[0020]
+| Run one job at a time
+
+| link:../decisions/0021-built-in-heic-and-video-date-readers.md[0021]
+| Built-in date readers for HEIC and MP4/MOV
 |===
 
 == 10. Risks and Technical Debt
@@ -510,21 +483,25 @@ Decisions are recorded as ADRs in link:../decisions/README.md[docs/decisions]. T
 |===
 | Risk | Impact | Mitigation
 
-| Large libraries (O(n²) dedup)
-| Slow on very large collections
-| The fingerprint cache avoids re-reading unchanged files (DUP-012); comparing stays O(n²), a few seconds for 8,000 files. V2: index-based matching.
+| Large libraries
+| The first content scan decodes every image
+| The fingerprint cache avoids re-reading unchanged files (DUP-012). Matching uses an index, about 0.1 s for 100,000 hashes (DUP-004).
 
 | pHash memory on NAS
 | Memory spikes when hashing many large images
 | Sequential processing, one image at a time. The detail check keeps one 4 KB thumbnail per candidate in memory during a run.
 
-| goexif RAW format gaps
-| Some RAW files may lack EXIF support
-| Graceful fallback to mtime. Log unsupported formats.
+| Date reader gaps
+| Some RAW files lack EXIF support in goexif; cameras that write local time into `mvhd` are shifted by the zone offset; Apple's `com.apple.quicktime.creationdate` is not read
+| Graceful fallback to filename, path, mtime (ORG-002). `ignoreModTime` sends undated files to `fallbackFolder`.
 
-| No file locking
-| Concurrent external writes during scan
-| Lock-file per source prevents overlapping Phorga runs.
+| Filesystems without hard links
+| On exFAT and some network mounts, publishing falls back to check + rename, so a file written by another program in that instant could be replaced
+| Documented in README › Known Limits (ADR-0019). Phorga's own jobs no longer run in parallel (RUN-002).
+
+| Jobs wait for each other
+| A long duplicate detection run delays organizer runs and the reverse
+| The status page shows waiting jobs; spread the schedules (ADR-0020).
 
 | Local/private web UI only
 | Public exposure would be unsafe without additional controls. The folder picker reveals folder names below `browseRoots`.
@@ -557,10 +534,13 @@ Decisions are recorded as ADRs in link:../decisions/README.md[docs/decisions]. T
 | 64×64 grayscale thumbnail of a pHash candidate. Two candidates are duplicates only when no tile of it differs in more than 12 % of its brightness steps (DUP-014).
 
 | targetStructure
-| Path template with multilingual tokens. Supports English (`{year}`, `{month}`, `{day}`), German (`{jahr}`, `{monat}`, `{tag}`), French (`{année}`, `{mois}`, `{jour}`), and Italian (`{anno}`, `{mese}`, `{giorno}`). Tokens are case-sensitive for output formatting (e.g., `{monat}` → february, `{Monat}` → Februar, `{MONAT}` → FEBRUAR).
+| Path template for the target folders, with tokens in four languages (ORG-005 to ORG-008).
+
+| Embedded date
+| The capture date stored in the file itself: EXIF in JPEG, RAW and HEIC, or the `mvhd` creation time in MP4/MOV. The only date the duplicate checks compare (ORG-011, DUP-002).
 
 | fallbackFolder
-| Destination for files where no date can be determined.
+| Destination for files where no date can be determined; reachable only with `ignoreModTime` (ORG-003).
 
 | Dry Run
 | Mode that logs planned actions without modifying files.

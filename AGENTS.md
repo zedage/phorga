@@ -32,10 +32,10 @@ internal/
   organizer/         organizer run: walk sources, resolve date, transfer, duplicates
   dedup/             duplicate detection run: scan, pHash/metadata compare, act
   exclude/           which entries below a source are skipped (fixed NAS/hidden list + exclude patterns)
-  metadata/          date extraction (EXIF → filename → path → mtime), targetStructure tokens
-  fileops/           atomic copy/move, random suffixes
+  metadata/          date extraction (embedded EXIF/HEIC/MP4 → filename → path → mtime), targetStructure tokens
+  fileops/           atomic, no-clobber copy/move (hard-link publish), random suffixes
   state/             JSON state per profile target and source (resume)
-  scheduler/         cron wrapper with overlap prevention
+  scheduler/         cron wrapper: no self-overlap, one job at a time
   notify/            ntfy.sh client (fire-and-forget)
   webui/             HTTP server, form model, i18n, embedded templates
 docs/                product, specs, arc42, decisions (+ docs_test.go)
@@ -64,9 +64,10 @@ The demo config uses repo-relative paths and schedules every minute. Stop it wit
 - **Go:** standard `gofmt`, small packages under `internal/`, no CGO (Phorga must cross-compile for ARM NAS).
 - **Logging:** `log/slog` with the JSON handler. Use structured keys (`"source", path`), not formatted strings.
 - **Safety first:**
-  - All file writes are atomic (temp file + rename) via `internal/fileops`.
+  - All file writes are atomic via `internal/fileops`. Media is published with a hard link, so an existing file is never replaced; never call `os.Rename` onto a media destination yourself ([ADR-0019](docs/decisions/0019-no-clobber-transfers-with-hard-links.md)).
   - `move` deletes the source only after a successful, verified write.
-  - Transfers keep the file's modification time and never overwrite an existing file, except with the duplicate action `replace`. Use `fileops.UniquePath` for new destinations.
+  - Transfers keep the file's modification time and never overwrite an existing file, except with the duplicate action `replace` (`fileops.AtomicCopyReplace`/`AtomicMoveReplace`). Use `fileops.UniquePath` for new destinations.
+  - Jobs run one at a time ([RUN-002](docs/specs/runtime.md)); do not start file work outside the scheduler.
   - `dryRun` must never change a file, including state files. The one exception is the duplicate detection fingerprint cache, which never touches a photo ([ADR-0015](docs/decisions/0015-dedup-fingerprint-cache-written-in-dry-runs.md)).
   - An error on one file is logged and counted, and never aborts a run.
   - Jobs get a `context.Context` and MUST check it between files, so shutdown stays fast ([RUN-001](docs/specs/runtime.md)).
@@ -84,7 +85,7 @@ Every behavior change follows **spec → code + tests → human docs**.
 2. **Code and tests.** Implement the change, then write or update tests that exercise the scenarios. Put `// Spec: <ID>` above each covering test function.
 3. **Close the spec.** Set the status to `implemented` and update the `**Code:**` and `**Tests:**` lines. If something is not tested, write `none` and add a `**Gap:**` line.
 4. **Human docs.** Update [`docs/product.md`](docs/product.md) if users would notice the change. Update [arc42](docs/arc42/arc42.adoc) if structure, runtime flow or deployment changed. Update the [README](README.md) and `config.example.yaml` if usage or config changed.
-5. **Decision?** If you made a real trade-off, add an ADR in [`docs/decisions/`](docs/decisions/README.md) and link it from the spec and from arc42 §9.
+5. **Decision?** Only for a decision that is expensive to reverse or that someone would plausibly undo without knowing why (a format on disk, a safety rule, a dependency, process-wide behavior), add an ADR in [`docs/decisions/`](docs/decisions/README.md) and link it from the spec and from arc42 §9. Smaller choices go into the requirement's `**Notes:**` line.
 
 Pure refactorings with no behavior change need only step 2 (tests stay green) and possibly updated `Code:` paths.
 
@@ -96,7 +97,7 @@ When the code and a spec disagree, do not silently "fix" either one. Find out wh
 - [ ] The affected spec requirements are updated, with correct status, scenarios, and `Code`/`Tests` references
 - [ ] Tests carry `// Spec: <ID>` comments
 - [ ] product.md, arc42, README and `config.example.yaml` are updated where affected
-- [ ] An ADR is added if a real trade-off was made
+- [ ] An ADR is added if the change made a decision that is expensive to reverse (see step 5)
 - [ ] The PR description lists the spec IDs that were added or changed
 
 ## Notes for AI agents

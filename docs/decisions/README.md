@@ -28,4 +28,4 @@ Short records of decisions that shaped Phorga: what was decided, why, and what i
 
 ## Writing a new ADR
 
-Add an ADR when a change makes a real trade-off: something a future reader might want to undo without knowing why it was done. Copy the structure of an existing ADR, use the next number, add a row above, and link it from the affected spec requirement and from arc42 §9. Do not edit accepted ADRs in substance. If a decision changes, write a new ADR and set the old one to `superseded by NNNN`.
+Add an ADR only for a decision that is expensive to reverse or that a future reader would plausibly undo without knowing why: a format on disk, a safety rule, a dependency, a process-wide behavior. Most changes do not need one. A choice that only matters for one requirement belongs in that requirement's `**Notes:**` line, and an alternative you rejected in five minutes is not worth a record. Copy the structure of an existing ADR, use the next number, add a row above, and link it from the affected spec requirement and from arc42 §9. Do not edit accepted ADRs in substance. If a decision changes, write a new ADR and set the old one to `superseded by NNNN`.

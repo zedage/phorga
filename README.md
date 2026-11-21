@@ -4,7 +4,7 @@ Headless photo/video organizer and duplicate detector. Runs as a daemon, organiz
 
 ## Features
 
-- **Organizer**: date-based file organization (EXIF → filename → source path → mtime fallback), move/copy, per-source cron scheduling, lightweight duplicate handling, dry-run, state/resume. Transfers keep the file's modification time, are verified before the source is deleted, and never overwrite silently
+- **Organizer**: date-based file organization (embedded date from EXIF, HEIC or MP4/MOV → filename → source path → mtime fallback), move/copy, per-source cron scheduling, lightweight duplicate handling, dry-run, state/resume. Transfers keep the file's modification time, are verified before the source is deleted, never overwrite an existing file, and moves within one volume don't copy at all
 - **Duplicate Detection**: independent metadata- or content-based (perceptual hash) dedup across sources, moveToFolder/skip actions, dry-run
 - **Web UI**: optional built-in configuration UI with dropdowns, help texts, live previews, a folder picker and a job status page with live progress, in DE/EN/IT/FR
 - **Notifications**: optional ntfy.sh push notifications on run completion
@@ -40,7 +40,7 @@ organizer:
         mode: move                      # move | copy
         schedule: "0 2 * * *"
         duplicates:
-          detectionMode: filename       # filename, filedate, exif (EXIF date only); combine with + or |
+          detectionMode: filename       # filename, filedate, exif (embedded date only); combine with + or |
           action:
             method: skip                # replace | addSuffix | moveToFolder | skip
 
@@ -48,7 +48,7 @@ duplicateDetection:
   - enabled: true
     schedule: "0 4 * * *"
     sources: [/photos/organized, /photos/archive]
-    detectionMode: content              # content (pHash) | metadata (size + EXIF date)
+    detectionMode: content              # content (pHash) | metadata (size + embedded date)
     action:
       method: moveToFolder
       duplicateFolder: /photos/duplicates
@@ -95,7 +95,8 @@ Relative paths are resolved against the working directory. In Docker, use the pa
 |---|---|---|---|---|
 | `target` | path | yes | – | Folder the organized files go into. |
 | `targetStructure` | text | no | `{year}/{month}` | Subfolder template below `target`, see [tokens](#targetstructure-tokens). Unknown tokens are rejected. |
-| `fallbackFolder` | path | no | – | Where files go when no date can be determined. Without it, such files are skipped and logged. |
+| `fallbackFolder` | path | no | – | Where files go when no date can be determined (only possible with `ignoreModTime`). Without it, such files are skipped and logged. |
+| `ignoreModTime` | bool | no | `false` | Don't use the file modification time as the last date source. Files without an embedded, filename or folder date then go to `fallbackFolder` (or are skipped) instead of the folder of the day they were copied. |
 | `dryRun` | bool | no | `false` | Only log what would happen. No file is changed, not even Phorga's state. |
 | `ntfy.url` | URL | no | – | ntfy topic URL that receives a short summary after every run, e.g. `https://ntfy.sh/my-topic`. |
 | `sources` | list | yes, ≥ 1 | – | Folders to take files from, see below. |
@@ -109,8 +110,8 @@ Relative paths are resolved against the working directory. In Docker, use the pa
 | `schedule` | cron | yes | – | When this source runs, see [Schedules](#schedules). |
 | `exclude` | list of patterns | no | – | Files and folders below `path` to leave out, see [Skipped and excluded folders](#skipped-and-excluded-folders). |
 | `duplicates` | object | no | – | What to do when a file with the same name already exists in the target. Without it, such files are skipped and logged. |
-| `duplicates.detectionMode` | text | yes, if `duplicates` | – | When an existing file counts as the same: `filename` (same name), `filedate` (same modification time), `exif` (same EXIF capture date; files without EXIF never match). Combine with `+` (all must match) or `\|` (any may match), not both. If it doesn't match, the file is kept with a random suffix. |
-| `duplicates.action.method` | `replace` \| `addSuffix` \| `moveToFolder` \| `skip` | yes, if `duplicates` | – | `replace` overwrites the existing file; `addSuffix` keeps both (`photo-a3f9.jpg`); `moveToFolder` puts the new file into `duplicateFolder`; `skip` leaves it in the source. |
+| `duplicates.detectionMode` | text | yes, if `duplicates` | – | When an existing file counts as the same: `filename` (same name), `filedate` (same modification time), `exif` (same embedded capture date: EXIF in JPEG, RAW and HEIC, creation time in MP4/MOV; files without one never match). Combine with `+` (all must match) or `\|` (any may match), not both. If it doesn't match, the file is kept with a random suffix. |
+| `duplicates.action.method` | `replace` \| `addSuffix` \| `moveToFolder` \| `skip` | yes, if `duplicates` | – | `replace` overwrites the existing file (only allowed if `detectionMode` compares `filedate` or `exif`, e.g. `filename+exif`); `addSuffix` keeps both (`photo-a3f9.jpg`); `moveToFolder` puts the new file into `duplicateFolder`; `skip` leaves it in the source. |
 | `duplicates.action.duplicateFolder` | path | for `moveToFolder` | – | Folder for duplicates. Existing files there are never overwritten. |
 
 **`duplicateDetection[]`**: one entry per job
@@ -121,7 +122,7 @@ Relative paths are resolved against the working directory. In Docker, use the pa
 | `sources` | list of paths | yes, ≥ 1 | – | Folders to compare, including all subfolders. Duplicates are found across all of them. |
 | `exclude` | list of patterns | no | – | Files and folders below each source to leave out, see [Skipped and excluded folders](#skipped-and-excluded-folders). |
 | `schedule` | cron | yes | – | When the job runs, see [Schedules](#schedules). |
-| `detectionMode` | `content` \| `metadata` | yes | – | `content` compares what images look like (perceptual hash, then an area-by-area check so burst shots don't match; JPEG and PNG only); `metadata` compares file size and EXIF capture date (much faster; files without EXIF never match). |
+| `detectionMode` | `content` \| `metadata` | yes | – | `content` compares what images look like (perceptual hash, then an area-by-area check so burst shots don't match; JPEG and PNG only); `metadata` compares file size and embedded capture date (much faster; works for JPEG, RAW, HEIC, MP4 and MOV; files without one never match). |
 | `action.method` | `moveToFolder` \| `skip` | yes | – | `moveToFolder` moves each duplicate into `duplicateFolder` (the file with the most pixels stays, then the larger one, then the first found); `skip` only logs it. Nothing is ever deleted. |
 | `action.duplicateFolder` | path | for `moveToFolder` | – | Folder for duplicates. Existing files there are never overwritten. |
 | `dryRun` | bool | no | `false` | Only log what would be done. No photo is moved. |
@@ -158,7 +159,7 @@ Wildcards: `*` (any characters except `/`), `?` (one character), `[abc]`. There 
 
 ### Schedules
 
-`schedule` is a standard 5-field cron expression: `minute hour day-of-month month day-of-week`, evaluated in the **local time of the machine** (in Docker, set `TZ`, e.g. `TZ=Europe/Zurich`). A run never overlaps with itself: if the previous run is still busy, the next one is skipped.
+`schedule` is a standard 5-field cron expression: `minute hour day-of-month month day-of-week`, evaluated in the **local time of the machine** (in Docker, set `TZ`, e.g. `TZ=Europe/Zurich`). A run never overlaps with itself: if the previous run is still busy, the next one is skipped. Different jobs run **one at a time**: a job that is due while another one runs waits for it, and the status page shows it as "waiting for another job".
 
 | Expression | Runs |
 |---|---|
@@ -175,7 +176,7 @@ The web UI shows the next three run times while you type.
 |---|---|---|
 | `org-<target>-<source>.state.json` | organizer, one per source | Files already handled, so later runs skip them. Never written in a dry run. |
 | `run-status.json` | all jobs | Last result of each job for the status page. Dry runs are not stored. |
-| `dedup-cache.json` | duplicate detection, shared by all jobs | Fingerprints (pHash or EXIF date, plus a small thumbnail for look-alike candidates) of unchanged files, so later runs only read new or changed files. Written in dry runs too; it never touches a photo. Delete it to force a full scan. |
+| `dedup-cache.json` | duplicate detection, shared by all jobs | Fingerprints (pHash or embedded date, plus a small thumbnail for look-alike candidates) of unchanged files, so later runs only read new or changed files. Written in dry runs too; it never touches a photo. Delete it to force a full scan. |
 
 All files are written atomically. Deleting a state file makes the organizer look at all files of that source again (already organized files are recognized as duplicates).
 
@@ -286,12 +287,11 @@ targetStructure: "{year}/{monthNumber}_{Monat}"              # 2024/03_März
 
 ## Known Limits
 
-- **HEIC and video dates** come from the filename, the folder or the modification time. Phorga reads capture dates only from EXIF in JPEG and TIFF-based RAW files.
+- **Video dates** come from the movie header's creation time, which is UTC and converted to `TZ`. Some cameras write local time there instead, which shifts their videos by the zone offset. Set `TZ` in Docker, otherwise dates near midnight can land on the wrong day.
 - **Content duplicate detection** compares JPEG and PNG only. HEIC, RAW and videos never match. The first run decodes every image, which takes long on a large library; later runs only read new or changed files, thanks to the cache in `<stateDir>/dedup-cache.json`.
 - **Duplicate detection keeps the file with the most pixels**, then the larger file. An upscaled or enlarged copy therefore beats its original. Duplicates are only moved to `duplicateFolder`, never deleted, so review that folder before you delete anything.
 - **Other file types stay in the source without a log line**, for example DNG, GIF, WebP, TIFF, AVI, M4V, 3GP and sidecars (XMP, AAE). The photo and the video of a Live Photo can land in different folders.
-- **Organizer duplicates with `detectionMode: filename` and `method: replace`** overwrite a different photo that happens to have the same name. Prefer `filename+exif` with `skip` or `moveToFolder`.
-- **The container runs as root by default**, so new files on the NAS belong to root. Set `user: "<uid>:<gid>"` in `docker-compose.yml` to change that.
+- **Hard links:** Phorga gives finished files their name with a hard link, so a file another program writes at the same moment is never replaced. On filesystems without hard links (exFAT, some network mounts), it falls back to a check followed by a rename, which leaves a short window.
 
 **Before you point Phorga at your only copy of your photos:** make a backup, start with `mode: copy` and `dryRun: true`, check the log and the status page, and switch to `mode: move` only after a few clean runs.
 
@@ -325,10 +325,10 @@ internal/
   exclude/               Skipped system folders and exclude patterns
   organizer/             Date-based organization engine
   dedup/                 Duplicate detection engine
-  metadata/              EXIF, filename & path date extraction, target path resolution
+  metadata/              Embedded (EXIF, HEIC, MP4/MOV), filename & path dates, target path resolution
   fileops/               Atomic copy/move operations
   state/                 JSON state persistence (resume support)
-  scheduler/             Cron wrapper with overlap prevention
+  scheduler/             Cron wrapper, one job at a time
   notify/                ntfy.sh client
   runstatus/             Last run result per job for the status page
   webui/                 Optional built-in configuration UI (HTTP, templates, i18n, folder picker, status page)
@@ -350,13 +350,19 @@ docker compose up -d       # uses the image from Docker Hub, see docker-compose.
 
 Mount your source/target directories and `config.yaml` as volumes. State is persisted in `/data/state`. In `mode: move`, the source folder must be writable (no `:ro`).
 
-**Synology:** in Container Manager, search the registry for `mnrd001/phorga`, download `latest`, and create a project from [`docker-compose.yml`](docker-compose.yml) with your shared folders as volumes. Set `user:` to your NAS user (`id` in an SSH shell shows uid and gid), so organized files belong to you.
+The image is based on distroless (no shell) and runs as the unprivileged user `65532`. Set `user:` in `docker-compose.yml` to your NAS user (`id` in an SSH shell shows uid and gid), so Phorga can write your folders and organized files belong to you.
+
+**Fast moves:** a move within one volume renames the file instead of copying it, but Linux only allows that within one mount. Mount the common parent once (e.g. `/volume1/photos:/photos`) instead of `incoming` and `organized` separately.
+
+**Upgrading from an image before 2026-11-21:** older images ran as root, so an existing state volume belongs to root and the new user cannot write it. Either set `user: "0:0"` to keep running as root, or hand the volume to the user you set in `user:` once, on the NAS host: `sudo chown -R <uid>:<gid> "$(docker volume inspect -f '{{.Mountpoint}}' phorga-state)"` (with Compose, the volume name usually starts with the project name; `docker volume ls` shows it).
+
+**Synology:** in Container Manager, search the registry for `mnrd001/phorga`, download `latest`, and create a project from [`docker-compose.yml`](docker-compose.yml) with your shared folders as volumes. Set `user:` to your NAS user, as above.
 
 **Build it yourself:**
 
 ```bash
 docker build -t phorga .
-# Multi-arch; Go cross-compiles, only the small runtime stage needs QEMU for arm64
+# Multi-arch; Go cross-compiles and the runtime stage has no RUN steps, so no QEMU is needed
 docker buildx build --platform linux/amd64,linux/arm64 -t <registry>/phorga --push .
 ```
 

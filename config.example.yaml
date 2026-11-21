@@ -28,7 +28,8 @@ organizer:
       url: https://ntfy.sh/your-topic # optional
     target: /path/to/organized/photos
     targetStructure: "{year}/{month}" # {year} 4-digit, {month} 2-digit, {monthWithName} 01-january, {day} 2-digit (01-31)
-    fallbackFolder: /path/to/fallback # optional, for files without usable date metadata
+    fallbackFolder: /path/to/fallback # optional, for files without a date (needs ignoreModTime: true)
+    ignoreModTime: false # true = don't fall back to the modification time; undated files go to fallbackFolder
     sources:
       - path: /path/to/photos1
         mode: move # move or copy
@@ -39,9 +40,9 @@ organizer:
         #   - "*_edited.jpg"   # a file name pattern
         #   - 2019/Scans       # a path relative to this source
         duplicates:
-          detectionMode: filename # filename, filedate, exif (EXIF date only); use '+' (AND) or '|' (OR), not mixed
+          detectionMode: filename # filename, filedate, exif (embedded date only: EXIF/HEIC/MP4/MOV); use '+' (AND) or '|' (OR), not mixed
           action:
-            method: skip # replace, addSuffix, moveToFolder, skip
+            method: skip # replace (needs filedate or exif in detectionMode), addSuffix, moveToFolder, skip
         schedule: "0 2 * * *" # daily at 02:00
 
       - path: /path/to/photos2
@@ -64,7 +65,7 @@ duplicateDetection:
       - /path/to/photos2
     # exclude: # optional, same patterns as for organizer sources
     #   - Export
-    detectionMode: content # content (pHash) | metadata (size + EXIF date; files without EXIF never match)
+    detectionMode: content # content (pHash) | metadata (size + embedded date: EXIF, HEIC, MP4/MOV; files without one never match)
     action:
       method: moveToFolder # moveToFolder | skip
       duplicateFolder: /path/to/duplicates
