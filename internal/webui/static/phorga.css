@@ -298,6 +298,7 @@ tbody tr:hover { background: var(--surface-2); }
 .badge.running { background: var(--accent-soft); color: var(--accent); }
 .badge.running::before { animation: pulse 1.4s ease-in-out infinite; }
 .badge.dry { background: var(--warn-bg); color: var(--warn-fg); }
+.badge.waiting { background: var(--warn-bg); color: var(--warn-fg); }
 @keyframes pulse { 50% { opacity: .3; } }
 
 /* Live progress of a running job (WEB-014) */

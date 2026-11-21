@@ -337,3 +337,21 @@ func TestThemeSwitchIsRendered(t *testing.T) {
 		}
 	}
 }
+
+// Spec: RUN-002, WEB-011
+func TestStatusTableShowsWaitingJob(t *testing.T) {
+	jobs := fakeStatus{
+		{Name: "organizer-0-source-0", Kind: "organizer", Label: "/in → /out", Schedule: "0 2 * * *", Running: true},
+		{Name: "dedup-0", Kind: "dedup", Label: "/out", Schedule: "0 2 * * *", Waiting: true},
+	}
+	s, err := New(Options{Address: "127.0.0.1:0", ConfigPath: sampleConfigPath(), Config: sampleConfig(), Status: jobs})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for lang, want := range map[string]string{"en": "waiting for another job", "de": "wartet auf anderen Job"} {
+		body := get(t, s, "/ui/status/table?lang="+lang).Body.String()
+		if !strings.Contains(body, `<span class="badge waiting">`+want+`</span>`) {
+			t.Errorf("%s: status table missing the waiting badge:\n%s", lang, body)
+		}
+	}
+}

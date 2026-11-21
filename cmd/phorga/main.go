@@ -271,6 +271,7 @@ func (b *statusBoard) Jobs() []webui.JobStatus {
 		js := webui.JobStatus{
 			Name: j.name, Kind: j.kind, Label: j.label, Schedule: j.schedule,
 			Next: b.sched.Next(j.name), Running: b.sched.Running(j.name),
+			Waiting: b.sched.Waiting(j.name),
 		}
 		if p, ok := b.recorder.Progress(j.name); ok && js.Running {
 			js.Phase, js.Done, js.Total, js.Since = p.Phase, p.Done, p.Total, p.Start

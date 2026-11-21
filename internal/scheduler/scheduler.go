@@ -23,12 +23,18 @@ var waitLogInterval = 10 * time.Second
 type Job func(ctx context.Context)
 
 // Scheduler wraps robfig/cron with overlap prevention and cancellation.
+// Jobs run one at a time: a job whose time comes while another job runs
+// waits for it (RUN-002).
 type Scheduler struct {
 	cron    *cron.Cron
 	locks   map[string]*sync.Mutex
 	entries map[string]cron.EntryID
 	running map[string]*atomic.Bool
+	waiting map[string]*atomic.Bool
 	mu      sync.Mutex
+
+	// exclusive is held by the one job that runs (RUN-002).
+	exclusive chan struct{}
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -43,8 +49,11 @@ func New() *Scheduler {
 		locks:   make(map[string]*sync.Mutex),
 		entries: make(map[string]cron.EntryID),
 		running: make(map[string]*atomic.Bool),
-		ctx:     ctx,
-		cancel:  cancel,
+		waiting: make(map[string]*atomic.Bool),
+
+		exclusive: make(chan struct{}, 1),
+		ctx:       ctx,
+		cancel:    cancel,
 	}
 }
 
@@ -72,16 +81,19 @@ func NextTimes(expr string, from time.Time, n int) ([]time.Time, error) {
 }
 
 // Register adds a named job with a cron expression. The job will not run
-// concurrently with itself — overlapping invocations are skipped and logged.
+// concurrently with itself — overlapping invocations are skipped and logged
+// (ORG-010). While another job runs, it waits for that job (RUN-002).
 // After Stop was called, the job is not started any more.
 func (s *Scheduler) Register(name, schedule string, fn Job) (cron.EntryID, error) {
 	s.mu.Lock()
 	if _, ok := s.locks[name]; !ok {
 		s.locks[name] = &sync.Mutex{}
 		s.running[name] = &atomic.Bool{}
+		s.waiting[name] = &atomic.Bool{}
 	}
 	lock := s.locks[name]
 	running := s.running[name]
+	waiting := s.waiting[name]
 	s.mu.Unlock()
 
 	wrappedFn := func() {
@@ -95,6 +107,12 @@ func (s *Scheduler) Register(name, schedule string, fn Job) (cron.EntryID, error
 		defer lock.Unlock()
 		s.active.Add(1)
 		defer s.active.Done()
+
+		if !s.acquire(name, waiting) {
+			return // shutting down while waiting
+		}
+		defer func() { <-s.exclusive }()
+
 		running.Store(true)
 		defer running.Store(false)
 
@@ -120,6 +138,28 @@ func (s *Scheduler) Register(name, schedule string, fn Job) (cron.EntryID, error
 	return id, nil
 }
 
+// acquire waits until no other job runs (RUN-002). It returns false when
+// the scheduler stops first.
+func (s *Scheduler) acquire(name string, waiting *atomic.Bool) bool {
+	select {
+	case s.exclusive <- struct{}{}:
+	default:
+		slog.Info("waiting for another job to finish", "job", name, "running", s.runningJobs())
+		waiting.Store(true)
+		defer waiting.Store(false)
+		select {
+		case s.exclusive <- struct{}{}:
+		case <-s.ctx.Done():
+			return false
+		}
+	}
+	if s.ctx.Err() != nil {
+		<-s.exclusive
+		return false
+	}
+	return true
+}
+
 // Next returns the next planned run of the named job, or the zero time if
 // the job is unknown or the scheduler has not been started.
 func (s *Scheduler) Next(name string) time.Time {
@@ -138,6 +178,15 @@ func (s *Scheduler) Running(name string) bool {
 	r, ok := s.running[name]
 	s.mu.Unlock()
 	return ok && r.Load()
+}
+
+// Waiting reports whether the named job is due but waits for another job
+// to finish (RUN-002).
+func (s *Scheduler) Waiting(name string) bool {
+	s.mu.Lock()
+	w, ok := s.waiting[name]
+	s.mu.Unlock()
+	return ok && w.Load()
 }
 
 // runningJobs returns the names of all jobs that are executing right now.

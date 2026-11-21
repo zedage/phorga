@@ -51,7 +51,7 @@
       <td><strong>{{call $.T (printf "kind_%s" .Kind)}}</strong><br><span class="muted">{{.Label}}</span></td>
       <td><code>{{.Schedule}}</code></td>
       <td>{{fmtTime .Next}}</td>
-      <td>{{if .Running}}<span class="badge running">{{call $.T "status_running"}}</span>{{template "progress" (dict "T" $.T "J" .)}}{{else}}<span class="badge">{{call $.T "status_idle"}}</span>{{end}}</td>
+      <td>{{if .Running}}<span class="badge running">{{call $.T "status_running"}}</span>{{template "progress" (dict "T" $.T "J" .)}}{{else if .Waiting}}<span class="badge waiting">{{call $.T "status_waiting"}}</span>{{else}}<span class="badge">{{call $.T "status_idle"}}</span>{{end}}</td>
       {{if .HasLast}}
       <td>{{fmtTime .LastStart}}{{if .DryRun}} <span class="badge dry">{{call $.T "status_dry_run"}}</span>{{end}}</td>
       <td>{{fmtDuration .LastDuration}}</td>

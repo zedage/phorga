@@ -22,6 +22,7 @@ Short records of decisions that shaped Phorga: what was decided, why, and what i
 | [0016](0016-fixed-skip-list-and-simple-exclude-patterns.md) | Fixed skip list for system folders, simple exclude patterns | 2026-11-15 | accepted |
 | [0017](0017-detail-check-after-phash.md) | Detail check after the pHash match in content mode | 2026-11-16 | accepted |
 | [0018](0018-keep-highest-resolution-duplicate.md) | Keep the highest-resolution file of a duplicate group | 2026-11-17 | accepted |
+| [0020](0020-run-one-job-at-a-time.md) | Run one job at a time | 2026-11-21 | accepted |
 
 ## Writing a new ADR
 

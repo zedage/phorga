@@ -156,7 +156,7 @@ When `browseRoots` is not set, the picker controls MUST be hidden and both endpo
 ### WEB-011 Status page
 **Status:** implemented
 
-`GET /ui/status` MUST show one row per registered job (each organizer source, each enabled dedup job) with: kind and label (`<source> → <target>`, or the dedup sources), cron schedule, next planned run, running/idle, and the last run's start, duration, counters and a dry-run badge. Jobs that have not run show "not run yet". The table MUST refresh itself every 10 s from `GET /ui/status/table` (fragment). Both endpoints answer `405` for other methods.
+`GET /ui/status` MUST show one row per registered job (each organizer source, each enabled dedup job) with: kind and label (`<source> → <target>`, or the dedup sources), cron schedule, next planned run, running/waiting/idle ("waiting for another job" while the job is due but another job runs, RUN-002), and the last run's start, duration, counters and a dry-run badge. Jobs that have not run show "not run yet". The table MUST refresh itself every 10 s from `GET /ui/status/table` (fragment). Both endpoints answer `405` for other methods.
 
 The last result of each job MUST be recorded after every run. Results of non-dry runs MUST be persisted atomically in `<stateDir>/run-status.json` and loaded at startup. Results of dry runs MUST be kept in memory only, so a dry run never writes a file. A failure to write the status file MUST be logged and never fail the job.
 
@@ -164,9 +164,11 @@ The last result of each job MUST be recorded after every run. Results of non-dry
   **THEN** the status page still shows that run with its counters
 - **WHEN** a dedup job with `dryRun: true` finishes
   **THEN** the page shows it with a "dry run" badge, and `run-status.json` is not created or changed
+- **WHEN** a dedup job is due while an organizer run is busy
+  **THEN** its row shows "waiting for another job"
 
 **Code:** `internal/runstatus/runstatus.go`, `internal/webui/status.go`, `internal/webui/templates/status.html`, `internal/scheduler/scheduler.go`, `internal/fileops/fileops.go`, `cmd/phorga/main.go`
-**Tests:** `internal/runstatus/runstatus_test.go#TestFinishPersistsAndReloads`, `internal/runstatus/runstatus_test.go#TestDryRunIsNotWritten`, `internal/runstatus/runstatus_test.go#TestWriteErrorDoesNotPanic`, `internal/scheduler/scheduler_test.go#TestNextAndRunning`, `internal/webui/usability_test.go#TestStatusTableShowsJobs`, `internal/webui/usability_test.go#TestStatusPageWithoutSource`, `cmd/phorga/status_test.go#TestStatusBoardReportsRecordedRun`, `cmd/phorga/status_test.go#TestRun_StatusPageIsServed`
+**Tests:** `internal/runstatus/runstatus_test.go#TestFinishPersistsAndReloads`, `internal/runstatus/runstatus_test.go#TestDryRunIsNotWritten`, `internal/runstatus/runstatus_test.go#TestWriteErrorDoesNotPanic`, `internal/scheduler/scheduler_test.go#TestNextAndRunning`, `internal/webui/usability_test.go#TestStatusTableShowsJobs`, `internal/webui/usability_test.go#TestStatusTableShowsWaitingJob`, `internal/webui/usability_test.go#TestStatusPageWithoutSource`, `cmd/phorga/status_test.go#TestStatusBoardReportsRecordedRun`, `cmd/phorga/status_test.go#TestRun_StatusPageIsServed`
 **Notes:** See [ADR-0014](../decisions/0014-persisted-run-status-without-dry-runs.md).
 
 ### WEB-012 Theme follows system color scheme

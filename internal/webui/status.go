@@ -13,6 +13,9 @@ type JobStatus struct {
 	Schedule string
 	Next     time.Time
 	Running  bool
+	// Waiting is true while the job is due but waits for another job to
+	// finish (RUN-002).
+	Waiting bool
 
 	// Progress of the current run (WEB-014); Phase is empty when unknown.
 	Phase string
