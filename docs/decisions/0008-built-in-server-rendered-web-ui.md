@@ -1,6 +1,6 @@
 # ADR-0008: Optional built-in, server-rendered web UI with HTMX
 
-- **Status:** accepted
+- **Status:** superseded in part by [ADR-0023](0023-optional-web-ui-password.md) (authentication)
 - **Date:** 2026-06-06
 - **Specs:** WEB-001 … WEB-006
 

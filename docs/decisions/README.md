@@ -11,8 +11,8 @@ Short records of decisions that shaped Phorga: what was decided, why, and what i
 | [0005](0005-json-state-files.md) | JSON flat files for state, no database | 2026-05-17 | accepted |
 | [0006](0006-atomic-file-operations.md) | Atomic file operations (temp file + rename) | 2026-05-17 | accepted |
 | [0007](0007-rename-to-phorga.md) | Rename the project from Phorganizer to Phorga | 2026-05-30 | accepted |
-| [0008](0008-built-in-server-rendered-web-ui.md) | Optional built-in, server-rendered web UI with HTMX | 2026-06-06 | accepted |
-| [0009](0009-ui-save-destination-and-no-hot-reload.md) | UI saves to active or separate file, no hot reload | 2026-06-06 | accepted |
+| [0008](0008-built-in-server-rendered-web-ui.md) | Optional built-in, server-rendered web UI with HTMX | 2026-06-06 | superseded in part by 0023 |
+| [0009](0009-ui-save-destination-and-no-hot-reload.md) | UI saves to active or separate file, no hot reload | 2026-06-06 | superseded in part by 0022 |
 | [0010](0010-multilingual-tokens-by-name.md) | Language chosen by token name, case controls rendering | 2026-06-06 | accepted |
 | [0011](0011-specs-and-agents-md-instead-of-openspec.md) | Specs in `docs/specs` + `AGENTS.md` instead of openspec | 2026-11-10 | accepted |
 | [0012](0012-duplicate-checks-require-real-exif.md) | Duplicate checks on dates require real EXIF | 2026-11-10 | accepted |
@@ -25,6 +25,8 @@ Short records of decisions that shaped Phorga: what was decided, why, and what i
 | [0019](0019-no-clobber-transfers-with-hard-links.md) | No-clobber transfers and same-volume moves with hard links | 2026-11-21 | accepted |
 | [0020](0020-run-one-job-at-a-time.md) | Run one job at a time | 2026-11-21 | accepted |
 | [0021](0021-built-in-heic-and-video-date-readers.md) | Built-in date readers for HEIC and MP4/MOV | 2026-11-21 | accepted |
+| [0022](0022-live-apply-and-setup-mode.md) | Apply UI changes live, start without a config | 2026-11-21 | accepted |
+| [0023](0023-optional-web-ui-password.md) | Optional web UI password from the environment, cross-site writes rejected | 2026-11-21 | accepted |
 
 ## Writing a new ADR
 

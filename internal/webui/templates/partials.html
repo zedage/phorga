@@ -22,7 +22,7 @@
   <input type="text" class="mono" id="{{fid .Name}}" name="{{.Name}}" value="{{.Value}}" spellcheck="false"{{if .Help}} aria-describedby="{{fid .Name}}-help"{{end}} hx-post="/ui/preview/schedule?field={{urlquery .Name}}" hx-trigger="input changed delay:300ms, load" hx-target="#{{fid .Name}}-preview">
   <div class="preview" id="{{fid .Name}}-preview" aria-live="polite"></div>
   {{else}}
-  <input type="text" id="{{fid .Name}}" name="{{.Name}}" value="{{.Value}}" spellcheck="false"{{if .Help}} aria-describedby="{{fid .Name}}-help"{{end}}>
+  <input type="text" id="{{fid .Name}}" name="{{.Name}}" value="{{.Value}}" spellcheck="false"{{if .Placeholder}} placeholder="{{.Placeholder}}"{{end}}{{if .Help}} aria-describedby="{{fid .Name}}-help"{{end}}>
   {{end}}
   {{if .Help}}<small class="help" id="{{fid .Name}}-help">{{call .R.T (printf "help_%s" .Help)}}</small>{{end}}
   <div class="field-error" id="err-{{fid .Name}}">{{call .R.FErr .Name}}</div>
@@ -41,13 +41,17 @@
 </div>
 {{end}}
 
+{{/*
+  Select (WEB-007). Each option shows a plain-language label from the
+  catalog key <OptPrefix><value> (default "opt_"), WEB-017.
+*/}}
 {{define "select"}}
 <div class="field{{if .Wide}} wide{{end}}">
   <label for="{{fid .Name}}">{{call .R.T .Label}}</label>
-  {{$v := .Value}}
+  {{$v := .Value}}{{$r := .R}}{{$op := or .OptPrefix "opt_"}}
   <select id="{{fid .Name}}" name="{{.Name}}"{{if .Help}} aria-describedby="{{fid .Name}}-help"{{end}}>
     <option value=""{{if eq $v ""}} selected{{end}}>{{call .R.T "not_set"}}</option>
-    {{range .Options}}<option value="{{.}}"{{if eq . $v}} selected{{end}}>{{.}}</option>{{end}}
+    {{range .Options}}<option value="{{.}}"{{if eq . $v}} selected{{end}}>{{call $r.T (printf "%s%s" $op .)}}</option>{{end}}
     {{if and $v (not (has .Options $v))}}<option value="{{$v}}" selected>{{$v}} ({{call .R.T "unknown_value"}})</option>{{end}}
   </select>
   {{if .Help}}<small class="help" id="{{fid .Name}}-help">{{call .R.T (printf "help_%s" .Help)}}</small>{{end}}
@@ -95,3 +99,46 @@
 
 {{/* Autocomplete options (WEB-010). Data is a []dirEntry. */}}
 {{define "suggest"}}{{range .Data}}<option value="{{.Path}}"></option>{{end}}{{end}}
+
+{{/*
+  Edit button (WEB-015): posts the whole form to /ui/form with op=<Op> and
+  swaps in the page that comes back. Without JavaScript it is a plain POST.
+  Expects R, Op, Label (i18n key), Icon and optionally Class.
+*/}}
+{{define "opButton"}}<button type="submit" name="op" value="{{.Op}}" formaction="/ui/form" hx-post="/ui/form" hx-target=".shell" hx-select=".shell" hx-swap="outerHTML" class="{{if .Class}}{{.Class}}{{else}}secondary{{end}}">{{template "icon" .Icon}}<span>{{call .R.T .Label}}</span></button>{{end}}
+
+{{/* Remove button: icon only, labelled for screen readers. Expects R, Op, Label. */}}
+{{define "removeButton"}}<button type="submit" name="op" value="{{.Op}}" formaction="/ui/form" hx-post="/ui/form" hx-target=".shell" hx-select=".shell" hx-swap="outerHTML" class="ghost icon-only remove" title="{{call .R.T .Label}}" aria-label="{{call .R.T .Label}}">{{template "icon" "trash"}}</button>{{end}}
+
+{{/*
+  Organizer duplicate detection as checkboxes (WEB-017). Expects R, Prefix
+  (e.g. "organizer.0.sources.1") and Src (an organizerSourceForm). The
+  server builds detectionMode from the ticked fields and the all/any choice.
+*/}}
+{{define "detection"}}{{$n := printf "%s.detectionMode" .Prefix}}{{$src := .Src}}{{$r := .R}}
+<div class="field wide detection" data-detection role="group" aria-labelledby="{{fid $n}}-label" aria-describedby="{{fid $n}}-help">
+  <input type="hidden" name="{{.Prefix}}.detectionUI" value="1">
+  <span class="label" id="{{fid $n}}-label">{{call .R.T "detection_mode"}}</span>
+  <small class="help" id="{{fid $n}}-help">{{call .R.T "help_detection"}}</small>
+  <div class="check-list">
+    {{range $.R.Data.Choices.DetectionFields}}
+    <label class="check">
+      <input type="checkbox" class="detection-field" name="{{$.Prefix}}.detectionFields" value="{{.}}"{{if has $src.DetectionFields .}} checked{{end}}>
+      <span><strong>{{call $r.T (printf "det_%s" .)}}</strong><small class="muted">{{call $r.T (printf "det_%s_help" .)}}</small></span>
+    </label>
+    {{end}}
+  </div>
+  <div class="detection-join" role="radiogroup" aria-label="{{call .R.T "det_join"}}"{{if lt (len $src.DetectionFields) 2}} hidden{{end}}>
+    <label class="check inline"><input type="radio" name="{{.Prefix}}.detectionJoin" value="all"{{if not $src.DetectionAny}} checked{{end}}><span>{{call .R.T "det_all"}}</span></label>
+    <label class="check inline"><input type="radio" name="{{.Prefix}}.detectionJoin" value="any"{{if $src.DetectionAny}} checked{{end}}><span>{{call .R.T "det_any"}}</span></label>
+  </div>
+  {{if $src.DetectionInvalid}}<p class="field-note">{{call .R.T "det_invalid"}} <code>{{$src.DetectionInvalid}}</code></p>{{end}}
+  <div class="field-error" id="err-{{fid $n}}">{{call .R.FErr $n}}</div>
+</div>
+{{end}}
+
+{{/* Name of a profile or job, or "<Key> <n>" when it has none (CFG-011). Expects T, Name, I, Key. */}}
+{{define "profileName"}}{{if .Name}}{{.Name}}{{else}}{{call .T .Key}} {{inc .I}}{{end}}{{end}}
+
+{{/* "Edit settings" / "Hide settings" at the end of a card summary (WEB-016). Expects the root data. */}}
+{{define "toggleHint"}}<span class="summary-toggle"><span class="when-closed">{{call .T "show_settings"}}</span><span class="when-open">{{call .T "hide_settings"}}</span>{{template "icon" "chevron"}}</span>{{end}}

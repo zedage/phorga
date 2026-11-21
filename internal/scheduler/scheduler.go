@@ -130,12 +130,32 @@ func (s *Scheduler) Register(name, schedule string, fn Job) (cron.EntryID, error
 		return 0, err
 	}
 
+	// Registering a name again replaces its schedule (CFG-008).
 	s.mu.Lock()
+	old, replaced := s.entries[name]
 	s.entries[name] = id
 	s.mu.Unlock()
+	if replaced {
+		s.cron.Remove(old)
+	}
 
 	slog.Info("job registered", "job", name, "schedule", schedule)
 	return id, nil
+}
+
+// Unregister removes a job's schedule, so it is not started any more. A run
+// of that job that is busy right now is not interrupted and finishes with
+// the settings it started with; while it runs, a job registered again
+// under the same name does not overlap with it (CFG-008).
+func (s *Scheduler) Unregister(name string) {
+	s.mu.Lock()
+	id, ok := s.entries[name]
+	delete(s.entries, name)
+	s.mu.Unlock()
+	if ok {
+		s.cron.Remove(id)
+		slog.Info("job unregistered", "job", name)
+	}
 }
 
 // acquire waits until no other job runs (RUN-002). It returns false when

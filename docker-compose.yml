@@ -10,21 +10,30 @@ services:
     # can write your folders and organized files belong to you. The state
     # volume and the target folders must be writable for this user.
     user: "1026:100"
-    # Optional web UI: set webUI.enabled: true and webUI.address: 0.0.0.0:8080
-    # in config.yaml, then uncomment. Binding to 127.0.0.1 keeps the UI
-    # reachable from this host only (it has no authentication).
-    # ports:
-    #   - "127.0.0.1:8080:8080"
+    # Web UI on port 8080. It always runs while there is no config yet, so
+    # Phorga can be set up in the browser. Binding to 127.0.0.1 keeps it
+    # reachable from this host only; other devices go through a reverse
+    # proxy (README, "Setup guide"). Set PHORGA_WEB_UI_PASSWORD below.
+    ports:
+      - "127.0.0.1:8080:8080"
     volumes:
-      - ./config.yaml:/config/config.yaml:ro
+      # The folder with config.yaml, writable for the user above. It may be
+      # empty: the web UI creates config.yaml on the first save. Mount the
+      # folder, not the file, or saving fails.
+      - ./config:/config
       # Read-only is fine for mode: copy. For mode: move, remove ":ro",
       # otherwise Phorga cannot delete the source files.
       - /path/to/photos/incoming:/photos/incoming:ro
       - /path/to/photos/organized:/photos/organized
       - /path/to/photos/duplicates:/photos/duplicates
       - phorga-state:/data/state
+      # Optional, Synology: lets the web UI list Synology Photos users.
+      # - /volume1/homes:/homes
     environment:
       - TZ=Europe/Berlin
+      # Password for the web UI (any user name). Set it whenever anyone but
+      # you can reach the port. Read only from here, never from the config.
+      # - PHORGA_WEB_UI_PASSWORD=choose-a-long-password
 
 volumes:
   phorga-state:

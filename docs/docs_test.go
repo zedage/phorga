@@ -35,6 +35,7 @@ var specPrefixes = map[string]string{
 	"notifications.md":       "NTF",
 	"web-ui.md":              "WEB",
 	"runtime.md":             "RUN",
+	"synology.md":            "SYN",
 }
 
 var validStatuses = map[string]bool{"proposed": true, "implemented": true, "removed": true}

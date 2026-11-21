@@ -96,12 +96,12 @@ func Validate(cfg *Config) error {
 func ValidateProblems(cfg *Config) []string {
 	var errs []string
 
-	if len(cfg.Organizer) == 0 && len(cfg.DuplicateDetection) == 0 {
-		return []string{"config must define at least one organizer profile or duplicateDetection job"}
-	}
-
 	if cfg.WebUI != nil {
 		errs = append(errs, validateWebUIConfig("webUI", *cfg.WebUI)...)
+	}
+
+	if cfg.SynologyPhotos != nil && cfg.SynologyPhotos.Homes != "" {
+		errs = append(errs, validateDir("synologyPhotos.homes", cfg.SynologyPhotos.Homes)...)
 	}
 
 	for i, profile := range cfg.Organizer {
@@ -117,23 +117,27 @@ func ValidateProblems(cfg *Config) []string {
 	return errs
 }
 
+// validateDir reports a path that is not absolute, does not exist or is not
+// a directory (CFG-006, CFG-010).
+func validateDir(prefix, dir string) []string {
+	if !filepath.IsAbs(dir) {
+		return []string{fmt.Sprintf("%s must be an absolute path, got '%s'", prefix, dir)}
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		return []string{fmt.Sprintf("%s '%s' does not exist", prefix, dir)}
+	}
+	if !info.IsDir() {
+		return []string{fmt.Sprintf("%s '%s' is not a directory", prefix, dir)}
+	}
+	return nil
+}
+
 func validateWebUIConfig(prefix string, webUI WebUIConfig) []string {
 	var errs []string
 
 	for i, root := range webUI.BrowseRoots {
-		rootPrefix := fmt.Sprintf("%s.browseRoots[%d]", prefix, i)
-		if !filepath.IsAbs(root) {
-			errs = append(errs, fmt.Sprintf("%s must be an absolute path, got '%s'", rootPrefix, root))
-			continue
-		}
-		info, err := os.Stat(root)
-		if err != nil {
-			errs = append(errs, fmt.Sprintf("%s '%s' does not exist", rootPrefix, root))
-			continue
-		}
-		if !info.IsDir() {
-			errs = append(errs, fmt.Sprintf("%s '%s' is not a directory", rootPrefix, root))
-		}
+		errs = append(errs, validateDir(fmt.Sprintf("%s.browseRoots[%d]", prefix, i), root)...)
 	}
 
 	if !webUI.Enabled {

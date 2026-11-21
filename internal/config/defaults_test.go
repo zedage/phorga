@@ -42,11 +42,7 @@ func TestResolveConfigPath_DefaultFileInWorkingDir(t *testing.T) {
 	t.Chdir(dir)
 	t.Setenv(envConfigPath, "")
 
-	path, err := ResolveConfigPath("")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if path != "config.yaml" {
+	if path := ResolveConfigPath(""); path != "config.yaml" {
 		t.Errorf("path = %q, want config.yaml", path)
 	}
 }

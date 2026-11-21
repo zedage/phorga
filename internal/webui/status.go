@@ -7,9 +7,14 @@ import (
 
 // JobStatus describes one scheduled job for the status page (WEB-011).
 type JobStatus struct {
-	Name     string
-	Kind     string // "organizer" or "dedup"
-	Label    string
+	Name  string
+	Kind  string // "organizer" or "dedup"
+	Label string
+	// Title is the name of the profile or job (CFG-011); empty if unnamed.
+	Title string
+	// Field is the form field of the job's schedule on the configuration
+	// page, e.g. "organizer.0.sources.1.schedule" (WEB-019).
+	Field    string
 	Schedule string
 	Next     time.Time
 	Running  bool

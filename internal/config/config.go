@@ -4,6 +4,7 @@ package config
 type Config struct {
 	StateDir           string               `yaml:"stateDir,omitempty" json:"stateDir,omitempty"`
 	WebUI              *WebUIConfig         `yaml:"webUI,omitempty" json:"webUI,omitempty"`
+	SynologyPhotos     *SynologyPhotos      `yaml:"synologyPhotos,omitempty" json:"synologyPhotos,omitempty"`
 	Organizer          []OrganizerProfile   `yaml:"organizer" json:"organizer"`
 	DuplicateDetection []DuplicateDetection `yaml:"duplicateDetection" json:"duplicateDetection"`
 }
@@ -17,8 +18,31 @@ type WebUIConfig struct {
 	BrowseRoots []string `yaml:"browseRoots,omitempty" json:"browseRoots,omitempty"`
 }
 
+// SynologyPhotos tells the web UI where to look for Synology Photos users
+// (SYN-001, CFG-010).
+type SynologyPhotos struct {
+	// Homes is the folder that holds the user home folders: where the NAS
+	// folder /volume1/homes is mounted. Empty means DefaultSynologyHomes.
+	Homes string `yaml:"homes,omitempty" json:"homes,omitempty"`
+}
+
+// DefaultSynologyHomes is where the user discovery looks when
+// synologyPhotos.homes is not set (SYN-001).
+const DefaultSynologyHomes = "/homes"
+
+// SynologyHomes returns the folder that holds the user home folders.
+func (c *Config) SynologyHomes() string {
+	if c != nil && c.SynologyPhotos != nil && c.SynologyPhotos.Homes != "" {
+		return c.SynologyPhotos.Homes
+	}
+	return DefaultSynologyHomes
+}
+
 // OrganizerProfile defines a single organizer target with its sources.
 type OrganizerProfile struct {
+	// Name is an optional label shown in the web UI and on the status page
+	// (CFG-011). It has no effect on what the profile does.
+	Name            string      `yaml:"name,omitempty" json:"name,omitempty"`
 	DryRun          bool        `yaml:"dryRun" json:"dryRun"`
 	Ntfy            *NtfyConfig `yaml:"ntfy,omitempty" json:"ntfy,omitempty"`
 	Target          string      `yaml:"target" json:"target"`
@@ -56,6 +80,9 @@ type DuplicateAction struct {
 
 // DuplicateDetection defines an independent duplicate detection job.
 type DuplicateDetection struct {
+	// Name is an optional label shown in the web UI and on the status page
+	// (CFG-011).
+	Name     string   `yaml:"name,omitempty" json:"name,omitempty"`
 	Enabled  bool     `yaml:"enabled" json:"enabled"`
 	DryRun   bool     `yaml:"dryRun" json:"dryRun"`
 	Schedule string   `yaml:"schedule" json:"schedule"`

@@ -110,8 +110,9 @@ func subdirs(roots []string, dir, prefix string, limit int) []dirEntry {
 }
 
 func (s *Server) rootEntries() []dirEntry {
-	out := make([]dirEntry, 0, len(s.browseRoots))
-	for _, root := range s.browseRoots {
+	roots := s.roots()
+	out := make([]dirEntry, 0, len(roots))
+	for _, root := range roots {
 		out = append(out, dirEntry{Name: root, Path: filepath.Clean(root)})
 	}
 	return out
@@ -119,7 +120,8 @@ func (s *Server) rootEntries() []dirEntry {
 
 // checkPicker answers 404 when the picker is disabled and 405 for non-GET.
 func (s *Server) checkPicker(w http.ResponseWriter, r *http.Request) bool {
-	if len(s.browseRoots) == 0 {
+	roots := s.roots()
+	if len(roots) == 0 {
 		http.NotFound(w, r)
 		return false
 	}
@@ -132,6 +134,7 @@ func (s *Server) checkPicker(w http.ResponseWriter, r *http.Request) bool {
 
 // handleFSList renders the picker dialog body for one folder.
 func (s *Server) handleFSList(w http.ResponseWriter, r *http.Request) {
+	roots := s.roots()
 	if !s.checkPicker(w, r) {
 		return
 	}
@@ -145,24 +148,24 @@ func (s *Server) handleFSList(w http.ResponseWriter, r *http.Request) {
 	p := ""
 	if raw := strings.TrimSpace(query.Get("path")); raw != "" {
 		p = filepath.Clean(raw)
-		if !filepath.IsAbs(p) || !isDir(p) || !withinRoots(s.browseRoots, p) {
+		if !filepath.IsAbs(p) || !isDir(p) || !withinRoots(roots, p) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
 	} else if raw := strings.TrimSpace(query.Get("start")); raw != "" && filepath.IsAbs(raw) {
-		p = nearestAllowedDir(s.browseRoots, filepath.Clean(raw))
+		p = nearestAllowedDir(roots, filepath.Clean(raw))
 	}
 
 	if p == "" {
 		data.Dirs = s.rootEntries()
 	} else {
 		data.Path = p
-		if !isRoot(s.browseRoots, p) {
-			if parent := filepath.Dir(p); withinRoots(s.browseRoots, parent) {
+		if !isRoot(roots, p) {
+			if parent := filepath.Dir(p); withinRoots(roots, parent) {
 				data.Parent = parent
 			}
 		}
-		data.Dirs = subdirs(s.browseRoots, p, "", maxListedDirs)
+		data.Dirs = subdirs(roots, p, "", maxListedDirs)
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -171,6 +174,7 @@ func (s *Server) handleFSList(w http.ResponseWriter, r *http.Request) {
 
 // handleFSSuggest renders <option> elements completing the typed path.
 func (s *Server) handleFSSuggest(w http.ResponseWriter, r *http.Request) {
+	roots := s.roots()
 	if !s.checkPicker(w, r) {
 		return
 	}
@@ -185,8 +189,8 @@ func (s *Server) handleFSSuggest(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(q, "/") || strings.HasSuffix(q, string(filepath.Separator)) {
 			dir, prefix = filepath.Clean(q), ""
 		}
-		if withinRoots(s.browseRoots, dir) {
-			dirs = subdirs(s.browseRoots, dir, prefix, maxSuggestedDirs)
+		if withinRoots(roots, dir) {
+			dirs = subdirs(roots, dir, prefix, maxSuggestedDirs)
 		} else {
 			for _, root := range s.rootEntries() {
 				if strings.HasPrefix(strings.ToLower(root.Path), strings.ToLower(q)) {

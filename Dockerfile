@@ -25,7 +25,12 @@ COPY --from=builder /out/phorga /usr/local/bin/phorga
 COPY --from=builder --chown=65532:65532 /out/data /data
 COPY --from=builder --chown=65532:65532 /out/config /config
 
+# The config may be missing: Phorga then starts its web UI for setup and
+# creates the file on the first save (CFG-009). The UI listens on all
+# interfaces inside the container; the port mapping decides who reaches it.
 ENV PHORGA_CONFIG=/config/config.yaml
+ENV PHORGA_WEB_UI_ADDR=0.0.0.0:8080
+EXPOSE 8080
 
 USER 65532:65532
 

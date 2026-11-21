@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"html/template"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -29,7 +30,11 @@ var templateFuncs = template.FuncMap{
 		return m, nil
 	},
 	"asset": assetURL,
-	"fid":   fieldID,
+	"inc":   func(i int) int { return i + 1 },
+	"ext": func(path string) string {
+		return strings.TrimPrefix(strings.ToLower(filepath.Ext(path)), ".")
+	},
+	"fid": fieldID,
 	"percent": func(done, total int) int {
 		if total <= 0 {
 			return 0

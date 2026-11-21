@@ -28,7 +28,7 @@ func postForm(t *testing.T, s *Server, target string, values url.Values, htmx bo
 	return resp
 }
 
-// Spec: WEB-007
+// Spec: WEB-007, WEB-017
 func TestPageRendersSelectsWithCurrentValue(t *testing.T) {
 	cfg := sampleConfig()
 	cfg.DuplicateDetection[0].Action.Method = "explode"
@@ -36,10 +36,10 @@ func TestPageRendersSelectsWithCurrentValue(t *testing.T) {
 
 	for _, want := range []string{
 		`<select id="f-organizer-0-sources-0-mode" name="organizer.0.sources.0.mode"`,
-		`<option value="copy" selected>copy</option>`,
-		`<option value="move">move</option>`,
-		`<option value="addSuffix">addSuffix</option>`,
-		`<option value="content" selected>content</option>`,
+		`<option value="copy" selected>copy – keep the original</option>`,
+		`<option value="move">move – remove the original after copying</option>`,
+		`<option value="addSuffix">addSuffix – keep both, add a suffix to the new one</option>`,
+		`<option value="content" selected>content – compare what the pictures look like</option>`,
 		`<option value="explode" selected>explode (unknown)</option>`,
 		`id="f-organizer-0-target-help"`,
 		"copy keeps the original",

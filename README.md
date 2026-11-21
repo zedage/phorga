@@ -6,25 +6,130 @@ Headless photo/video organizer and duplicate detector. Runs as a daemon, organiz
 
 - **Organizer**: date-based file organization (embedded date from EXIF, HEIC or MP4/MOV → filename → source path → mtime fallback), move/copy, per-source cron scheduling, lightweight duplicate handling, dry-run, state/resume. Transfers keep the file's modification time, are verified before the source is deleted, never overwrite an existing file, and moves within one volume don't copy at all
 - **Duplicate Detection**: independent metadata- or content-based (perceptual hash) dedup across sources, moveToFolder/skip actions, dry-run
-- **Web UI**: optional built-in configuration UI with dropdowns, help texts, live previews, a folder picker and a job status page with live progress, in DE/EN/IT/FR
+- **Web UI**: built-in configuration UI with dropdowns, help texts, live previews, a folder picker and a job status page with live progress, in DE/EN/IT/FR. Saved changes apply without a restart, and Phorga can start without any config and be set up there. Optional password, built-in setup guide
+- **Synology Photos users**: finds the users with a Synology Photos library and sets up sorting of their phone uploads with one checkbox each
 - **Notifications**: optional ntfy.sh push notifications on run completion
 - **Docker-first**: single container, multi-arch (amd64/arm64), works on Synology NAS
 
 ## Quick Start
 
 ```bash
-cp config.example.yaml config.yaml
-# edit config.yaml with your paths and schedules
-
-# Run directly
+# Run directly: without a config file, Phorga starts its web UI for setup
 go build -o phorga ./cmd/phorga
-./phorga --config config.yaml
+./phorga --config config.yaml        # then open http://127.0.0.1:8080/ui
 
-# Or with Docker
-docker compose up -d
+# Or with Docker (see docker-compose.yml)
+docker compose up -d                 # then open http://127.0.0.1:8080/ui
 ```
 
+**New here?** Follow the [Setup guide](#setup-guide): Synology NAS or another computer, step by step.
+
+You can also write the config yourself: copy [`config.example.yaml`](config.example.yaml) to `config.yaml` and edit it.
+
 Stop Phorga with Ctrl+C (or `docker stop`). It finishes the current file and exits within a few seconds; press Ctrl+C again to quit at once.
+
+## Setup guide
+
+Two ways to run Phorga with Synology Photos: **on the NAS** in Container Manager, or **on another computer** that is always on (Mac mini, NUC, home server) and reaches the NAS over the network. Both end in the web UI, where you pick the users. The same guide is built into the web UI under **Help** (`/ui/help`), in German, English, Italian and French.
+
+### A. On a Synology NAS (Container Manager)
+
+You need DSM 7.2 or later and an administrator account. All steps are done in DSM in your browser.
+
+1. **Install Container Manager.** Package Center → search for "Container Manager" → Install. If you use Synology Photos, the user home service is already on; otherwise turn it on in Control Panel → User & Group → Advanced → User Home.
+2. **Create a user for Phorga.** Control Panel → User & Group → Create. Name it `phorga` and give it a long random password (you will not need it again). At "Assign shared folder permissions", give **Read/Write** to `docker` and `homes`. At "Assign application permissions", deny everything; Phorga never signs in to DSM.
+3. **Create the folders.** In File Station, open `docker`, create the folder `phorga`, and inside it the folders `config` and `state`.
+4. **Find the user ID.** Control Panel → Task Scheduler → Create → Scheduled Task → User-defined script. Name `phorga id`, user `root`, untick "Enabled"; under Task Settings, enter the command `id phorga > /volume1/docker/phorga/id.txt`. Save, select the task, click Run, and open `docker/phorga/id.txt` in File Station: `uid=1030(phorga) gid=100(users)` means `1030:100`. Then delete the task.
+5. **Create the project.** Container Manager → Project → Create. Project name `phorga`, path `/docker/phorga`, source "Create docker-compose.yml", and paste:
+
+   ```yaml
+   services:
+     phorga:
+       image: mnrd001/phorga:latest
+       container_name: phorga
+       restart: unless-stopped
+       user: "1030:100"                 # uid:gid of the DSM user "phorga"
+       ports:
+         - "127.0.0.1:8080:8080"        # NAS only; the reverse proxy opens it to your network
+       volumes:
+         - ./config:/config             # config.yaml, written by the web UI
+         - ./state:/data/state
+         - /volume1/homes:/homes        # the Synology Photos libraries of all users
+       environment:
+         - TZ=Europe/Berlin
+         - PHORGA_WEB_UI_PASSWORD=choose-a-long-password
+   ```
+
+   Replace `1030:100` with the numbers from step 4, and `choose-a-long-password` with your own password for the web UI. Click Next, skip the web portal settings, and click Done. Container Manager downloads Phorga and starts it.
+6. **Make it reachable with HTTPS.** Control Panel → Login Portal → Advanced → Reverse Proxy → Create: name `Phorga`; source protocol `HTTPS`, hostname `*`, port `8443`; destination protocol `HTTP`, hostname `localhost`, port `8080`. Save. If the DSM firewall is on, allow port 8443 (Control Panel → Security → Firewall).
+7. **Open Phorga.** On any device in your network, open `https://<NAS address>:8443/ui`, e.g. `https://192.168.1.20:8443/ui`. If your NAS uses its own certificate, the browser warns once; at home that is expected. Sign in with any user name and your web UI password, then continue with [C. Set Phorga up](#c-set-phorga-up).
+
+### B. On another computer (Mac mini, NUC, server)
+
+Phorga runs on a computer that is always on and works on the NAS through a network share.
+
+1. **Install Docker.** macOS and Windows: Docker Desktop, with "Start Docker Desktop when you sign in" turned on in its settings. Linux: Docker Engine with the Compose plugin.
+2. **Allow access on the NAS.** In DSM, create the user `phorga` with Read/Write on `homes` (step A2), and check that SMB is on (Control Panel → File Services → SMB).
+3. **Connect the share.** macOS: Finder → Go → Connect to Server → `smb://<NAS address>/homes`, sign in as `phorga`; the share appears as `/Volumes/homes`. To connect it again after a restart, add it under System Settings → General → Login Items. Linux: mount it, for example with this line in `/etc/fstab` (the credentials file holds `username=phorga` and `password=…`):
+
+   ```
+   //192.168.1.20/homes  /mnt/nas-homes  cifs  credentials=/etc/phorga-nas,uid=1000,gid=1000,_netdev  0  0
+   ```
+
+4. **Create the project.** Create a folder `phorga` in your home folder, with the folders `config` and `state` inside, and save this as `docker-compose.yml` in it:
+
+   ```yaml
+   services:
+     phorga:
+       image: mnrd001/phorga:latest
+       container_name: phorga
+       restart: unless-stopped
+       user: "501:20"                   # output of "id -u" and "id -g" on this computer
+       ports:
+         - "127.0.0.1:8080:8080"        # this computer only; "8080:8080" opens it to your network
+       volumes:
+         - ./config:/config             # config.yaml, written by the web UI
+         - ./state:/data/state
+         - /Volumes/homes:/homes        # the NAS share "homes"; Linux: /mnt/nas-homes:/homes
+       environment:
+         - TZ=Europe/Berlin
+         - PHORGA_WEB_UI_PASSWORD=choose-a-long-password
+   ```
+
+   Set `user:` to the output of `id -u` and `id -g`, the password to your own, and on Linux the share to your mount point.
+5. **Start Phorga.** In a terminal: `cd ~/phorga && docker compose up -d`. Open `http://127.0.0.1:8080/ui` on this computer, sign in with any user name and your password, and continue with [C. Set Phorga up](#c-set-phorga-up).
+6. **Keep it running.** The computer must not go to sleep (macOS: System Settings → Energy → Prevent automatic sleeping). The container only sees a share that was connected when it started: after reconnecting the share, run `docker compose restart`.
+
+### C. Set Phorga up
+
+1. **Pick the users.** On the configuration page, "Synology Photos users" lists everyone with a Synology Photos library. Tick the users whose phone uploads Phorga should sort, and click **Add selected users**.
+2. **Check the profile.** Each user gets a profile that moves new files from `Photos/MobileBackup` into `Photos/<year>/<month>` every night at 03:00. It starts as a **dry run**: Phorga only writes to its log what it would do. Click the profile to change the time or the folder structure.
+3. **Save.** Saving writes the config file and schedules the jobs at once. No restart is needed.
+4. **Check the dry run.** After the first run, the status page shows how many files would be moved, and the container log lists each file (Container Manager → Container → phorga → Log, or `docker compose logs phorga`). To try it right away, set the schedule to `*/5 * * * *` (every 5 minutes) and set it back afterwards.
+5. **Switch the dry run off.** When the log looks right, open the profile, untick **Dry run** and save. From the next run on, Phorga moves the files. Synology Photos shows them in their new folders once it has indexed them. After the first real run, check that the Synology Photos app on the phone does not upload the moved photos again.
+6. **Optional: find duplicates.** Under "Duplicate detection jobs", add a job that compares folders and finds copies of the same photo. It also starts as a dry run, and it only ever moves duplicates to a folder you choose; it never deletes anything.
+
+### D. Open the UI from other devices
+
+Whoever can open the web UI can change which files Phorga moves. Protect it like this:
+
+- **Always set a password** with `PHORGA_WEB_UI_PASSWORD`, as in the compose files above. Use a long one: there is no lockout after wrong attempts. The browser asks for it once per session (any user name). To change it, edit the compose file and recreate the container (Container Manager → Project → phorga → YAML Configurations → Edit, or `docker compose up -d`). The password is read only from the environment; it never appears in the config file or the UI.
+- **Synology:** the reverse proxy (step A6) adds HTTPS, and because the container port stays on `127.0.0.1`, the proxy is the only way in. To allow only your home network, create an access control profile (Control Panel → Login Portal → Advanced → Access Control Profile) that allows e.g. `192.168.1.0/24` and denies everything else, and select it in the reverse proxy rule. With your own domain, use it as the hostname instead of `*` and assign its certificate under Control Panel → Security → Certificate → Settings.
+- **Other computer:** change the port to `"8080:8080"` and run `docker compose up -d`. Then open `http://<computer address>:8080/ui`. Without HTTPS the password crosses your network unencrypted, which is only acceptable in a home network you trust; for HTTPS, put a reverse proxy such as Caddy in front.
+- **Never** forward the port to the internet in your router. To use Phorga on the go, connect to your home network with a VPN (for example Synology VPN Server or Tailscale).
+
+The UI also rejects form posts that a browser marks as coming from another website, so a page you visit cannot change Phorga's settings through your browser.
+
+### E. Troubleshooting
+
+| Problem | What to do |
+|---|---|
+| "homes folder not found" | The container does not see the homes folder. Check the volume `/volume1/homes:/homes`; on another computer, check that the share is connected. If it is mounted at another path, enter that path as the homes folder in the Synology Photos section. |
+| A user is marked "no access" | Phorga's user may not read that home folder. Give the user `phorga` Read/Write on the shared folder `homes`, and check that `user:` in the compose file holds its uid and gid. |
+| Saving fails with "permission denied" | The `config` folder must be writable for the user in `user:`. Mount the folder (`./config:/config`), not `config.yaml` on its own. |
+| The page does not open | Check that the container is running and that its log shows no error. Synology: check the reverse proxy rule (destination `localhost`, port `8080`) and the firewall. Other computer: with `127.0.0.1` in the port, only that computer can open the page. |
+| The browser keeps asking for the password | Any user name works; the password must match `PHORGA_WEB_UI_PASSWORD` exactly. After changing it, the container must be recreated. |
+| Moved photos do not show up in Synology Photos | Synology Photos has to index new folders first. Wait a few minutes; if they still do not appear, start indexing again in the Synology Photos settings. |
 
 ## Configuration
 
@@ -68,13 +173,19 @@ Phorga uses the first of these that is set:
 2. the environment variable `PHORGA_CONFIG` (set to `/config/config.yaml` in the Docker image)
 3. `config.yaml` in the current working directory
 
-Files ending in `.yaml`, `.yml` or `.json` are accepted. The config is read **once at startup**; after a change, restart Phorga. An invalid config stops Phorga at startup with exit code 1 and a list of all problems found. The config must define at least one `organizer` profile or one `duplicateDetection` job.
+Files ending in `.yaml`, `.yml` or `.json` are accepted. An invalid config stops Phorga at startup with exit code 1 and a list of all problems found.
+
+**No config yet?** If the file does not exist, Phorga starts anyway, without jobs, and always starts its web UI so you can set it up there. The first save creates the file (and its folder). The same happens with a config that defines no jobs.
+
+**Changing the config.** Saving in the web UI applies the changes at once; a job that is running finishes with its old settings. Only `stateDir`, `webUI.address` and turning the web UI off need a restart, and the UI says so. Edits made to the file in an editor are picked up at the next restart.
 
 | Flag | Meaning |
 |---|---|
 | `--config <path>` | Config file to use (see above) |
 | `--web-ui` | Start the web UI even if `webUI.enabled` is `false` |
-| `--web-ui-addr <host:port>` | Listen address of the web UI, overrides `webUI.address` |
+| `--web-ui-addr <host:port>` | Listen address of the web UI, overrides `webUI.address` and `PHORGA_WEB_UI_ADDR` |
+
+The environment variable `PHORGA_WEB_UI_ADDR` sets the web UI address like `--web-ui-addr` (the flag wins). The Docker image sets it to `0.0.0.0:8080`.
 
 ### Reference
 
@@ -85,14 +196,16 @@ Relative paths are resolved against the working directory. In Docker, use the pa
 | Field | Type | Required | Default | Meaning |
 |---|---|---|---|---|
 | `stateDir` | path | no | `/data/state` | Folder for Phorga's own files (see [Files in `stateDir`](#files-in-statedir)). Created if missing. |
-| `organizer` | list | one of the two | – | Organizer profiles, see below. |
-| `duplicateDetection` | list | one of the two | – | Duplicate detection jobs, see below. |
+| `organizer` | list | no | – | Organizer profiles, see below. |
+| `duplicateDetection` | list | no | – | Duplicate detection jobs, see below. Without any profile or job, Phorga only runs its web UI. |
 | `webUI` | object | no | off | Built-in web UI, see below. |
+| `synologyPhotos` | object | no | – | Where to find Synology Photos users, see below. |
 
 **`organizer[]`**: one entry per target folder
 
 | Field | Type | Required | Default | Meaning |
 |---|---|---|---|---|
+| `name` | text | no | – | Your label for the profile, shown in the web UI and on the status page. |
 | `target` | path | yes | – | Folder the organized files go into. |
 | `targetStructure` | text | no | `{year}/{month}` | Subfolder template below `target`, see [tokens](#targetstructure-tokens). Unknown tokens are rejected. |
 | `fallbackFolder` | path | no | – | Where files go when no date can be determined (only possible with `ignoreModTime`). Without it, such files are skipped and logged. |
@@ -118,6 +231,7 @@ Relative paths are resolved against the working directory. In Docker, use the pa
 
 | Field | Type | Required | Default | Meaning |
 |---|---|---|---|---|
+| `name` | text | no | – | Your label for the job, shown in the web UI and on the status page. |
 | `enabled` | bool | no | `false` | Only enabled jobs are scheduled. Disabled jobs are still validated. |
 | `sources` | list of paths | yes, ≥ 1 | – | Folders to compare, including all subfolders. Duplicates are found across all of them. |
 | `exclude` | list of patterns | no | – | Files and folders below each source to leave out, see [Skipped and excluded folders](#skipped-and-excluded-folders). |
@@ -133,8 +247,14 @@ Relative paths are resolved against the working directory. In Docker, use the pa
 | Field | Type | Required | Default | Meaning |
 |---|---|---|---|---|
 | `enabled` | bool | no | `false` | Start the web UI together with Phorga (also possible with `--web-ui`). |
-| `address` | `host:port` | no | `127.0.0.1:8080` | Listen address. In Docker use `0.0.0.0:8080` and publish the port on `127.0.0.1` only. |
-| `browseRoots` | list of absolute paths | no | – | Folders the folder picker may show. Each must exist. Without it, the picker is off. |
+| `address` | `host:port` | no | `127.0.0.1:8080` | Listen address. `--web-ui-addr` and `PHORGA_WEB_UI_ADDR` override it; in the Docker image the UI therefore always listens on `0.0.0.0:8080`. |
+| `browseRoots` | list of absolute paths | no | – | Folders the folder picker may show. Each must exist. Without it, the picker is off. Without a config file, `/homes` and `/photos` are used if they exist. |
+
+**`synologyPhotos`**
+
+| Field | Type | Required | Default | Meaning |
+|---|---|---|---|---|
+| `homes` | absolute path | no | `/homes` | Folder that holds the user home folders, i.e. where the NAS folder `/volume1/homes` is mounted. Must exist when set. Used to find Synology Photos users, see [Synology Photos users](#synology-photos-users). |
 
 ### Skipped and excluded folders
 
@@ -191,9 +311,15 @@ Phorga can expose a small built-in configuration UI from the same process that r
 - Live previews: the folder a `targetStructure` produces (for 15 March 2024), and the next 3 runs of each cron `schedule`
 - Validation errors are shown next to the field they belong to
 - Folder picker ("Browse…" dialog and autocomplete) for all path fields, limited to `webUI.browseRoots`
-- Configuration page grouped into sections (general, web UI, organizer profiles with their sources, duplicate detection jobs, save target) with a sidebar to jump between them
-- Status page (`/ui/status`): summary of running/waiting/idle jobs, then next run, running state and last result of every job, refreshed every 10 s
-- Saves either back to the active config file or to a separate config file
+- Configuration page grouped into sections (Synology Photos users, organizer profiles, duplicate detection jobs, general, web UI, save target) with a sidebar to jump between them
+- Each profile and job is a collapsed card showing its flow (source folders with mode and schedule → target folder and structure); rarely used fields are under "More options". Profiles and jobs can be given a `name`
+- Duplicate detection mode as checkboxes ("same file name", "same modification date", "same capture date") with all/any, and plain-language labels in the dropdowns
+- **Edit YAML**: the config file as text, validated and applied on save, comments kept (`/ui/yaml`)
+- Buttons to add and remove organizer profiles, sources and duplicate detection jobs. New entries start as dry runs
+- Status page (`/ui/status`): summary of running/waiting/idle jobs, then next run, running state and last result of every job, refreshed every 10 s. Each job links to its schedule on the configuration page
+- Saves either to the active config file, which applies the changes at once, or to a separate config file, which changes nothing in the running Phorga
+- **Help** (`/ui/help`): the [Setup guide](#setup-guide) in all four languages, with a summary of this installation (config file, Synology homes folder, password, address)
+- Optional password: set `PHORGA_WEB_UI_PASSWORD` and every page asks for it (HTTP Basic auth, any user name). It is read only from the environment, never from the config. Form posts that a browser marks as coming from another website are rejected
 
 Enable it in config:
 
@@ -210,7 +336,7 @@ go run ./cmd/phorga --config config.yaml --web-ui
 go run ./cmd/phorga --config config.yaml --web-ui --web-ui-addr 127.0.0.1:9090
 ```
 
-The UI shows the values currently loaded at startup. Saving to a separate file writes a new config file but does not automatically reload the running scheduler.
+The UI shows the configuration in effect. Saving to the active file writes it and applies it right away (see [Changing the config](#where-phorga-looks-for-its-config)). Saving to a separate file only writes that file. The web UI always starts while there are no jobs.
 
 **Folder picker.** It is off until you list the folders it may browse:
 
@@ -223,6 +349,26 @@ webUI:
 ```
 
 The picker shows only folders (no files, no hidden folders) below these roots, and never creates or changes anything.
+
+#### Synology Photos users
+
+Synology Photos keeps each user's library in `/volume1/homes/<user>/Photos`, and its phone app uploads to `Photos/MobileBackup`. If Phorga can see the homes folder (in Docker: mount `/volume1/homes:/homes`, or set `synologyPhotos.homes`), the first section of the configuration page lists every user with a `Photos` folder. Tick users and click **Add selected users**; each gets this profile, which you can still change before saving:
+
+```yaml
+- dryRun: true                       # switch off after checking the log
+  target: /homes/<user>/Photos
+  targetStructure: "{year}/{month}"
+  sources:
+    - path: /homes/<user>/Photos/MobileBackup
+      mode: move
+      schedule: "0 3 * * *"
+      duplicates:
+        detectionMode: filename+exif # same photo already there: leave it in MobileBackup
+        action:
+          method: skip
+```
+
+Users who already have a profile are shown as "already set up"; users whose home folder Phorga's user may not read are shown as "no access". Finding users only reads folder names.
 
 **Status page.** The last result of each job is stored in `<stateDir>/run-status.json`, so it survives a restart. Dry runs are shown too, but only kept in memory, so a dry run never writes a file.
 
@@ -332,7 +478,8 @@ internal/
   scheduler/             Cron wrapper, one job at a time
   notify/                ntfy.sh client
   runstatus/             Last run result per job for the status page
-  webui/                 Optional built-in configuration UI (HTTP, templates, i18n, folder picker, status page)
+  synology/              Finds Synology Photos users and builds their profile
+  webui/                 Built-in configuration UI (HTTP, templates, i18n, folder picker, status page)
 ```
 
 ## Docker
@@ -349,7 +496,7 @@ docker pull mnrd001/phorga:latest
 docker compose up -d       # uses the image from Docker Hub, see docker-compose.yml
 ```
 
-Mount your source/target directories and `config.yaml` as volumes. State is persisted in `/data/state`. In `mode: move`, the source folder must be writable (no `:ro`).
+Mount your source/target directories and the **folder** that holds `config.yaml` (e.g. `./config:/config`) as volumes. The folder must be writable for Phorga's user, so the web UI can save; a `config.yaml` mounted on its own cannot be replaced. It may be empty at first. State is persisted in `/data/state`. In `mode: move`, the source folder must be writable (no `:ro`).
 
 The image is based on distroless (no shell) and runs as the unprivileged user `65532`. Set `user:` in `docker-compose.yml` to your NAS user (`id` in an SSH shell shows uid and gid), so Phorga can write your folders and organized files belong to you.
 
@@ -357,7 +504,7 @@ The image is based on distroless (no shell) and runs as the unprivileged user `6
 
 **Upgrading from an image before 2026-11-21:** older images ran as root, so an existing state volume belongs to root and the new user cannot write it. Either set `user: "0:0"` to keep running as root, or hand the volume to the user you set in `user:` once, on the NAS host: `sudo chown -R <uid>:<gid> "$(docker volume inspect -f '{{.Mountpoint}}' phorga-state)"` (with Compose, the volume name usually starts with the project name; `docker volume ls` shows it).
 
-**Synology:** in Container Manager, search the registry for `mnrd001/phorga`, download `latest`, and create a project from [`docker-compose.yml`](docker-compose.yml) with your shared folders as volumes. Set `user:` to your NAS user, as above.
+**Synology:** see the [Setup guide](#a-on-a-synology-nas-container-manager), which creates a project in Container Manager with a dedicated user and `/volume1/homes:/homes` mounted, so the web UI can list the Synology Photos users.
 
 **Build it yourself:**
 
@@ -367,7 +514,7 @@ docker build -t phorga .
 docker buildx build --platform linux/amd64,linux/arm64 -t <registry>/phorga --push .
 ```
 
-**Web UI in Docker:** inside the container, `127.0.0.1` is not reachable from the host. Set `webUI.address: 0.0.0.0:8080` in `config.yaml` and publish the port on the host's loopback only, e.g. `-p 127.0.0.1:8080:8080` (see the commented `ports` entry in [`docker-compose.yml`](docker-compose.yml)). The UI has no authentication, so do not publish it on all interfaces.
+**Web UI in Docker:** the image sets `PHORGA_WEB_UI_ADDR=0.0.0.0:8080`, so the UI listens on port 8080 inside the container whatever `webUI.address` says. Publish the port on the host's loopback only, e.g. `-p 127.0.0.1:8080:8080` (see `ports` in [`docker-compose.yml`](docker-compose.yml)), and reach it from other devices through a reverse proxy with HTTPS. Set `PHORGA_WEB_UI_PASSWORD` whenever anyone but you can reach the port; without it, Phorga logs a warning at start-up when the UI listens beyond loopback. See [D. Open the UI from other devices](#d-open-the-ui-from-other-devices). Never publish the UI to the internet.
 
 ## Documentation
 

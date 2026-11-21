@@ -26,7 +26,7 @@ So `grep -rn ORG-002` finds the requirement, the code reference, and the test.
 ## Repository layout
 
 ```
-cmd/phorga/          main → run(ctx, args, logOut): flags, config, scheduler + web UI lifecycle (tested)
+cmd/phorga/          main → run(ctx, args, logOut): flags, config, scheduler + web UI lifecycle; engine applies saved configs live (tested)
 internal/
   config/            load (YAML/JSON), defaults, validate, resolve path, save
   organizer/         organizer run: walk sources, resolve date, transfer, duplicates
@@ -37,7 +37,9 @@ internal/
   state/             JSON state per profile target and source (resume)
   scheduler/         cron wrapper: no self-overlap, one job at a time
   notify/            ntfy.sh client (fire-and-forget)
-  webui/             HTTP server, form model, i18n, embedded templates
+  runstatus/         last result and live progress per job for the status page
+  synology/          finds Synology Photos users, builds their organizer profile
+  webui/             HTTP server, form model, add/remove edits, i18n, embedded templates
 docs/                product, specs, arc42, decisions (+ docs_test.go)
 testdata/tools/      generator for demo images in data/
 data/                demo config; generated folders are git-ignored

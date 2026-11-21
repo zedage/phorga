@@ -68,28 +68,43 @@ Exact rules: [specs/duplicate-detection.md](specs/duplicate-detection.md)
 
 Everything is configured in one YAML or JSON file. Phorga checks the whole file at startup and refuses to start if anything is wrong. It then lists every problem at once, so you can fix them all in one go. Phorga finds the file via `--config`, the `PHORGA_CONFIG` environment variable, or `./config.yaml`.
 
+You don't have to write that file yourself. If it doesn't exist yet, Phorga starts anyway, without any jobs, and opens its web UI so you can set it up in the browser. The first save creates the file ([ADR-0022](decisions/0022-live-apply-and-setup-mode.md)).
+
 A complete, commented example is in [`config.example.yaml`](../config.example.yaml), and the reference is in the [README](../README.md#configuration).
 
 Exact rules: [specs/configuration.md](specs/configuration.md)
 
 ## Web UI
 
-For people who prefer not to edit YAML, Phorga can show a small **configuration page** in the browser, in German, English, Italian or French. It shows the configuration Phorga is currently running with. You can check your changes, and then save either over the active file or into a new file to try them out. Phorga picks up saved changes after a restart ([ADR-0009](decisions/0009-ui-save-destination-and-no-hot-reload.md)).
+For people who prefer not to edit YAML, Phorga can show a small **configuration page** in the browser, in German, English, Italian or French. It shows the configuration Phorga is currently running with. You can check your changes and then save them. Saving to the active file applies them right away, without a restart: new schedules start at once, and a job that is running at that moment finishes calmly with its old settings. Only a different state folder or web UI address needs a restart, and Phorga tells you so. You can also save into a separate file to try something out; that changes nothing in the running Phorga ([ADR-0022](decisions/0022-live-apply-and-setup-mode.md), [ADR-0009](decisions/0009-ui-save-destination-and-no-hot-reload.md)).
 
 The page is meant to be usable without knowing the config format:
 
-- **Clear structure.** Settings are grouped into sections (general, web UI, organizer profiles, duplicate detection, where to save), with a sidebar to jump between them. Each profile, source and job is a card whose header sums it up, e.g. the source folder, `copy` or `move`, and its schedule. The language can be switched in the top bar.
-- **Dropdowns** for settings with fixed choices, such as `copy`/`move`, and a short **help text** under every field.
+- **An overview first.** Each profile and duplicate detection job is a card that is closed by default and shows at a glance where files come from and where they go: the source folders with `copy` or `move` and their schedule, an arrow, and the target folder with its folder structure. One click opens the settings; rarely used ones sit under "More options". Settings you seldom touch (state folder, web UI, where to save) are folded away too. A sidebar jumps between sections, and the language can be switched in the top bar.
+- **Your own names.** Give a profile or job a name such as "Robin's phone"; it is shown on the card and on the status page. Without one, it is simply numbered.
+- **Add and remove** profiles, sources and duplicate detection jobs with a button. New entries start as dry runs, so nothing is touched until you have checked the log.
+- **Plain-language choices.** Dropdowns say what each choice does, e.g. "copy – keep the original". When to treat a file as a duplicate is a set of checkboxes ("same file name", "same capture date", …) instead of a code like `filename+exif`. A short **help text** sits under every field.
+- **Edit the file directly.** Advanced users can open the config file as text from the top of the page, change it and save. Phorga checks it with the same rules and applies it right away, and comments in the file are kept.
 - **Live previews.** While you type a folder structure such as `{year}/{month}`, you see the folder it produces for an example date. While you type a schedule, you see its next three run times.
 - **Errors next to the field.** "Validate" marks each wrong field directly, not only in a list at the top.
 - **Folder picker.** A "Browse…" button and suggestions while typing, so you can pick folders on the NAS instead of typing paths. For safety it only shows folders below the locations you list in `webUI.browseRoots`, and it never changes anything. Without that list, it is off ([ADR-0013](decisions/0013-folder-picker-limited-to-browse-roots.md)).
-- **Status page.** At the top, how many jobs are running, waiting or idle. Then, for every job: when it runs next, whether it is running right now or waiting for another job, and what the last run did (files processed, duplicates found, errors). While a job runs, you see what it is doing, for example "Scanning files: 1500 / 7402 (20 %)" with a progress bar and how long it has been running. It refreshes by itself every 10 seconds. The last results survive a restart. Dry runs are shown but not stored ([ADR-0014](decisions/0014-persisted-run-status-without-dry-runs.md)).
+- **Status page.** At the top, how many jobs are running, waiting or idle. Then, for every job: when it runs next, whether it is running right now or waiting for another job, and what the last run did (files processed, duplicates found, errors). While a job runs, you see what it is doing, for example "Scanning files: 1500 / 7402 (20 %)" with a progress bar and how long it has been running. Click a job to jump to its schedule on the configuration page. It refreshes by itself every 10 seconds. The last results survive a restart. Dry runs are shown but not stored ([ADR-0014](decisions/0014-persisted-run-status-without-dry-runs.md)).
 
 - **Light and dark mode.** The page follows the light or dark setting of your system automatically. A switch in the top bar lets you force light or dark instead; your browser remembers the choice.
 
-The page works without internet access. The UI has no login. It is meant for your own computer or home network only, and by default it is reachable only from the same machine ([ADR-0008](decisions/0008-built-in-server-rendered-web-ui.md)).
+- **Help built in.** A Help page in the top bar has the step-by-step setup guide (Synology NAS or another computer), and a short summary of this installation: where the config file is, whether the Synology homes folder was found and how many users it has, and whether a password is set.
+
+The page works without internet access. It is meant for your own computer or home network only, and by default it is reachable only from the same machine. A NAS has no browser, though, so to use the page from a laptop or phone you can protect it with a **password** (set in the container's environment, never in the config) and reach it through the NAS's reverse proxy with HTTPS. Phorga warns in its log when the page is open to the network without a password. Other websites you visit cannot change Phorga's settings through your browser ([ADR-0023](decisions/0023-optional-web-ui-password.md), [ADR-0008](decisions/0008-built-in-server-rendered-web-ui.md)).
 
 Exact rules: [specs/web-ui.md](specs/web-ui.md)
+
+## Synology Photos users
+
+On a Synology NAS, each user's Synology Photos library is the `Photos` folder in their home folder, and the phone app uploads into `Photos/MobileBackup`. Phorga finds these users by itself when the NAS folder `homes` is available to it, and lists them at the top of the configuration page. Tick the users whose phone uploads should be sorted and click "Add selected users". Each one gets a ready-made profile: every night, new files in `MobileBackup` are moved into `Photos/<year>/<month>`. Photos that are already there with the same name and capture date stay where they are. The profile starts as a dry run. Check the log or status page, then switch dry run off and save.
+
+Users who already have a profile are marked as set up. A user whose home folder Phorga may not read is marked "no access", which means the container's user lacks permission for it.
+
+Exact rules: [specs/synology.md](specs/synology.md)
 
 ## Notifications
 

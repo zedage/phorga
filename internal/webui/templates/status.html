@@ -62,9 +62,11 @@
         <div class="job-cell">
           <span class="job-icon kind-{{.Kind}}">{{if eq .Kind "dedup"}}{{template "icon" "copy"}}{{else}}{{template "icon" "layers"}}{{end}}</span>
           <div class="job-text">
-            <strong>{{call $.T (printf "kind_%s" .Kind)}}</strong>
+            {{if .Field}}<a class="job-link" href="/ui#{{fid .Field}}" title="{{call $.T "status_open_config"}}">{{end}}
+            <strong>{{if .Title}}{{.Title}}{{else}}{{call $.T (printf "kind_%s" .Kind)}}{{end}}</strong>
             <span class="job-label">{{.Label}}</span>
             <span class="job-schedule" title="{{call $.T "status_schedule"}}">{{template "icon" "clock"}}<code>{{.Schedule}}</code></span>
+            {{if .Field}}</a>{{end}}
           </div>
         </div>
       </td>

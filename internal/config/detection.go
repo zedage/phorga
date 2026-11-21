@@ -9,6 +9,12 @@ import (
 // (ORG-011).
 var organizerDetectionFields = []string{"filename", "filedate", "exif"}
 
+// DetectionFields returns the fields an organizer detectionMode may use, in
+// their canonical order (WEB-017).
+func DetectionFields() []string {
+	return append([]string(nil), organizerDetectionFields...)
+}
+
 // DetectionExpr is a parsed organizer duplicates.detectionMode (ORG-011):
 // one or more fields, joined by '+' (all must match) or '|' (one is enough).
 type DetectionExpr struct {

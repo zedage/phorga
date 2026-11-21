@@ -2,10 +2,12 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"gopkg.in/yaml.v3"
 )
@@ -59,6 +61,10 @@ func normalizedCopy(cfg *Config) *Config {
 		}
 		clone.WebUI = &webUI
 	}
+	if cfg.SynologyPhotos != nil {
+		syn := *cfg.SynologyPhotos
+		clone.SynologyPhotos = &syn
+	}
 
 	for i := range clone.Organizer {
 		clone.Organizer[i].Sources = append([]OrganizerSource(nil), cfg.Organizer[i].Sources...)
@@ -97,6 +103,13 @@ func copyList(list []string) []string {
 	return append([]string(nil), list...)
 }
 
+// WriteFile writes data as the config file at path, atomically, creating
+// missing folders. The web UI uses it to save edited text as it is, with its
+// comments (WEB-018).
+func WriteFile(path string, data []byte) error {
+	return writeFileAtomic(path, data, 0644)
+}
+
 func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -128,6 +141,10 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 	}
 	if err := os.Rename(tmpPath, path); err != nil {
 		cleanup()
+		if errors.Is(err, syscall.EBUSY) {
+			// Docker bind mount of the file itself: it cannot be replaced.
+			return fmt.Errorf("replacing config file atomically: %w (the file is mounted on its own; mount its folder instead, e.g. ./config:/config)", err)
+		}
 		return fmt.Errorf("replacing config file atomically: %w", err)
 	}
 	return nil

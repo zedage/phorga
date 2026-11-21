@@ -129,6 +129,7 @@ package "internal" {
   [notify]
   [webui]
   [runstatus]
+  [synology]
 }
 
 [main] --> [config]
@@ -141,6 +142,8 @@ package "internal" {
 [runstatus] --> [fileops]
 [webui] --> [scheduler]
 [webui] --> [metadata]
+[webui] --> [synology]
+[synology] --> [config]
 [organizer] --> [metadata]
 [organizer] --> [fileops]
 [organizer] --> [state]
@@ -160,7 +163,7 @@ package "internal" {
 | Package | Responsibility
 
 | `cmd/phorga`
-| Entry point. `main` only wires SIGINT/SIGTERM to a context (and restores the default handling after the first signal, so a second one terminates); `run(ctx, args, logOut)` parses flags, loads and validates the config, registers jobs, starts the scheduler and the optional web UI, and returns the exit code (0 ok, 1 error, 2 usage). Tested end-to-end in `main_test.go`.
+| Entry point. `main` only wires SIGINT/SIGTERM to a context (and restores the default handling after the first signal, so a second one terminates); `run(ctx, args, logOut)` parses flags, loads and validates the config (or starts setup mode without one, CFG-009), registers jobs, starts the scheduler and the web UI (always when there are no jobs), and returns the exit code (0 ok, 1 error, 2 usage). The `engine` owns the configuration in effect: the web UI hands it a saved configuration, which it writes, reads back and puts into effect by swapping the scheduled jobs (CFG-008, ADR-0022). Tested end-to-end in `main_test.go`.
 
 | `config`
 | YAML/JSON loading, defaults, fail-fast validation.
@@ -169,7 +172,7 @@ package "internal" {
 | Decides which entries below a source are skipped: the fixed system and hidden entries (`@eaDir`, `#recycle`, `#snapshot`, dot-names) and the user's `exclude` patterns. Used by the organizer, duplicate detection and the file count, and by `config` to validate patterns (ADR-0016).
 
 | `scheduler`
-| Cron wrapper. A job never overlaps with itself (TryLock per job), and only one job runs at a time (a one-slot semaphore; due jobs wait, ADR-0020). Reports the next run and the running/waiting state per job, and computes next run times for the UI preview.
+| Cron wrapper. A job never overlaps with itself (TryLock per job name, kept across config changes), and only one job runs at a time (a one-slot semaphore; due jobs wait, ADR-0020). Jobs can be unregistered while running; the busy run finishes. Reports the next run and the running/waiting state per job, and computes next run times for the UI preview.
 
 | `organizer`
 | Recursive source scanning, date resolution, copy/move, lightweight duplicate handling.
@@ -192,8 +195,11 @@ package "internal" {
 | `runstatus`
 | Last result per job for the status page. Persists non-dry results to `<stateDir>/run-status.json`; dry-run results stay in memory (ADR-0014).
 
+| `synology`
+| Finds Synology Photos users (`<homes>/<user>/Photos`) by reading folder names only, and builds the ready-made organizer profile for a user (SYN-001, SYN-002).
+
 | `webui`
-| Optional HTTP handlers, templates, localization, config save/validate flow, live previews, the read-only folder picker below `webUI.browseRoots` (ADR-0013), the status page, and the embedded HTMX and stylesheet assets. Gets job status from `main` through the small `StatusSource` interface.
+| Optional HTTP handlers, templates, localization, config save/validate flow, live previews, adding and removing entries and Synology Photos users in the form (`POST /ui/form`, WEB-015, SYN-003), collapsed cards with a flow summary (WEB-016), editing the config file as text (`/ui/yaml`, WEB-018), the read-only folder picker below `webUI.browseRoots` (ADR-0013), the status page, the help page with the setup guide in one template per language (`/ui/help`, WEB-022), and the embedded HTMX and stylesheet assets. All handlers sit behind the optional Basic-auth password (WEB-020) and Go's cross-origin protection (WEB-021). Gets job status from `main` through the small `StatusSource` interface, and applies a save through the `Apply` callback, or the edited file text through `ApplyRaw`, which writes it unchanged so comments stay (CFG-008, WEB-018).
 |===
 
 == 6. Runtime View
@@ -299,9 +305,16 @@ Browser -> main : GET /ui
 main -> webui : render page
 webui -> config : map loaded config to form/view model
 webui --> Browser : HTML page
+Browser -> main : POST /ui/form (op=addProfile, addUsers, …)
+webui -> synology : find users (op=addUsers)
+webui --> Browser : page with the changed form (nothing written)
+Browser -> main : GET/POST /ui/yaml (file as text)
+webui -> config : Parse + Validate the text
+webui -> main : ApplyRaw(text) (save: written as it is, then applied)
 Browser -> main : POST /ui/validate or /ui/save
 main -> webui : parse form
-webui -> config : validate / save
+webui -> config : validate
+webui -> main : Apply(cfg) (save to the active file, see below)
 webui --> Browser : HTML fragment (+ out-of-band field errors) or full HTML response
 Browser -> main : POST /ui/preview/structure or /ui/preview/schedule
 webui -> metadata : resolve sample path
@@ -312,6 +325,35 @@ webui -> webui : clean path, resolve symlinks, check browseRoots
 webui --> Browser : folder list / options, or 403
 @enduml
 ----
+
+=== Applying a Saved Configuration
+
+[plantuml, runtime-apply, svg]
+----
+@startuml
+participant webui
+participant "engine (main)" as engine
+participant config
+participant scheduler
+participant runstatus
+webui -> engine : Apply(cfg) or ApplyRaw(text)
+engine -> config : Validate, write (atomic; ApplyRaw writes the edited text as it is), Load (read back)
+alt invalid or write failed
+  engine --> webui : error, nothing changed
+else
+  loop every old job
+    engine -> scheduler : Unregister(name)
+    note right : a running job finishes\nwith its old settings
+  end
+  engine -> scheduler : Register(new jobs)
+  engine -> runstatus : Forget(names that now mean another folder)
+  engine --> webui : applied config + fields that need a restart
+  webui -> webui : show applied config, take new browseRoots
+end
+@enduml
+----
+
+At startup without a config file, `run` uses a configuration with no jobs and the web UI on (setup mode, CFG-009); the first save creates the file. `stateDir`, `webUI.address` and turning the UI off only take effect after a restart (ADR-0022).
 
 === Job Status Recording
 
@@ -353,6 +395,7 @@ node "Host / NAS" {
   node "Docker" {
     artifact "phorga\ncontainer" as app
     file "/config/config.yaml" as cfg
+    folder "/homes (= /volume1/homes, optional)" as homes
     database "/data/state/*.json" as state
   }
   folder "/mnt/photos/incoming" as src
@@ -361,8 +404,9 @@ node "Host / NAS" {
 }
 cloud "ntfy.sh" as ntfy
 
-cfg --> app
-browser --> app : HTTP 127.0.0.1:8080\n(host loopback → container 0.0.0.0:8080)
+cfg <--> app : read at startup,\nwritten by the UI
+app --> homes : finds Synology Photos users
+browser --> app : HTTPS via reverse proxy → 127.0.0.1:8080\n(host loopback → container 0.0.0.0:8080)
 app --> src : reads
 app --> tgt : writes
 app --> dup : writes
@@ -375,9 +419,10 @@ app --> ntfy : HTTP POST
 * Base image: `gcr.io/distroless/static-debian13:nonroot` (no shell; CA certificates and time zone data included). Runs as uid 65532 unless `user:` sets the NAS user. Images before 2026-11-21 ran as root on Alpine; their state volume belongs to root (README › Docker).
 * State volume: `/data/state`
 * Mount the common parent of source and target once (e.g. `/volume1/photos`) to get same-volume moves; Linux refuses hard links across mount points (ORG-025).
-* Config mount: `/config/config.yaml` (read-only)
+* Config mount: the folder `/config`, writable by Phorga's user, so the web UI can create and replace `config.yaml` atomically. A file mounted on its own cannot be replaced (EBUSY). The file may be missing at first (setup mode, CFG-009).
+* Synology Photos users (optional): mount `/volume1/homes` at `/homes`. Phorga's user needs read access to the home folders it should list, and write access to the ones it organizes.
 * Timezone via `TZ` environment variable.
-* Web UI (optional): listens on `0.0.0.0:8080` inside the container; the port is published on the host loopback only (`127.0.0.1:8080:8080`).
+* Web UI: the image sets `PHORGA_WEB_UI_ADDR=0.0.0.0:8080`, so the UI listens on all interfaces inside the container; the port mapping decides who can reach it (`127.0.0.1:8080:8080` publishes it on the host loopback only). It always starts while there are no jobs. Other devices reach it through a reverse proxy on the host, on a Synology the DSM reverse proxy (HTTPS, e.g. port 8443 → `localhost:8080`). `PHORGA_WEB_UI_PASSWORD` turns on HTTP Basic auth for every request (WEB-020, ADR-0023).
 
 == 8. Crosscutting Concepts
 
@@ -403,7 +448,7 @@ Phorga's own files (state, cache, run status, config) are written with temp file
 * All actions, skips, and errors are logged with context.
 
 === Configuration UI
-An optional HTTP server in the main process renders templates with HTMX; all assets are embedded, so it works offline. It shows the loaded config, validates with the same rules as startup, and saves to the active or a separate file. It is meant for local/private use only. The behavior is specified in link:../specs/web-ui.md[web-ui.md].
+An optional HTTP server in the main process renders templates with HTMX; all assets are embedded, so it works offline. It shows the configuration in effect, validates with the same rules as startup, and saves to the active file (applied at once, CFG-008) or a separate file (not applied). It is meant for local/private use only. The behavior is specified in link:../specs/web-ui.md[web-ui.md].
 
 == 9. Architectural Decisions
 
@@ -435,10 +480,10 @@ Decisions are recorded as ADRs in link:../decisions/README.md[docs/decisions]. T
 | Project name Phorga
 
 | link:../decisions/0008-built-in-server-rendered-web-ui.md[0008]
-| Optional built-in, server-rendered web UI with HTMX
+| Optional built-in, server-rendered web UI with HTMX (authentication part superseded by 0023)
 
 | link:../decisions/0009-ui-save-destination-and-no-hot-reload.md[0009]
-| UI saves to active or separate file; no hot reload
+| UI saves to active or separate file; no hot reload (hot reload part superseded by 0022)
 
 | link:../decisions/0010-multilingual-tokens-by-name.md[0010]
 | Multilingual tokens chosen by name; case controls rendering
@@ -475,6 +520,12 @@ Decisions are recorded as ADRs in link:../decisions/README.md[docs/decisions]. T
 
 | link:../decisions/0021-built-in-heic-and-video-date-readers.md[0021]
 | Built-in date readers for HEIC and MP4/MOV
+
+| link:../decisions/0022-live-apply-and-setup-mode.md[0022]
+| Apply UI changes live; start without a config (setup mode)
+
+| link:../decisions/0023-optional-web-ui-password.md[0023]
+| Optional web UI password from the environment (Basic auth); cross-site writes rejected
 |===
 
 == 10. Risks and Technical Debt
@@ -504,8 +555,16 @@ Decisions are recorded as ADRs in link:../decisions/README.md[docs/decisions]. T
 | The status page shows waiting jobs; spread the schedules (ADR-0020).
 
 | Local/private web UI only
-| Public exposure would be unsafe without additional controls. The folder picker reveals folder names below `browseRoots`.
-| Document local/private deployment scope and rely on external protection if exposed. Keep `browseRoots` limited to the media folders.
+| Whoever reaches the UI can change what Phorga moves, with immediate effect. One shared password, no lockout; over plain HTTP it is readable on the network. The folder picker reveals folder names below `browseRoots`.
+| Optional password (WEB-020), start-up warning without one, cross-site writes rejected (WEB-021). The guide puts HTTPS in front and forbids internet exposure (ADR-0023). Keep `browseRoots` limited to the media folders.
+
+| Access to all home folders
+| Listing and organizing Synology Photos users means Phorga's user must read (and, for `move`, write) other users' home folders, a wider permission than a single photo share
+| The UI marks users it cannot read as "no access" instead of failing. Mounting `/homes` is optional; users can mount single `Photos` folders instead.
+
+| Settings change while a job runs
+| After a save, a running job keeps its old settings until it ends
+| Intended (ADR-0022): the next run uses the new settings; the save result says what needs a restart.
 
 | Duplicated token list
 | `targetStructure` tokens are defined in both `config` and `metadata`, so they can diverge

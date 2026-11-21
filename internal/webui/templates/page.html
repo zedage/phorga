@@ -4,16 +4,17 @@
 {{template "head" (dict "Title" (call .T "page_title"))}}
 <body class="page-config">
   {{template "nav" (dict "T" .T "Lang" .Data.Lang "Active" "config")}}
-  <div class="shell">
+  <div class="shell" data-focus="{{.Data.Focus}}">
     <aside class="sidebar">
       <nav class="toc" aria-label="{{call .T "sections_nav"}}">
         <div class="toc-title">{{call .T "sections_nav"}}</div>
+        <a href="#sec-synology">{{template "icon" "users"}}<span>{{call .T "synology_section"}}</span>{{if .Data.Synology.Users}}<span class="count">{{len .Data.Synology.Users}}</span>{{end}}</a>
+        <a href="#sec-organizer">{{template "icon" "layers"}}<span>{{call .T "organizer_section"}}</span><span class="count">{{len .Data.Form.Organizer}}</span></a>
+        {{range $i, $org := .Data.Form.Organizer}}<a class="sub" href="#org-{{$i}}"><span>{{template "profileName" (dict "T" $.T "Name" $org.Name "I" $i "Key" "organizer_profile")}}</span></a>{{end}}
+        <a href="#sec-dedup">{{template "icon" "copy"}}<span>{{call .T "duplicate_section"}}</span><span class="count">{{len .Data.Form.DuplicateDetection}}</span></a>
+        {{range $i, $dd := .Data.Form.DuplicateDetection}}<a class="sub" href="#dd-{{$i}}"><span>{{template "profileName" (dict "T" $.T "Name" $dd.Name "I" $i "Key" "duplicate_job")}}</span></a>{{end}}
         <a href="#sec-general">{{template "icon" "sliders"}}<span>{{call .T "section_general"}}</span></a>
         <a href="#sec-webui">{{template "icon" "monitor"}}<span>{{call .T "webui_section"}}</span></a>
-        <a href="#sec-organizer">{{template "icon" "layers"}}<span>{{call .T "organizer_section"}}</span><span class="count">{{len .Data.Form.Organizer}}</span></a>
-        {{range $i, $org := .Data.Form.Organizer}}<a class="sub" href="#org-{{$i}}"><span>{{call $.T "organizer_profile"}} {{$i}}</span></a>{{end}}
-        <a href="#sec-dedup">{{template "icon" "copy"}}<span>{{call .T "duplicate_section"}}</span><span class="count">{{len .Data.Form.DuplicateDetection}}</span></a>
-        {{range $i, $dd := .Data.Form.DuplicateDetection}}<a class="sub" href="#dd-{{$i}}"><span>{{call $.T "duplicate_job"}} {{$i}}</span></a>{{end}}
         <a href="#sec-save">{{template "icon" "save"}}<span>{{call .T "save_target"}}</span></a>
       </nav>
     </aside>
@@ -22,12 +23,25 @@
       <header class="page-head">
         <h1>{{call .T "heading"}}</h1>
         <p class="lead">{{call .T "intro"}}</p>
-        <div class="config-chip" title="{{call .T "loaded_config"}}">
-          {{template "icon" "file"}}
-          <span class="config-chip-label">{{call .T "loaded_config"}}</span>
-          <code>{{.Data.ConfigPath}}</code>
+        <div class="config-row">
+          <div class="config-chip" title="{{call .T "loaded_config"}}">
+            {{template "icon" "file"}}
+            <span class="config-chip-label">{{call .T "loaded_config"}}</span>
+            <code>{{.Data.ConfigPath}}</code>
+          </div>
+          <a class="button secondary small" href="/ui/yaml">{{template "icon" "code"}}<span>{{if eq (ext .Data.ConfigPath) "json"}}{{call .T "edit_json"}}{{else}}{{call .T "edit_yaml"}}{{end}}</span></a>
         </div>
       </header>
+
+      {{if .Data.Setup}}
+      <div class="callout setup-callout" role="status">
+        {{template "icon" "info"}}
+        <div>
+          <strong>{{call .T "setup_title"}}</strong>
+          <div>{{call .T "setup_body"}} <a href="/ui/help">{{call .T "setup_help_link"}}</a></div>
+        </div>
+      </div>
+      {{end}}
 
       <div class="callout">
         {{template "icon" "shield"}}
@@ -42,37 +56,54 @@
       <form method="post" action="/ui/save" class="config-form">
         <input type="hidden" name="lang" value="{{.Data.Lang}}">
 
-        <section class="section" id="sec-general">
-          <div class="section-head">
-            <span class="section-icon">{{template "icon" "sliders"}}</span>
-            <h2>{{call .T "section_general"}}</h2>
-          </div>
-          <div class="card">
-            <div class="fields">
-              {{template "field" (dict "R" . "Name" "stateDir" "Label" "state_dir" "Value" .Data.Form.StateDir "Help" "state_dir" "Kind" "path" "Wide" true)}}
-            </div>
-          </div>
-        </section>
-
-        <section class="section" id="sec-webui">
-          <div class="section-head">
-            <span class="section-icon">{{template "icon" "monitor"}}</span>
-            <h2>{{call .T "webui_section"}}</h2>
-          </div>
-          <div class="card">
-            <div class="fields">
-              {{template "checkbox" (dict "R" . "Name" "webUI.enabled" "Label" "webui_enabled" "Value" .Data.Form.WebUI.Enabled "Help" "webui_enabled")}}
-              {{template "field" (dict "R" . "Name" "webUI.address" "Label" "webui_address" "Value" .Data.Form.WebUI.Address "Help" "webui_address" "Kind" "text")}}
-              <div class="field wide">
-                <label for="{{fid "webUI.browseRoots"}}">{{call .T "browse_roots_label"}}</label>
-                <textarea id="{{fid "webUI.browseRoots"}}" name="webUI.browseRoots" rows="3" spellcheck="false" aria-describedby="{{fid "webUI.browseRoots"}}-help">{{lines .Data.Form.WebUI.BrowseRoots}}</textarea>
-                <small class="help" id="{{fid "webUI.browseRoots"}}-help">{{call .T "help_browse_roots"}}</small>
-                <div class="field-error" id="err-{{fid "webUI.browseRoots"}}">{{call .FErr "webUI.browseRoots"}}</div>
+        {{/* ---------- Synology Photos users (SYN-003) ---------- */}}
+        <section class="section" id="sec-synology">
+          <details class="section-details" id="sec-synology-details"{{if or .Data.Setup .Data.Synology.Addable (.Data.HasErrors "synologyPhotos.homes") (eq .Data.Focus "sec-synology")}} open{{end}}>
+            <summary class="section-head">
+              <span class="section-icon">{{template "icon" "users"}}</span>
+              <h2>{{call .T "synology_section"}}</h2>
+              <span class="section-summary">{{with .Data.Synology}}{{if not .Found}}{{call $.T "synology_summary_none"}}{{else}}{{len .Users}} {{call $.T "synology_summary_users"}}{{end}}{{end}}</span>
+              {{template "icon" "chevron"}}
+            </summary>
+            <div class="card">
+              <p class="help group-help">{{call .T "synology_intro"}}</p>
+              <div class="fields">
+                {{template "field" (dict "R" . "Name" "synologyPhotos.homes" "Label" "synology_homes" "Value" .Data.Form.SynologyHomes "Help" "synology_homes" "Kind" "path" "Wide" true)}}
+              </div>
+              {{with .Data.Synology}}
+              {{if not .Found}}
+              <p class="muted synology-empty">{{call $.T "synology_not_found"}} <code>{{.Homes}}</code></p>
+              {{else if not .Users}}
+              <p class="muted synology-empty">{{call $.T "synology_no_users"}} <code>{{.Homes}}</code></p>
+              {{else}}
+              <ul class="user-list">
+                {{range .Users}}
+                <li class="user-row">
+                  <label class="user-pick">
+                    <input type="checkbox" name="synologyUser" value="{{.Name}}"{{if or .Configured (not .Readable)}} disabled{{end}}{{if .Configured}} checked{{end}}>
+                    <span class="user-name">{{.Name}}</span>
+                    <code class="path-chip">{{.Photos}}</code>
+                  </label>
+                  <span class="user-badges">
+                    {{if .Configured}}<span class="badge ok">{{call $.T "synology_configured"}}</span>
+                    {{else if not .Readable}}<span class="badge warn">{{call $.T "synology_no_access"}}</span>
+                    {{else if not .HasMobileBackup}}<span class="badge">{{call $.T "synology_no_backup"}}</span>{{end}}
+                  </span>
+                </li>
+                {{end}}
+              </ul>
+              <p class="help group-help">{{call $.T "synology_add_help"}}</p>
+              {{end}}
+              {{end}}
+              <div class="section-actions">
+                {{if .Data.Synology.Addable}}{{template "opButton" (dict "R" . "Op" "addUsers" "Label" "synology_add" "Icon" "plus" "Class" "primary")}}{{end}}
+                {{template "opButton" (dict "R" . "Op" "refreshUsers" "Label" "synology_refresh" "Icon" "refresh")}}
               </div>
             </div>
-          </div>
+          </details>
         </section>
 
+        {{/* ---------- Organizer profiles (WEB-016) ---------- */}}
         <input type="hidden" name="organizerCount" value="{{len .Data.Form.Organizer}}">
         <section class="section" id="sec-organizer">
           <div class="section-head">
@@ -80,78 +111,125 @@
             <h2>{{call .T "organizer_section"}}</h2>
             <span class="count">{{len .Data.Form.Organizer}}</span>
           </div>
+          <p class="help section-help">{{call .T "organizer_section_help"}}</p>
           {{range $i, $org := .Data.Form.Organizer}}
+          {{$p := printf "organizer.%d" $i}}
           <article class="card entity" id="org-{{$i}}">
-            <header class="entity-head">
-              <div class="entity-title">
-                <span class="entity-index">{{$i}}</span>
-                <h3>{{call $.T "organizer_profile"}} {{$i}}</h3>
-              </div>
-              <div class="entity-meta">
-                <code class="path-chip" data-mirror="{{fid (printf "organizer.%d.target" $i)}}">{{$org.Target}}</code>
-                <span class="badge dry" data-show-if="{{fid (printf "organizer.%d.dryRun" $i)}}"{{if not $org.DryRun}} hidden{{end}}>{{call $.T "dry_run"}}</span>
-              </div>
-            </header>
-
-            <fieldset class="group">
-              <legend>{{call $.T "group_target"}}</legend>
-              <div class="fields">
-                {{template "field" (dict "R" $ "Name" (printf "organizer.%d.target" $i) "Label" "target" "Value" $org.Target "Help" "target" "Kind" "path" "Wide" true)}}
-                {{template "field" (dict "R" $ "Name" (printf "organizer.%d.targetStructure" $i) "Label" "target_structure" "Value" $org.TargetStructure "Help" "target_structure" "Kind" "structure")}}
-                {{template "field" (dict "R" $ "Name" (printf "organizer.%d.fallbackFolder" $i) "Label" "fallback_folder" "Value" $org.FallbackFolder "Help" "fallback_folder" "Kind" "path")}}
-              </div>
-            </fieldset>
-
-            <fieldset class="group">
-              <legend>{{call $.T "group_options"}}</legend>
-              <div class="fields">
-                {{template "checkbox" (dict "R" $ "Name" (printf "organizer.%d.dryRun" $i) "Label" "dry_run" "Value" $org.DryRun "Help" "dry_run")}}
-                {{template "checkbox" (dict "R" $ "Name" (printf "organizer.%d.ignoreModTime" $i) "Label" "ignore_mod_time" "Value" $org.IgnoreModTime "Help" "ignore_mod_time")}}
-                {{template "field" (dict "R" $ "Name" (printf "organizer.%d.ntfyURL" $i) "Label" "ntfy_url" "Value" $org.NtfyURL "Help" "ntfy_url" "Kind" "text" "Wide" true)}}
-              </div>
-            </fieldset>
-
-            <input type="hidden" name="organizer.{{$i}}.sourceCount" value="{{len $org.Sources}}">
-            <div class="subhead">{{call $.T "sources"}} <span class="count">{{len $org.Sources}}</span></div>
-            {{range $j, $src := $org.Sources}}
-            <div class="subcard" id="org-{{$i}}-src-{{$j}}">
-              <header class="subcard-head">
-                <span class="subcard-icon">{{template "icon" "source"}}</span>
-                <strong>{{call $.T "source"}} {{$j}}</strong>
-                <code class="path-chip" data-mirror="{{fid (printf "organizer.%d.sources.%d.path" $i $j)}}">{{$src.Path}}</code>
-                <span class="flow">{{template "icon" "arrow"}}<span data-mirror="{{fid (printf "organizer.%d.sources.%d.mode" $i $j)}}">{{$src.Mode}}</span></span>
-                <code class="cron" data-mirror="{{fid (printf "organizer.%d.sources.%d.schedule" $i $j)}}">{{$src.Schedule}}</code>
-              </header>
-
-              <fieldset class="group">
-                <legend>{{call $.T "group_basics"}}</legend>
-                <div class="fields">
-                  {{template "field" (dict "R" $ "Name" (printf "organizer.%d.sources.%d.path" $i $j) "Label" "path" "Value" $src.Path "Help" "source_path" "Kind" "path" "Wide" true)}}
-                  {{template "select" (dict "R" $ "Name" (printf "organizer.%d.sources.%d.mode" $i $j) "Label" "mode" "Value" $src.Mode "Help" "mode" "Options" $.Data.Choices.SourceModes)}}
-                  {{template "field" (dict "R" $ "Name" (printf "organizer.%d.sources.%d.schedule" $i $j) "Label" "schedule" "Value" $src.Schedule "Help" "schedule" "Kind" "schedule")}}
-                  {{template "exclude" (dict "R" $ "Name" (printf "organizer.%d.sources.%d.exclude" $i $j) "Value" $src.Exclude)}}
+            <details class="entity-details" id="org-{{$i}}-details"{{if $.Data.Open (printf "org-%d" $i) (printf "%s." $p)}} open{{end}}>
+              <summary class="entity-summary">
+                <div class="entity-head">
+                  <div class="entity-title">
+                    <span class="entity-index">{{inc $i}}</span>
+                    <h3 data-mirror="{{fid (printf "%s.name" $p)}}" data-fallback="{{call $.T "organizer_profile"}} {{inc $i}}">{{template "profileName" (dict "T" $.T "Name" $org.Name "I" $i "Key" "organizer_profile")}}</h3>
+                  </div>
+                  <div class="entity-meta">
+                    <span class="badge dry" data-show-if="{{fid (printf "%s.dryRun" $p)}}"{{if not $org.DryRun}} hidden{{end}}>{{call $.T "dry_run"}}</span>
+                    {{template "toggleHint" $}}
+                  </div>
                 </div>
-              </fieldset>
+                <div class="flow">
+                  <ul class="flow-sources" aria-label="{{call $.T "sources"}}">
+                    {{range $j, $src := $org.Sources}}
+                    {{$sp := printf "%s.sources.%d" $p $j}}
+                    <li class="flow-node">
+                      {{template "icon" "folder"}}
+                      <code class="flow-path" data-mirror="{{fid (printf "%s.path" $sp)}}" data-fallback="{{call $.T "not_set"}}">{{if $src.Path}}{{$src.Path}}{{else}}{{call $.T "not_set"}}{{end}}</code>
+                      <span class="flow-meta">
+                        <span class="chip" data-mirror="{{fid (printf "%s.mode" $sp)}}">{{$src.Mode}}</span>
+                        <code class="cron" data-mirror="{{fid (printf "%s.schedule" $sp)}}">{{$src.Schedule}}</code>
+                      </span>
+                    </li>
+                    {{else}}
+                    <li class="flow-node muted">{{call $.T "no_sources"}}</li>
+                    {{end}}
+                  </ul>
+                  <div class="flow-arrow" aria-hidden="true">{{template "icon" "arrow"}}</div>
+                  <div class="flow-node flow-target" aria-label="{{call $.T "target"}}">
+                    {{template "icon" "folder"}}
+                    <code class="flow-path" data-mirror="{{fid (printf "%s.target" $p)}}" data-fallback="{{call $.T "not_set"}}">{{if $org.Target}}{{$org.Target}}{{else}}{{call $.T "not_set"}}{{end}}</code>
+                    <span class="flow-meta"><code class="structure" data-mirror="{{fid (printf "%s.targetStructure" $p)}}">{{$org.TargetStructure}}</code></span>
+                  </div>
+                </div>
+              </summary>
 
-              <fieldset class="group has-dependents">
-                <legend>{{call $.T "group_duplicates"}}</legend>
-                <div class="fields">
-                  {{template "checkbox" (dict "R" $ "Name" (printf "organizer.%d.sources.%d.duplicatesEnabled" $i $j) "Label" "duplicates_enabled" "Value" $src.DuplicatesEnabled "Help" "duplicates_enabled" "Wide" true)}}
+              <div class="entity-body">
+                <fieldset class="group">
+                  <legend>{{call $.T "group_profile"}}</legend>
+                  <div class="fields">
+                    {{template "field" (dict "R" $ "Name" (printf "%s.name" $p) "Label" "name" "Value" $org.Name "Help" "name" "Kind" "text" "Placeholder" (printf "%s %d" (call $.T "organizer_profile") (inc $i)))}}
+                    {{template "checkbox" (dict "R" $ "Name" (printf "%s.dryRun" $p) "Label" "dry_run" "Value" $org.DryRun "Help" "dry_run")}}
+                  </div>
+                </fieldset>
+
+                <fieldset class="group">
+                  <legend>{{call $.T "group_target"}}</legend>
+                  <div class="fields">
+                    {{template "field" (dict "R" $ "Name" (printf "%s.target" $p) "Label" "target" "Value" $org.Target "Help" "target" "Kind" "path" "Wide" true)}}
+                    {{template "field" (dict "R" $ "Name" (printf "%s.targetStructure" $p) "Label" "target_structure" "Value" $org.TargetStructure "Help" "target_structure" "Kind" "structure" "Wide" true)}}
+                  </div>
+                </fieldset>
+
+                <input type="hidden" name="{{$p}}.sourceCount" value="{{len $org.Sources}}">
+                <div class="subhead">{{call $.T "sources"}} <span class="count">{{len $org.Sources}}</span></div>
+                {{range $j, $src := $org.Sources}}
+                {{$sp := printf "%s.sources.%d" $p $j}}
+                <div class="subcard" id="org-{{$i}}-src-{{$j}}">
+                  <header class="subcard-head">
+                    <span class="subcard-icon">{{template "icon" "source"}}</span>
+                    <strong>{{call $.T "source"}} {{inc $j}}</strong>
+                    {{template "removeButton" (dict "R" $ "Op" (printf "removeSource:%d:%d" $i $j) "Label" "remove_source")}}
+                  </header>
+
+                  <div class="fields">
+                    {{template "field" (dict "R" $ "Name" (printf "%s.path" $sp) "Label" "path" "Value" $src.Path "Help" "source_path" "Kind" "path" "Wide" true)}}
+                    {{template "select" (dict "R" $ "Name" (printf "%s.mode" $sp) "Label" "mode" "Value" $src.Mode "Help" "mode" "Options" $.Data.Choices.SourceModes)}}
+                    {{template "field" (dict "R" $ "Name" (printf "%s.schedule" $sp) "Label" "schedule" "Value" $src.Schedule "Help" "schedule" "Kind" "schedule")}}
+                  </div>
+
+                  <fieldset class="group has-dependents">
+                    <legend>{{call $.T "group_duplicates"}}</legend>
+                    <div class="fields">
+                      {{template "checkbox" (dict "R" $ "Name" (printf "%s.duplicatesEnabled" $sp) "Label" "duplicates_enabled" "Value" $src.DuplicatesEnabled "Help" "duplicates_enabled" "Wide" true)}}
+                    </div>
+                    <div class="fields dependents">
+                      {{template "detection" (dict "R" $ "Prefix" $sp "Src" $src)}}
+                      {{template "select" (dict "R" $ "Name" (printf "%s.actionMethod" $sp) "Label" "action_method" "Value" $src.ActionMethod "Help" "org_action_method" "Options" $.Data.Choices.OrgMethods "OptPrefix" "optorg_")}}
+                      {{template "field" (dict "R" $ "Name" (printf "%s.duplicateFolder" $sp) "Label" "duplicate_folder" "Value" $src.DuplicateFolder "Help" "duplicate_folder" "Kind" "path")}}
+                    </div>
+                  </fieldset>
+
+                  <details class="more" id="org-{{$i}}-src-{{$j}}-more"{{if $.Data.HasErrors (printf "%s.exclude" $sp)}} open{{end}}>
+                    <summary>{{template "icon" "chevron"}}{{call $.T "more_options"}}</summary>
+                    <div class="fields">
+                      {{template "exclude" (dict "R" $ "Name" (printf "%s.exclude" $sp) "Value" $src.Exclude)}}
+                    </div>
+                  </details>
                 </div>
-                <div class="fields dependents">
-                  {{template "field" (dict "R" $ "Name" (printf "organizer.%d.sources.%d.detectionMode" $i $j) "Label" "detection_mode" "Value" $src.DetectionMode "Help" "org_detection_mode" "Kind" "text")}}
-                  {{template "select" (dict "R" $ "Name" (printf "organizer.%d.sources.%d.actionMethod" $i $j) "Label" "action_method" "Value" $src.ActionMethod "Help" "org_action_method" "Options" $.Data.Choices.OrgMethods)}}
-                  {{template "field" (dict "R" $ "Name" (printf "organizer.%d.sources.%d.duplicateFolder" $i $j) "Label" "duplicate_folder" "Value" $src.DuplicateFolder "Help" "duplicate_folder" "Kind" "path" "Wide" true)}}
+                {{end}}
+                <div class="section-actions">{{template "opButton" (dict "R" $ "Op" (printf "addSource:%d" $i) "Label" "add_source" "Icon" "plus")}}</div>
+
+                <details class="more" id="org-{{$i}}-more"{{if $.Data.HasErrors (printf "%s.fallbackFolder" $p) (printf "%s.ntfyURL" $p)}} open{{end}}>
+                  <summary>{{template "icon" "chevron"}}{{call $.T "more_options"}}</summary>
+                  <div class="fields">
+                    {{template "field" (dict "R" $ "Name" (printf "%s.fallbackFolder" $p) "Label" "fallback_folder" "Value" $org.FallbackFolder "Help" "fallback_folder" "Kind" "path" "Wide" true)}}
+                    {{template "checkbox" (dict "R" $ "Name" (printf "%s.ignoreModTime" $p) "Label" "ignore_mod_time" "Value" $org.IgnoreModTime "Help" "ignore_mod_time" "Wide" true)}}
+                    {{template "field" (dict "R" $ "Name" (printf "%s.ntfyURL" $p) "Label" "ntfy_url" "Value" $org.NtfyURL "Help" "ntfy_url" "Kind" "text" "Wide" true)}}
+                  </div>
+                </details>
+
+                <div class="entity-foot">
+                  {{template "opButton" (dict "R" $ "Op" (printf "removeProfile:%d" $i) "Label" "remove_profile" "Icon" "trash" "Class" "ghost danger")}}
                 </div>
-              </fieldset>
-            </div>
-            {{end}}
+              </div>
+            </details>
           </article>
           {{else}}
           <div class="card empty">{{call .T "no_profiles"}}</div>
           {{end}}
+          <div class="section-actions">{{template "opButton" (dict "R" . "Op" "addProfile" "Label" "add_profile" "Icon" "plus")}}</div>
         </section>
 
+        {{/* ---------- Duplicate detection jobs (WEB-016) ---------- */}}
         <input type="hidden" name="duplicateDetectionCount" value="{{len .Data.Form.DuplicateDetection}}">
         <section class="section" id="sec-dedup">
           <div class="section-head">
@@ -159,83 +237,174 @@
             <h2>{{call .T "duplicate_section"}}</h2>
             <span class="count">{{len .Data.Form.DuplicateDetection}}</span>
           </div>
+          <p class="help section-help">{{call .T "duplicate_section_help"}}</p>
           {{range $i, $dd := .Data.Form.DuplicateDetection}}
+          {{$p := printf "duplicateDetection.%d" $i}}
           <article class="card entity" id="dd-{{$i}}">
-            <header class="entity-head">
-              <div class="entity-title">
-                <span class="entity-index">{{$i}}</span>
-                <h3>{{call $.T "duplicate_job"}} {{$i}}</h3>
-              </div>
-              <div class="entity-meta">
-                <code class="cron" data-mirror="{{fid (printf "duplicateDetection.%d.schedule" $i)}}">{{$dd.Schedule}}</code>
-                <span class="badge" data-show-unless="{{fid (printf "duplicateDetection.%d.enabled" $i)}}"{{if $dd.Enabled}} hidden{{end}}>{{call $.T "badge_disabled"}}</span>
-                <span class="badge dry" data-show-if="{{fid (printf "duplicateDetection.%d.dryRun" $i)}}"{{if not $dd.DryRun}} hidden{{end}}>{{call $.T "dry_run"}}</span>
-              </div>
-            </header>
+            <details class="entity-details" id="dd-{{$i}}-details"{{if $.Data.Open (printf "dd-%d" $i) (printf "%s." $p)}} open{{end}}>
+              <summary class="entity-summary">
+                <div class="entity-head">
+                  <div class="entity-title">
+                    <span class="entity-index">{{inc $i}}</span>
+                    <h3 data-mirror="{{fid (printf "%s.name" $p)}}" data-fallback="{{call $.T "duplicate_job"}} {{inc $i}}">{{template "profileName" (dict "T" $.T "Name" $dd.Name "I" $i "Key" "duplicate_job")}}</h3>
+                  </div>
+                  <div class="entity-meta">
+                    <span class="badge" data-show-unless="{{fid (printf "%s.enabled" $p)}}"{{if $dd.Enabled}} hidden{{end}}>{{call $.T "badge_disabled"}}</span>
+                    <span class="badge dry" data-show-if="{{fid (printf "%s.dryRun" $p)}}"{{if not $dd.DryRun}} hidden{{end}}>{{call $.T "dry_run"}}</span>
+                    {{template "toggleHint" $}}
+                  </div>
+                </div>
+                <div class="flow">
+                  <ul class="flow-sources" aria-label="{{call $.T "group_compare"}}">
+                    {{range $j, $source := $dd.Sources}}
+                    <li class="flow-node">{{template "icon" "folder"}}<code class="flow-path" data-mirror="{{fid (printf "%s.sources.%d" $p $j)}}" data-fallback="{{call $.T "not_set"}}">{{if $source}}{{$source}}{{else}}{{call $.T "not_set"}}{{end}}</code></li>
+                    {{else}}
+                    <li class="flow-node muted">{{call $.T "no_sources"}}</li>
+                    {{end}}
+                  </ul>
+                  <div class="flow-arrow" aria-hidden="true">{{template "icon" "arrow"}}</div>
+                  <div class="flow-node flow-target">
+                    {{template "icon" "copy"}}
+                    <span class="flow-path">{{call $.T "flow_compare"}} <code data-mirror="{{fid (printf "%s.detectionMode" $p)}}">{{$dd.DetectionMode}}</code></span>
+                    <span class="flow-meta">
+                      <code class="cron" data-mirror="{{fid (printf "%s.schedule" $p)}}">{{$dd.Schedule}}</code>
+                      <span class="chip" data-mirror="{{fid (printf "%s.actionMethod" $p)}}">{{$dd.ActionMethod}}</span>
+                      <code data-mirror="{{fid (printf "%s.duplicateFolder" $p)}}">{{$dd.DuplicateFolder}}</code>
+                    </span>
+                  </div>
+                </div>
+              </summary>
 
-            <fieldset class="group">
-              <legend>{{call $.T "group_schedule"}}</legend>
-              <div class="fields">
-                {{template "checkbox" (dict "R" $ "Name" (printf "duplicateDetection.%d.enabled" $i) "Label" "enabled" "Value" $dd.Enabled "Help" "dedup_enabled")}}
-                {{template "checkbox" (dict "R" $ "Name" (printf "duplicateDetection.%d.dryRun" $i) "Label" "dry_run" "Value" $dd.DryRun "Help" "dry_run")}}
-                {{template "field" (dict "R" $ "Name" (printf "duplicateDetection.%d.schedule" $i) "Label" "schedule" "Value" $dd.Schedule "Help" "schedule" "Kind" "schedule")}}
-                {{template "select" (dict "R" $ "Name" (printf "duplicateDetection.%d.detectionMode" $i) "Label" "detection_mode" "Value" $dd.DetectionMode "Help" "dedup_detection_mode" "Options" $.Data.Choices.DedupModes)}}
-                {{template "select" (dict "R" $ "Name" (printf "duplicateDetection.%d.actionMethod" $i) "Label" "action_method" "Value" $dd.ActionMethod "Help" "dedup_action_method" "Options" $.Data.Choices.DedupMethods)}}
-                {{template "field" (dict "R" $ "Name" (printf "duplicateDetection.%d.duplicateFolder" $i) "Label" "duplicate_folder" "Value" $dd.DuplicateFolder "Help" "duplicate_folder" "Kind" "path")}}
-                {{template "field" (dict "R" $ "Name" (printf "duplicateDetection.%d.ntfyURL" $i) "Label" "ntfy_url" "Value" $dd.NtfyURL "Help" "ntfy_url" "Kind" "text" "Wide" true)}}
-              </div>
-            </fieldset>
+              <div class="entity-body">
+                <fieldset class="group">
+                  <legend>{{call $.T "group_profile"}}</legend>
+                  <div class="fields">
+                    {{template "field" (dict "R" $ "Name" (printf "%s.name" $p) "Label" "name" "Value" $dd.Name "Help" "name" "Kind" "text" "Placeholder" (printf "%s %d" (call $.T "duplicate_job") (inc $i)))}}
+                    {{template "checkbox" (dict "R" $ "Name" (printf "%s.enabled" $p) "Label" "enabled" "Value" $dd.Enabled "Help" "dedup_enabled")}}
+                    {{template "checkbox" (dict "R" $ "Name" (printf "%s.dryRun" $p) "Label" "dry_run" "Value" $dd.DryRun "Help" "dry_run")}}
+                  </div>
+                </fieldset>
 
-            <fieldset class="group">
-              <legend>{{call $.T "group_compare"}}</legend>
-              <input type="hidden" name="duplicateDetection.{{$i}}.sourceCount" value="{{len $dd.Sources}}">
-              <p class="help group-help">{{call $.T "help_dedup_sources"}}</p>
-              <div class="fields">
-                {{range $j, $source := $dd.Sources}}
-                {{template "field" (dict "R" $ "Name" (printf "duplicateDetection.%d.sources.%d" $i $j) "Label" "source" "Value" $source "Kind" "path" "Wide" true)}}
-                {{end}}
+                <fieldset class="group">
+                  <legend>{{call $.T "group_compare"}}</legend>
+                  <input type="hidden" name="{{$p}}.sourceCount" value="{{len $dd.Sources}}">
+                  <p class="help group-help">{{call $.T "help_dedup_sources"}}</p>
+                  <div class="fields">
+                    {{range $j, $source := $dd.Sources}}
+                    <div class="field-with-remove wide">
+                    {{template "field" (dict "R" $ "Name" (printf "%s.sources.%d" $p $j) "Label" "source" "Value" $source "Kind" "path" "Wide" true)}}
+                    {{template "removeButton" (dict "R" $ "Op" (printf "removeDedupSource:%d:%d" $i $j) "Label" "remove_source")}}
+                    </div>
+                    {{end}}
+                  </div>
+                  <div class="section-actions">{{template "opButton" (dict "R" $ "Op" (printf "addDedupSource:%d" $i) "Label" "add_source" "Icon" "plus")}}</div>
+                  <div class="field-error" id="err-{{fid (printf "%s.sources" $p)}}">{{call $.FErr (printf "%s.sources" $p)}}</div>
+                </fieldset>
+
+                <fieldset class="group">
+                  <legend>{{call $.T "group_schedule"}}</legend>
+                  <div class="fields">
+                    {{template "field" (dict "R" $ "Name" (printf "%s.schedule" $p) "Label" "schedule" "Value" $dd.Schedule "Help" "schedule" "Kind" "schedule")}}
+                    {{template "select" (dict "R" $ "Name" (printf "%s.detectionMode" $p) "Label" "detection_mode" "Value" $dd.DetectionMode "Help" "dedup_detection_mode" "Options" $.Data.Choices.DedupModes "OptPrefix" "optdd_")}}
+                    {{template "select" (dict "R" $ "Name" (printf "%s.actionMethod" $p) "Label" "action_method" "Value" $dd.ActionMethod "Help" "dedup_action_method" "Options" $.Data.Choices.DedupMethods "OptPrefix" "optdd_")}}
+                    {{template "field" (dict "R" $ "Name" (printf "%s.duplicateFolder" $p) "Label" "duplicate_folder" "Value" $dd.DuplicateFolder "Help" "duplicate_folder" "Kind" "path")}}
+                  </div>
+                </fieldset>
+
+                <details class="more" id="dd-{{$i}}-more"{{if $.Data.HasErrors (printf "%s.exclude" $p) (printf "%s.ntfyURL" $p)}} open{{end}}>
+                  <summary>{{template "icon" "chevron"}}{{call $.T "more_options"}}</summary>
+                  <div class="fields">
+                    {{template "exclude" (dict "R" $ "Name" (printf "%s.exclude" $p) "Value" $dd.Exclude)}}
+                    {{template "field" (dict "R" $ "Name" (printf "%s.ntfyURL" $p) "Label" "ntfy_url" "Value" $dd.NtfyURL "Help" "ntfy_url" "Kind" "text" "Wide" true)}}
+                  </div>
+                </details>
+
+                <div class="entity-foot">
+                  {{template "opButton" (dict "R" $ "Op" (printf "removeDedup:%d" $i) "Label" "remove_dedup" "Icon" "trash" "Class" "ghost danger")}}
+                </div>
               </div>
-              <div class="field-error" id="err-{{fid (printf "duplicateDetection.%d.sources" $i)}}">{{call $.FErr (printf "duplicateDetection.%d.sources" $i)}}</div>
-              <div class="fields">
-                {{template "exclude" (dict "R" $ "Name" (printf "duplicateDetection.%d.exclude" $i) "Value" $dd.Exclude)}}
-              </div>
-            </fieldset>
+            </details>
           </article>
           {{else}}
           <div class="card empty">{{call .T "no_dedup_jobs"}}</div>
           {{end}}
+          <div class="section-actions">{{template "opButton" (dict "R" . "Op" "addDedup" "Label" "add_dedup" "Icon" "plus")}}</div>
+        </section>
+
+        {{/* ---------- Rarely changed settings, collapsed (WEB-016) ---------- */}}
+        <section class="section" id="sec-general">
+          <details class="section-details" id="sec-general-details"{{if .Data.HasErrors "stateDir"}} open{{end}}>
+            <summary class="section-head">
+              <span class="section-icon">{{template "icon" "sliders"}}</span>
+              <h2>{{call .T "section_general"}}</h2>
+              <span class="section-summary"><code data-mirror="{{fid "stateDir"}}">{{.Data.Form.StateDir}}</code></span>
+              {{template "icon" "chevron"}}
+            </summary>
+            <div class="card">
+              <div class="fields">
+                {{template "field" (dict "R" . "Name" "stateDir" "Label" "state_dir" "Value" .Data.Form.StateDir "Help" "state_dir" "Kind" "path" "Wide" true)}}
+              </div>
+            </div>
+          </details>
+        </section>
+
+        <section class="section" id="sec-webui">
+          <details class="section-details" id="sec-webui-details"{{if .Data.HasErrors "webUI."}} open{{end}}>
+            <summary class="section-head">
+              <span class="section-icon">{{template "icon" "monitor"}}</span>
+              <h2>{{call .T "webui_section"}}</h2>
+              <span class="section-summary"><code data-mirror="{{fid "webUI.address"}}">{{.Data.Form.WebUI.Address}}</code></span>
+              {{template "icon" "chevron"}}
+            </summary>
+            <div class="card">
+              <div class="fields">
+                {{template "checkbox" (dict "R" . "Name" "webUI.enabled" "Label" "webui_enabled" "Value" .Data.Form.WebUI.Enabled "Help" "webui_enabled")}}
+                {{template "field" (dict "R" . "Name" "webUI.address" "Label" "webui_address" "Value" .Data.Form.WebUI.Address "Help" "webui_address" "Kind" "text")}}
+                <div class="field wide">
+                  <label for="{{fid "webUI.browseRoots"}}">{{call .T "browse_roots_label"}}</label>
+                  <textarea id="{{fid "webUI.browseRoots"}}" name="webUI.browseRoots" rows="3" spellcheck="false" aria-describedby="{{fid "webUI.browseRoots"}}-help">{{lines .Data.Form.WebUI.BrowseRoots}}</textarea>
+                  <small class="help" id="{{fid "webUI.browseRoots"}}-help">{{call .T "help_browse_roots"}}</small>
+                  <div class="field-error" id="err-{{fid "webUI.browseRoots"}}">{{call .FErr "webUI.browseRoots"}}</div>
+                </div>
+              </div>
+            </div>
+          </details>
         </section>
 
         <section class="section" id="sec-save">
-          <div class="section-head">
-            <span class="section-icon">{{template "icon" "save"}}</span>
-            <h2>{{call .T "save_target"}}</h2>
-          </div>
-          <div class="card save-card">
-            <div class="choice-cards" role="radiogroup" aria-label="{{call .T "save_target"}}">
-              <label class="choice">
-                <input type="radio" name="saveTarget" value="active" {{if ne .Data.Form.SaveTarget "separate"}}checked{{end}}>
-                <span class="choice-body">
-                  <strong>{{call .T "save_target_active"}}</strong>
-                  <code>{{.Data.ConfigPath}}</code>
-                </span>
-              </label>
-              <label class="choice">
-                <input type="radio" name="saveTarget" value="separate" {{if eq .Data.Form.SaveTarget "separate"}}checked{{end}}>
-                <span class="choice-body">
-                  <strong>{{call .T "save_target_separate"}}</strong>
-                  <span class="muted">.yaml · .yml · .json</span>
-                </span>
-              </label>
+          <details class="section-details" id="sec-save-details"{{if or (eq .Data.Form.SaveTarget "separate") (.Data.HasErrors "separatePath")}} open{{end}}>
+            <summary class="section-head">
+              <span class="section-icon">{{template "icon" "save"}}</span>
+              <h2>{{call .T "save_target"}}</h2>
+              <span class="section-summary">{{if eq .Data.Form.SaveTarget "separate"}}{{call .T "save_target_separate"}}{{else}}<code>{{.Data.ConfigPath}}</code>{{end}}</span>
+              {{template "icon" "chevron"}}
+            </summary>
+            <div class="card save-card">
+              <div class="choice-cards" role="radiogroup" aria-label="{{call .T "save_target"}}">
+                <label class="choice">
+                  <input type="radio" name="saveTarget" value="active" {{if ne .Data.Form.SaveTarget "separate"}}checked{{end}}>
+                  <span class="choice-body">
+                    <strong>{{call .T "save_target_active"}}</strong>
+                    <code>{{.Data.ConfigPath}}</code>
+                  </span>
+                </label>
+                <label class="choice">
+                  <input type="radio" name="saveTarget" value="separate" {{if eq .Data.Form.SaveTarget "separate"}}checked{{end}}>
+                  <span class="choice-body">
+                    <strong>{{call .T "save_target_separate"}}</strong>
+                    <span class="muted">.yaml · .yml · .json</span>
+                  </span>
+                </label>
+              </div>
+              <div class="fields separate-path">
+                {{template "field" (dict "R" . "Name" "separatePath" "Label" "separate_path" "Value" .Data.Form.SeparatePath "Help" "separate_path" "Kind" "path" "Wide" true)}}
+              </div>
             </div>
-            <div class="fields separate-path">
-              {{template "field" (dict "R" . "Name" "separatePath" "Label" "separate_path" "Value" .Data.Form.SeparatePath "Help" "separate_path" "Kind" "path" "Wide" true)}}
-            </div>
-          </div>
+          </details>
         </section>
 
         <div class="actionbar">
-          <div class="actionbar-hint">{{template "icon" "info"}}<span>{{call .T "restart_hint"}}</span></div>
+          <div class="actionbar-hint">{{template "icon" "info"}}<span>{{call .T "apply_hint"}}</span></div>
           <div class="actionbar-buttons">
             <button type="submit" formaction="/ui/validate" hx-post="/ui/validate" hx-target="#feedback" hx-swap="innerHTML" class="secondary">{{template "icon" "check"}}{{call .T "validate"}}</button>
             <button type="submit" formaction="/ui/save" hx-post="/ui/save" hx-target="#feedback" hx-swap="innerHTML">{{template "icon" "save"}}{{call .T "save"}}</button>
@@ -265,44 +434,115 @@
       }
       document.getElementById('picker').close();
     }
-    // Clear old field errors before a new validate/save (WEB-008).
+
+    // Open every collapsed card and "more options" block around el (WEB-016).
+    function phorgaReveal(el) {
+      for (var p = el; p; p = p.parentElement) {
+        if (p.tagName === 'DETAILS') p.open = true;
+      }
+    }
+    // Open the cards that contain a field error, e.g. after validate/save.
+    function phorgaRevealErrors() {
+      var first = null;
+      document.querySelectorAll('.field-error').forEach(function (el) {
+        if (el.textContent.trim()) { phorgaReveal(el); first = first || el; }
+      });
+      return first;
+    }
+
+    // Clear old field errors before a new validate/save (WEB-008), and
+    // remember which cards are open before an edit replaces the page (WEB-015).
+    var phorgaOpen = [];
     document.body.addEventListener('htmx:beforeRequest', function (e) {
       var path = (e.detail.requestConfig && e.detail.requestConfig.path) || '';
       if (path.indexOf('/ui/validate') === 0 || path.indexOf('/ui/save') === 0) {
         document.querySelectorAll('.field-error').forEach(function (el) { el.textContent = ''; });
       }
+      if (path.indexOf('/ui/form') === 0) {
+        phorgaOpen = [];
+        document.querySelectorAll('details[open][id]').forEach(function (d) { phorgaOpen.push(d.id); });
+      }
     });
     // Bring the result of validate/save into view, it is rendered above the form.
     document.body.addEventListener('htmx:afterSwap', function (e) {
       if (e.detail.target && e.detail.target.id === 'feedback' && e.detail.target.textContent.trim()) {
+        phorgaRevealErrors();
         e.detail.target.scrollIntoView({behavior: 'smooth', block: 'start'});
         e.detail.target.focus({preventScroll: true});
       }
     });
-    // Card headers summarize their fields; keep them in sync while editing.
-    (function () {
-      function sync() {
-        document.querySelectorAll('[data-mirror]').forEach(function (el) {
-          var src = document.getElementById(el.dataset.mirror);
-          if (src) { el.textContent = src.value; el.hidden = !src.value; }
-        });
-        document.querySelectorAll('[data-show-if]').forEach(function (el) {
-          var src = document.getElementById(el.dataset.showIf);
-          if (src) el.hidden = !src.checked;
-        });
-        document.querySelectorAll('[data-show-unless]').forEach(function (el) {
-          var src = document.getElementById(el.dataset.showUnless);
-          if (src) el.hidden = src.checked;
-        });
+
+    // Card summaries mirror their fields; keep them in sync while editing.
+    function phorgaSync() {
+      document.querySelectorAll('[data-mirror]').forEach(function (el) {
+        var src = document.getElementById(el.dataset.mirror);
+        if (!src) return;
+        el.textContent = src.value || el.dataset.fallback || '';
+        el.hidden = !el.textContent;
+      });
+      document.querySelectorAll('[data-show-if]').forEach(function (el) {
+        var src = document.getElementById(el.dataset.showIf);
+        if (src) el.hidden = !src.checked;
+      });
+      document.querySelectorAll('[data-show-unless]').forEach(function (el) {
+        var src = document.getElementById(el.dataset.showUnless);
+        if (src) el.hidden = src.checked;
+      });
+      // "All or one" only matters with two or more ticked fields (WEB-017).
+      document.querySelectorAll('[data-detection]').forEach(function (el) {
+        var join = el.querySelector('.detection-join');
+        if (join) join.hidden = el.querySelectorAll('.detection-field:checked').length < 2;
+      });
+    }
+    document.addEventListener('input', phorgaSync);
+    document.addEventListener('change', phorgaSync);
+    phorgaSync();
+
+    // After an edit (WEB-015), reopen the cards that were open and scroll to
+    // the entry that was added or changed.
+    function phorgaFocus() {
+      var shell = document.querySelector('.shell[data-focus]');
+      var el = shell && shell.dataset.focus && document.getElementById(shell.dataset.focus);
+      if (el) { phorgaReveal(el); el.scrollIntoView({block: 'start'}); }
+    }
+    document.body.addEventListener('htmx:afterSettle', function (e) {
+      var path = (e.detail.requestConfig && e.detail.requestConfig.path) || '';
+      if (path.indexOf('/ui/form') === 0) {
+        phorgaOpen.forEach(function (id) { var d = document.getElementById(id); if (d) d.open = true; });
+        phorgaSync();
+        phorgaFocus();
       }
-      document.addEventListener('input', sync);
-      document.addEventListener('change', sync);
-      sync();
-    })();
+    });
+
+    // A link such as /ui#f-organizer-0-sources-1-schedule from the status
+    // page (WEB-019) opens the card, scrolls to the field and highlights it.
+    function phorgaGoToHash() {
+      var id = decodeURIComponent(location.hash.slice(1));
+      var el = id && document.getElementById(id);
+      if (!el) return;
+      phorgaReveal(el);
+      var field = el.closest('.field') || el;
+      field.scrollIntoView({block: 'center'});
+      if (el.focus) el.focus({preventScroll: true});
+      field.classList.remove('highlight');
+      void field.offsetWidth; // restart the animation
+      field.classList.add('highlight');
+    }
+    window.addEventListener('hashchange', phorgaGoToHash);
+    phorgaRevealErrors();
+    phorgaFocus();
+    phorgaGoToHash();
+
     // Highlight the section in view in the sidebar.
     (function () {
       var links = {};
       document.querySelectorAll('.toc a').forEach(function (a) { links[a.getAttribute('href').slice(1)] = a; });
+      document.querySelectorAll('.toc a').forEach(function (a) {
+        a.addEventListener('click', function () {
+          var t = document.getElementById(a.getAttribute('href').slice(1));
+          if (t) phorgaReveal(t.querySelector('details') || t);
+        });
+      });
       if (!('IntersectionObserver' in window)) return;
       var obs = new IntersectionObserver(function (entries) {
         entries.forEach(function (en) {

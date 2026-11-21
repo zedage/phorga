@@ -1,0 +1,62 @@
+{{/* Help page with the setup guide (WEB-022). Data is a helpData; the guide
+     itself comes from help_<lang>.html, rendered into .Data.Guide. */}}
+{{define "help"}}
+<!doctype html>
+<html lang="{{.Lang}}">
+{{template "head" (dict "Title" (call .T "guide_title"))}}
+<body class="page-help">
+  {{template "nav" (dict "T" .T "Lang" .Lang "Active" "help")}}
+  <div class="shell">
+    <aside class="sidebar">
+      <nav class="toc" aria-label="{{call .T "guide_heading"}}">
+        <div class="toc-title">{{call .T "guide_heading"}}</div>
+        <a href="#install">{{template "icon" "info"}}<span>{{call .T "guide_toc_install"}}</span></a>
+        <a href="#synology">{{template "icon" "layers"}}<span>{{call .T "guide_toc_synology"}}</span></a>
+        <a href="#other">{{template "icon" "monitor"}}<span>{{call .T "guide_toc_other"}}</span></a>
+        <a href="#setup">{{template "icon" "sliders"}}<span>{{call .T "guide_toc_setup"}}</span></a>
+        <a href="#remote">{{template "icon" "globe"}}<span>{{call .T "guide_toc_remote"}}</span></a>
+        <a href="#trouble">{{template "icon" "alert"}}<span>{{call .T "guide_toc_trouble"}}</span></a>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <header class="page-head">
+        <h1>{{call .T "guide_heading"}}</h1>
+        <p class="lead">{{call .T "guide_intro"}}</p>
+      </header>
+
+      <section class="section" id="install" aria-labelledby="install-title">
+        <div class="section-head">
+          <span class="section-icon">{{template "icon" "info"}}</span>
+          <h2 id="install-title">{{call .T "guide_toc_install"}}</h2>
+        </div>
+        <div class="card">
+          <dl class="facts">
+            <div>
+              <dt>{{call .T "guide_config_file"}}</dt>
+              <dd><code>{{.Data.ConfigPath}}</code> {{if .Data.ConfigExists}}<span class="badge ok">{{call .T "guide_exists"}}</span>{{else}}<span class="badge">{{call .T "guide_not_created"}}</span>{{end}}</dd>
+            </div>
+            <div>
+              <dt>{{call .T "guide_homes"}}</dt>
+              <dd><code>{{.Data.Homes}}</code> {{if .Data.HomesFound}}<span class="badge ok">{{.Data.Users}} {{call .T "synology_summary_users"}}</span>{{else}}<span class="badge warn">{{call .T "synology_summary_none"}}</span>{{end}}</dd>
+            </div>
+            <div>
+              <dt>{{call .T "guide_password"}}</dt>
+              <dd>{{if .Data.PasswordSet}}<span class="badge ok">{{call .T "guide_password_on"}}</span>{{else}}<span class="badge warn">{{call .T "guide_password_off"}}</span>{{end}}</dd>
+            </div>
+            <div>
+              <dt>{{call .T "guide_address"}}</dt>
+              <dd><code>{{.Data.Address}}</code></dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <article class="guide">
+        {{.Data.Guide}}
+      </article>
+    </main>
+  </div>
+</body>
+</html>
+{{end}}

@@ -210,11 +210,14 @@ func TestValidateDuplicateDetection(t *testing.T) {
 	}
 }
 
-// Spec: CFG-002
+// Spec: CFG-002, CFG-009
 func TestValidateEmptyConfig(t *testing.T) {
 	cfg := &Config{}
-	if err := Validate(cfg); err == nil {
-		t.Fatal("expected validation error for empty config")
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("a config without jobs must be valid (setup mode), got %v", err)
+	}
+	if cfg.HasJobs() {
+		t.Fatal("an empty config has no jobs")
 	}
 }
 
@@ -253,11 +256,7 @@ func TestValidateProblemsReturnsIndividualMessages(t *testing.T) {
 // Spec: CFG-003
 func TestResolveConfigPath_CLI(t *testing.T) {
 	tmp := writeTemp(t, "config.yaml", "organizer: []")
-	path, err := ResolveConfigPath(tmp)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if path != tmp {
+	if path := ResolveConfigPath(tmp); path != tmp {
 		t.Errorf("expected %s, got %s", tmp, path)
 	}
 }
@@ -266,27 +265,42 @@ func TestResolveConfigPath_CLI(t *testing.T) {
 func TestResolveConfigPath_Env(t *testing.T) {
 	tmp := writeTemp(t, "config.yaml", "organizer: []")
 	t.Setenv(envConfigPath, tmp)
-	path, err := ResolveConfigPath("")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if path != tmp {
+	if path := ResolveConfigPath(""); path != tmp {
 		t.Errorf("expected %s, got %s", tmp, path)
 	}
 }
 
-// Spec: CFG-003
+// Spec: CFG-003, CFG-009
 func TestResolveConfigPath_NotFound(t *testing.T) {
 	t.Setenv(envConfigPath, "")
-	// Change to a temp dir without config.yaml
-	dir := t.TempDir()
-	oldWd, _ := os.Getwd()
-	_ = os.Chdir(dir)
-	defer func() { _ = os.Chdir(oldWd) }()
+	t.Chdir(t.TempDir()) // no config.yaml here
 
-	_, err := ResolveConfigPath("")
-	if err == nil {
-		t.Fatal("expected error when no config file found")
+	path := ResolveConfigPath("")
+	if path != defaultConfigFile {
+		t.Fatalf("expected the default file %s, got %s", defaultConfigFile, path)
+	}
+	cfg, exists, err := LoadOrDefault(path)
+	if err != nil || exists {
+		t.Fatalf("missing file: exists=%v err=%v", exists, err)
+	}
+	if cfg.HasJobs() || cfg.WebUI == nil || !cfg.WebUI.Enabled || cfg.WebUI.Address != DefaultWebUIAddress || cfg.StateDir != "/data/state" {
+		t.Fatalf("unexpected default config %+v / %+v", cfg, cfg.WebUI)
+	}
+}
+
+// Spec: CFG-009
+func TestLoadOrDefault(t *testing.T) {
+	existing := writeTemp(t, "config.yaml", "stateDir: /tmp/x\n")
+	cfg, exists, err := LoadOrDefault(existing)
+	if err != nil || !exists || cfg.StateDir != "/tmp/x" {
+		t.Fatalf("existing file: cfg=%+v exists=%v err=%v", cfg, exists, err)
+	}
+	if _, _, err := LoadOrDefault(filepath.Join(t.TempDir(), "config.toml")); err == nil {
+		t.Fatal("a missing file with an unsupported extension must fail")
+	}
+	broken := writeTemp(t, "broken.yaml", "organizer: [")
+	if _, _, err := LoadOrDefault(broken); err == nil {
+		t.Fatal("an existing broken file must fail")
 	}
 }
 

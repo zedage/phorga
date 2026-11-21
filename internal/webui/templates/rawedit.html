@@ -1,0 +1,56 @@
+{{/* Edit the config file as text (WEB-018). Data is a rawData. */}}
+{{define "rawedit"}}
+<!doctype html>
+<html lang="{{.Lang}}">
+{{template "head" (dict "Title" (call .T "raw_title"))}}
+<body class="page-raw">
+  {{template "nav" (dict "T" .T "Lang" .Lang "Active" "config")}}
+  <main class="content wide-content">
+    <header class="page-head">
+      <a class="back-link" href="/ui">{{template "icon" "arrow-left"}}<span>{{call .T "raw_back"}}</span></a>
+      <h1>{{if eq (ext .Data.ConfigPath) "json"}}{{call .T "edit_json"}}{{else}}{{call .T "edit_yaml"}}{{end}}</h1>
+      <p class="lead">{{call .T "raw_intro"}}</p>
+      <div class="config-chip" title="{{call .T "loaded_config"}}">
+        {{template "icon" "file"}}
+        <span class="config-chip-label">{{call .T "loaded_config"}}</span>
+        <code>{{.Data.ConfigPath}}</code>
+      </div>
+    </header>
+
+    {{if not .Data.Exists}}
+    <div class="callout">{{template "icon" "info"}}<div>{{call .T "raw_not_created"}}</div></div>
+    {{end}}
+
+    <div id="feedback" tabindex="-1">{{template "flash" .}}</div>
+
+    <form method="post" action="/ui/yaml" class="raw-form">
+      <input type="hidden" name="lang" value="{{.Lang}}">
+      <label class="sr-only" for="raw-content">{{.Data.ConfigPath}}</label>
+      <textarea id="raw-content" name="content" class="raw-editor mono" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off">{{.Data.Content}}</textarea>
+      <div class="actionbar">
+        <div class="actionbar-hint">{{template "icon" "info"}}<span>{{call .T "raw_hint"}}</span></div>
+        <div class="actionbar-buttons">
+          <a class="button secondary" href="/ui">{{call .T "browse_cancel"}}</a>
+          <button type="submit" name="action" value="validate" class="secondary">{{template "icon" "check"}}{{call .T "validate"}}</button>
+          <button type="submit" name="action" value="save">{{template "icon" "save"}}{{call .T "raw_save"}}</button>
+        </div>
+      </div>
+    </form>
+  </main>
+  <script>
+    // Tab indents with two spaces instead of leaving the editor (YAML has no
+    // tabs). Esc, then Tab, moves on to the buttons, so the editor is no trap.
+    var phorgaEscaped = false;
+    document.getElementById('raw-content').addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { phorgaEscaped = true; return; }
+      if (e.key !== 'Tab' || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey || phorgaEscaped) { phorgaEscaped = false; return; }
+      e.preventDefault();
+      var el = e.target, start = el.selectionStart, end = el.selectionEnd;
+      el.setRangeText('  ', start, end, 'end');
+    });
+    var fb = document.getElementById('feedback');
+    if (fb && fb.textContent.trim()) fb.scrollIntoView({block: 'start'});
+  </script>
+</body>
+</html>
+{{end}}
