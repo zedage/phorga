@@ -272,3 +272,50 @@ func TestTransferOntoItselfIsRefused(t *testing.T) {
 		t.Errorf("file changed to %q", got)
 	}
 }
+
+// Spec: ORG-025, DUP-005
+func TestAtomicMove_SymlinkIsMovedAsItsContent(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		op   func(src, dst string) error
+	}{
+		{"move", AtomicMove},
+		{"move with replace", AtomicMoveReplace},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			shared := filepath.Join(dir, "shared", "IMG_1.jpg")
+			writeFile(t, shared, "photo data")
+			src := filepath.Join(dir, "in", "IMG_1.jpg")
+			if err := os.MkdirAll(filepath.Dir(src), 0755); err != nil {
+				t.Fatal(err)
+			}
+			// A relative link, which would point nowhere from the target.
+			if err := os.Symlink(filepath.Join("..", "shared", "IMG_1.jpg"), src); err != nil {
+				t.Skipf("cannot create symbolic links here: %v", err)
+			}
+			dst := filepath.Join(dir, "out", "2024", "05", "IMG_1.jpg")
+
+			if err := tc.op(src, dst); err != nil {
+				t.Fatalf("move: %v", err)
+			}
+			info, err := os.Lstat(dst)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !info.Mode().IsRegular() {
+				t.Fatalf("target must be a regular file, mode %v", info.Mode())
+			}
+			if got := readFile(t, dst); got != "photo data" {
+				t.Errorf("target content = %q, want the photo the link pointed to", got)
+			}
+			if _, err := os.Lstat(src); !os.IsNotExist(err) {
+				t.Errorf("the source link must be gone, lstat error: %v", err)
+			}
+			if got := readFile(t, shared); got != "photo data" {
+				t.Errorf("the file the link pointed to must stay, content %q", got)
+			}
+			assertNoTempFiles(t, filepath.Dir(dst))
+		})
+	}
+}

@@ -88,7 +88,7 @@ The matching MUST NOT compare every pair: an index MUST find each file's candida
 ### DUP-005 Action `moveToFolder`
 **Status:** implemented
 
-With `action.method: moveToFolder`, the duplicate MUST be moved into `action.duplicateFolder`. That field is required for this method (CFG-002). A file that is already in `duplicateFolder` MUST NOT be overwritten, also not one that appears while the move runs; the duplicate is then written with a random suffix (as in ORG-020). Within one volume, the move does not copy (ORG-025). The move keeps the modification time and is verified (ORG-018, ORG-019).
+With `action.method: moveToFolder`, the duplicate MUST be moved into `action.duplicateFolder`. That field is required for this method (CFG-002). A file that is already in `duplicateFolder` MUST NOT be overwritten, also not one that appears while the move runs; the duplicate is then written with a random suffix (as in ORG-020). Within one volume, the move does not copy (ORG-025); a duplicate that is a symbolic link is moved as its content, like in ORG-025. The move keeps the modification time and is verified (ORG-018, ORG-019).
 
 - **WHEN** a duplicate is found and the method is `moveToFolder`
   **THEN** the duplicate is moved into `duplicateFolder` and the original stays in place
@@ -96,7 +96,7 @@ With `action.method: moveToFolder`, the duplicate MUST be moved into `action.dup
   **THEN** both files are in `duplicateFolder` afterwards
 
 **Code:** `internal/dedup/dedup.go`, `internal/config/validate.go`
-**Tests:** `internal/dedup/dedup_test.go#TestDedup_MoveToFolder`, `internal/config/config_test.go#TestValidateMoveToFolderRequiresDuplicateFolder`, `internal/dedup/actions_test.go#TestDedup_GroupOfThree_MovesTwoWithoutErrors`, `internal/dedup/actions_test.go#TestDedup_MoveToFolderNeverOverwrites`
+**Tests:** `internal/dedup/dedup_test.go#TestDedup_MoveToFolder`, `internal/config/config_test.go#TestValidateMoveToFolderRequiresDuplicateFolder`, `internal/dedup/actions_test.go#TestDedup_GroupOfThree_MovesTwoWithoutErrors`, `internal/dedup/actions_test.go#TestDedup_MoveToFolderNeverOverwrites`, `internal/fileops/noclobber_test.go#TestAtomicMove_SymlinkIsMovedAsItsContent`
 
 ### DUP-006 Action `skip`
 **Status:** implemented

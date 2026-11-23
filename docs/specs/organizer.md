@@ -404,13 +404,15 @@ When the target path of a file is the file itself (same file on disk, e.g. becau
 ### ORG-025 Moves within one volume keep the file
 **Status:** implemented
 
-In `move` mode, when source and destination are on the same volume, the file MUST get its new name without copying its data: a hard link at the destination, then the source name is removed. The moved file is the same file (inode), so its content, permissions and modification time are unchanged (ORG-018) and no size check is needed (ORG-019). When that is not possible (another volume, which includes separate Docker bind mounts, or a filesystem without hard links), the move MUST fall back to the verified copy of ORG-004 and ORG-019. With `replace`, a rename is used instead of the hard link.
+In `move` mode, when source and destination are on the same volume, the file MUST get its new name without copying its data: a hard link at the destination, then the source name is removed. The moved file is the same file (inode), so its content, permissions and modification time are unchanged (ORG-018) and no size check is needed (ORG-019). When that is not possible (another volume, which includes separate Docker bind mounts, or a filesystem without hard links), the move MUST fall back to the verified copy of ORG-004 and ORG-019. With `replace`, a rename is used instead of the hard link. A source that is a symbolic link MUST NOT take this shortcut, because the hard link or rename would move the link itself, which may point nowhere from its new folder: its content is copied as in ORG-004 and ORG-019, and then only the link is removed. The file it points to stays untouched.
 
 - **WHEN** a 4 GB video is moved from `/volume1/photos/incoming` to `/volume1/photos/organized` on the same volume and mount
   **THEN** no data is copied and the file is the same inode afterwards
 - **WHEN** the target is on another volume
   **THEN** the file is copied, verified, and only then removed from the source
+- **WHEN** the source holds `IMG_1.jpg`, a relative symbolic link to `../shared/IMG_1.jpg`, and it is moved to `2024/05/`
+  **THEN** `2024/05/IMG_1.jpg` is a regular file with the photo's content, the link is gone, and `shared/IMG_1.jpg` is unchanged
 
 **Code:** `internal/fileops/fileops.go`
-**Tests:** `internal/fileops/noclobber_test.go#TestAtomicMove_SameVolumeKeepsTheFileWithoutCopying`, `internal/fileops/noclobber_test.go#TestAtomicMove_OtherVolumeCopiesAndRemovesSource`, `internal/fileops/noclobber_test.go#TestReplace_OverwritesExistingFile`
+**Tests:** `internal/fileops/noclobber_test.go#TestAtomicMove_SameVolumeKeepsTheFileWithoutCopying`, `internal/fileops/noclobber_test.go#TestAtomicMove_OtherVolumeCopiesAndRemovesSource`, `internal/fileops/noclobber_test.go#TestReplace_OverwritesExistingFile`, `internal/fileops/noclobber_test.go#TestAtomicMove_SymlinkIsMovedAsItsContent`
 **Notes:** In Docker, source and target are only "the same volume" when they come from the same bind mount, e.g. mount `/volume1/photos` once instead of `incoming` and `organized` separately. See [ADR-0019](../decisions/0019-no-clobber-transfers-with-hard-links.md).
