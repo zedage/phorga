@@ -421,7 +421,7 @@ app --> ntfy : HTTP POST
 ----
 
 * Image: `mnrd001/phorga` on Docker Hub, multi-arch (`linux/amd64`, `linux/arm64`). Built and pushed by `.github/workflows/docker.yml`, only after build, vet and test pass: every merge to `main` pushes `edge` and `sha-<commit>`; a release tag `vYYYY.MM.MICRO` on `main` pushes `YYYY.MM.MICRO`, `YYYY.MM` and `latest` and creates a GitHub release (ADR-0024). The version is passed as build argument `VERSION` and linked into the binary (`-X main.version`, RUN-004). Go cross-compiles in the build stage, and the runtime stage has no `RUN` steps, so no emulation is needed.
-* Base image: `gcr.io/distroless/static-debian13:nonroot` (no shell; CA certificates and time zone data included). Runs as uid 65532 unless `user:` sets the NAS user. Images before 2026-11-21 ran as root on Alpine; their state volume belongs to root (README › Docker).
+* Base image: `gcr.io/distroless/static-debian13:nonroot` (no shell; CA certificates and time zone data included). Runs as uid 65532 unless `user:` sets the NAS user; the working directory is `/`, not the base image's `/home/nonroot`, which only uid 65532 may enter (Docker 20.10 on DSM 7.1 refuses to start the container otherwise). Images before 2026-11-21 ran as root on Alpine; their state volume belongs to root (README › Docker).
 * State volume: `/data/state`
 * Mount the common parent of source and target once (e.g. `/volume1/photos`) to get same-volume moves; Linux refuses hard links across mount points (ORG-025).
 * Config mount: the folder `/config`, writable by Phorga's user, so the web UI can create and replace `config.yaml` atomically. A file mounted on its own cannot be replaced (EBUSY). The file may be missing at first (setup mode, CFG-009).

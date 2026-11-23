@@ -34,6 +34,11 @@ ENV PHORGA_CONFIG=/config/config.yaml
 ENV PHORGA_WEB_UI_ADDR=0.0.0.0:8080
 EXPOSE 8080
 
+# The distroless base starts in /home/nonroot, which only uid 65532 may enter.
+# Start in / instead, so the image also runs as the NAS user set with user:
+# (older runtimes such as Docker 20.10 on DSM 7.1 refuse to start otherwise).
+WORKDIR /
+
 USER 65532:65532
 
 ENTRYPOINT ["/usr/local/bin/phorga"]
