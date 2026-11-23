@@ -37,13 +37,15 @@ A second SIGINT or SIGTERM while Phorga is waiting MUST end the process immediat
 ### RUN-002 One job at a time
 **Status:** implemented
 
-Phorga MUST run at most one job (organizer source or duplicate detection job) at a time. When a job is due while another job runs, it MUST wait until that job has finished and then start, and log once at info level `waiting for another job to finish` with its name and the running job. While it waits, the status page shows it as waiting (WEB-011). A job MUST still never overlap with itself: if its schedule fires while it runs or waits, that run is skipped (ORG-010). On shutdown (RUN-001), waiting jobs MUST NOT start.
+Phorga MUST run at most one job (organizer source or duplicate detection job) at a time. When a job is due while another job runs, it MUST wait until that job has finished and then start, and log once at info level `waiting for another job to finish` with its name and the running job. While it waits, the status page shows it as waiting (WEB-011). A job MUST still never overlap with itself: if its schedule fires while it runs or waits, that run is skipped (ORG-010). On shutdown (RUN-001), waiting jobs MUST NOT start. Neither may a waiting run whose job was removed or replaced by a saved configuration in the meantime (CFG-008).
 
 - **WHEN** a duplicate detection job is due at 02:00 while the organizer run that started at 01:55 is still busy
   **THEN** the duplicate detection waits, the log names both jobs, and it starts when the organizer run has finished
 - **WHEN** Phorga is told to stop while a job waits
   **THEN** that job does not start, and Phorga exits as in RUN-001
+- **WHEN** a job waits and its configuration is saved with changed settings
+  **THEN** the waiting run does not start; the next run uses the new settings
 
 **Code:** `internal/scheduler/scheduler.go`, `cmd/phorga/main.go`
-**Tests:** `internal/scheduler/serial_test.go#TestJobsRunOneAtATime`, `internal/scheduler/serial_test.go#TestWaitingJobDoesNotStartAfterStop`, `internal/webui/usability_test.go#TestStatusTableShowsWaitingJob`
+**Tests:** `internal/scheduler/serial_test.go#TestJobsRunOneAtATime`, `internal/scheduler/serial_test.go#TestWaitingJobDoesNotStartAfterStop`, `internal/scheduler/unregister_test.go#TestWaitingRunOfUnregisteredJobDoesNotStart`, `internal/scheduler/unregister_test.go#TestWaitingRunOfReplacedJobDoesNotStart`, `internal/webui/usability_test.go#TestStatusTableShowsWaitingJob`
 **Notes:** Before this requirement, different jobs ran in parallel, so an organizer and a duplicate detection job on overlapping folders could act on the same file, and two sources of one profile could write into the same target folder at once. Running in parallel gained little on a NAS with spinning disks. See [ADR-0020](../decisions/0020-run-one-job-at-a-time.md).

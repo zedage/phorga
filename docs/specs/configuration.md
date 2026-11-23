@@ -111,6 +111,7 @@ Replaced by CFG-008: changes saved in the web UI now apply without a restart ([A
 When the web UI saves to the active config file (WEB-004), the system MUST validate the new configuration, write it (CFG-004), read it back, and put it into effect without a restart:
 - every job of the old configuration is unscheduled, and the jobs of the new one are scheduled at once (ORG-010, DUP-008)
 - a job that is running at that moment MUST NOT be stopped; it finishes with the settings it started with. While it runs, a job registered again under the same name does not start (no overlap, ORG-010), and jobs still run one at a time (RUN-002)
+- a run that is due but still waits for another job (RUN-002) belongs to the old configuration: when its job is removed or registered again, that run MUST NOT start, and logs `skipping run of a replaced job` at info level instead. The job's next run uses the new settings
 - the last result of a job whose name now stands for another folder or kind MUST be dropped from the status page (WEB-011), so it does not show another job's numbers; a job that only changed its schedule or options keeps it
 - the web UI then shows the new configuration, and its folder picker uses the new `browseRoots` (WEB-010)
 
@@ -122,13 +123,15 @@ If validation or writing fails, nothing changes. Three settings only take effect
   **THEN** it has no next run any more
 - **WHEN** an organizer source is running and its schedule is changed and saved
   **THEN** the run finishes undisturbed, and the new schedule applies to later runs
+- **WHEN** an organizer source waits for a running duplicate detection job, and its profile gets `dryRun: true` (or is removed) and is saved
+  **THEN** the waiting run does not start when the duplicate detection ends, so no file is moved with the old settings
 - **WHEN** `stateDir` and `webUI.address` are changed and saved
   **THEN** the result says that these take effect after a restart
 - **WHEN** the config file is changed on disk while Phorga runs
   **THEN** the web UI still shows the values in effect
 
 **Code:** `cmd/phorga/engine.go`, `cmd/phorga/main.go`, `internal/scheduler/scheduler.go`, `internal/runstatus/runstatus.go`, `internal/webui/server.go`
-**Tests:** `cmd/phorga/engine_test.go#TestEngineApplySavesAndSchedulesJobs`, `cmd/phorga/engine_test.go#TestEngineApplyRejectsInvalidConfig`, `cmd/phorga/engine_test.go#TestEngineApplyForgetsResultsOfChangedJobs`, `cmd/phorga/engine_test.go#TestEngineApplyReportsRestartFields`, `internal/scheduler/unregister_test.go#TestUnregisterLetsTheRunningJobFinish`, `internal/scheduler/unregister_test.go#TestRegisterSameNameReplacesSchedule`, `internal/runstatus/forget_test.go#TestForgetDropsRecordsAndPersists`, `internal/webui/apply_test.go#TestSaveAppliesThroughApplyFunc`, `cmd/phorga/main_test.go#TestRun_SaveAppliesWithoutRestartAndPersists`, `cmd/phorga/main_test.go#TestRun_ConfigIsNotReloaded`
+**Tests:** `cmd/phorga/engine_test.go#TestEngineApplySavesAndSchedulesJobs`, `cmd/phorga/engine_test.go#TestEngineApplyRejectsInvalidConfig`, `cmd/phorga/engine_test.go#TestEngineApplyForgetsResultsOfChangedJobs`, `cmd/phorga/engine_test.go#TestEngineApplyReportsRestartFields`, `internal/scheduler/unregister_test.go#TestUnregisterLetsTheRunningJobFinish`, `internal/scheduler/unregister_test.go#TestRegisterSameNameReplacesSchedule`, `internal/scheduler/unregister_test.go#TestWaitingRunOfUnregisteredJobDoesNotStart`, `internal/scheduler/unregister_test.go#TestWaitingRunOfReplacedJobDoesNotStart`, `internal/runstatus/forget_test.go#TestForgetDropsRecordsAndPersists`, `internal/webui/apply_test.go#TestSaveAppliesThroughApplyFunc`, `cmd/phorga/main_test.go#TestRun_SaveAppliesWithoutRestartAndPersists`, `cmd/phorga/main_test.go#TestRun_ConfigIsNotReloaded`
 **Notes:** See [ADR-0022](../decisions/0022-live-apply-and-setup-mode.md). Job names are positions (`organizer-0-source-1`, `dedup-0`), so removing a profile renames the ones after it; their last results are dropped. A removed job that is still running is not listed on the status page until it ends, but other jobs show "waiting for another job" meanwhile.
 
 ### CFG-009 Start without a config (setup mode)
