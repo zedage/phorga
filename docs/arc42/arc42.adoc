@@ -16,7 +16,7 @@ It runs as a daemon inside a Docker container, organizing media files by date me
 * Docker-first deployment, multi-arch (amd64, arm64).
 * Optional push notifications via ntfy.sh.
 
-The product view is in link:../product.md[product.md]. The exact, testable requirements are in link:../specs/README.md[docs/specs] (IDs `ORG-*`, `DUP-*`, `CFG-*`, `NTF-*`, `WEB-*`). This document does not repeat them.
+The product view is in link:../product.md[product.md]. The exact, testable requirements are in link:../specs/README.md[docs/specs] (IDs `ORG-*`, `DUP-*`, `CFG-*`, `NTF-*`, `WEB-*`, `RUN-*`). This document does not repeat them; it covers structure, runtime flow and deployment.
 
 === Quality Goals
 
@@ -25,7 +25,7 @@ The product view is in link:../product.md[product.md]. The exact, testable requi
 | Goal | Description
 
 | Reliability
-| File operations are atomic (temp+rename). Single file failures do not abort runs.
+| File operations are atomic and never replace an existing file (hard-link publish). Jobs run one at a time. Single file failures do not abort runs.
 
 | Resumability
 | State is persisted; the daemon resumes where it left off after restarts.
@@ -35,19 +35,6 @@ The product view is in link:../product.md[product.md]. The exact, testable requi
 
 | Portability
 | Runs on Linux, macOS, Windows, and Synology NAS.
-|===
-
-=== Stakeholders
-
-[cols="1,2"]
-|===
-| Role | Concern
-
-| End User
-| Reliable, unattended photo organization on a NAS.
-
-| Developer
-| Clean package structure, testable code, easy local development.
 |===
 
 == 2. Constraints
@@ -112,9 +99,10 @@ pho --> ntfy : sends notifications
 
 == 4. Solution Strategy
 
-* *Single binary, optional local web UI*: Organizer and Duplicate Detection run as independent goroutine-based cron jobs within one process; the same process can optionally expose a configuration web UI.
+* *Single binary, optional local web UI*: Organizer and Duplicate Detection are independent cron jobs within one process, run one at a time (ADR-0020); the same process can optionally expose a configuration web UI.
 * *Cron-based scheduling*: Uses `robfig/cron/v3` for in-process scheduling. No external cron dependency.
-* *Atomic file operations*: All writes use temp-file + rename to prevent partial files on crash.
+* *Atomic, no-clobber file operations*: Media is written to a temp file and published with a hard link, which never replaces an existing file; moves within one volume are a link plus unlink (ADR-0006, ADR-0019).
+* *Own readers for container formats*: Capture dates of HEIC and MP4/MOV are read by small pure-Go box walkers (ADR-0021).
 * *JSON state files*: Simple, inspectable, corruption-tolerant state persistence.
 * *Structured logging*: JSON-formatted `slog` output for observability.
 
@@ -141,6 +129,7 @@ package "internal" {
   [notify]
   [webui]
   [runstatus]
+  [synology]
 }
 
 [main] --> [config]
@@ -153,6 +142,8 @@ package "internal" {
 [runstatus] --> [fileops]
 [webui] --> [scheduler]
 [webui] --> [metadata]
+[webui] --> [synology]
+[synology] --> [config]
 [organizer] --> [metadata]
 [organizer] --> [fileops]
 [organizer] --> [state]
@@ -172,7 +163,7 @@ package "internal" {
 | Package | Responsibility
 
 | `cmd/phorga`
-| Entry point. `main` only wires SIGINT/SIGTERM to a context (and restores the default handling after the first signal, so a second one terminates); `run(ctx, args, logOut)` parses flags, loads and validates the config, registers jobs, starts the scheduler and the optional web UI, and returns the exit code (0 ok, 1 error, 2 usage). Tested end-to-end in `main_test.go`.
+| Entry point. `main` only wires SIGINT/SIGTERM to a context (and restores the default handling after the first signal, so a second one terminates); `run(ctx, args, logOut)` parses flags, loads and validates the config (or starts setup mode without one, CFG-009), registers jobs, starts the scheduler and the web UI (always when there are no jobs), and returns the exit code (0 ok, 1 error, 2 usage). The `engine` owns the configuration in effect: the web UI hands it a saved configuration, which it writes, reads back and puts into effect by swapping the scheduled jobs (CFG-008, ADR-0022). Tested end-to-end in `main_test.go`.
 
 | `config`
 | YAML/JSON loading, defaults, fail-fast validation.
@@ -181,19 +172,19 @@ package "internal" {
 | Decides which entries below a source are skipped: the fixed system and hidden entries (`@eaDir`, `#recycle`, `#snapshot`, dot-names) and the user's `exclude` patterns. Used by the organizer, duplicate detection and the file count, and by `config` to validate patterns (ADR-0016).
 
 | `scheduler`
-| Cron wrapper with overlap prevention (TryLock per job). Also reports the next run and running state per job, and computes next run times for the UI preview.
+| Cron wrapper. A job never overlaps with itself (TryLock per job name, kept across config changes), and only one job runs at a time (a one-slot semaphore; due jobs wait, ADR-0020). Jobs can be unregistered while running; the busy run finishes. Reports the next run and the running/waiting state per job, and computes next run times for the UI preview.
 
 | `organizer`
 | Recursive source scanning, date resolution, copy/move, lightweight duplicate handling.
 
 | `dedup`
-| Independent duplicate detection (metadata, or perceptual hash confirmed by a detail check), cross-source matching. One shared fingerprint cache (`<stateDir>/dedup-cache.json`) keeps pHash/EXIF results, the detail fingerprints of candidates and the resolution of group members for unchanged files between runs (ADR-0015, ADR-0017). Each duplicate group keeps its highest-resolution file (ADR-0018).
+| Independent duplicate detection (metadata, or perceptual hash confirmed by a detail check), cross-source matching through an index (metadata buckets, multi-index hashing for pHash) instead of comparing every pair. One shared fingerprint cache (`<stateDir>/dedup-cache.json`) keeps pHash/EXIF results, the detail fingerprints of candidates and the resolution of group members for unchanged files between runs (ADR-0015, ADR-0017). Each duplicate group keeps its highest-resolution file (ADR-0018).
 
 | `metadata`
-| EXIF extraction (goexif), filename/path date parsing, file type detection, target path token resolution.
+| Date resolution: embedded dates (EXIF via goexif; HEIC `Exif` item and MP4/MOV `mvhd` via its own ISO box reader, ADR-0021), filename and path dates; file type detection; target path token resolution.
 
 | `fileops`
-| Atomic copy/move, atomic byte writes, directory creation, suffix generation.
+| Atomic, no-clobber copy and move (hard-link publish, same-volume link moves, `…Replace` variants only for the organizer's `replace`), atomic writes of Phorga's own files, suffix generation (ADR-0019).
 
 | `state`
 | JSON state read/write with atomic saves and corruption recovery.
@@ -204,11 +195,18 @@ package "internal" {
 | `runstatus`
 | Last result per job for the status page. Persists non-dry results to `<stateDir>/run-status.json`; dry-run results stay in memory (ADR-0014).
 
+| `synology`
+| Finds Synology Photos users (`<homes>/<user>/Photos`) by reading folder names only, and builds the ready-made organizer profile for a user (SYN-001, SYN-002).
+
 | `webui`
-| Optional HTTP handlers, templates, localization, config save/validate flow, live previews, the read-only folder picker below `webUI.browseRoots` (ADR-0013), the status page, and the embedded HTMX and stylesheet assets. Gets job status from `main` through the small `StatusSource` interface.
+| Optional HTTP handlers, templates, localization, config save/validate flow, live previews, adding and removing entries and Synology Photos users in the form (`POST /ui/form`, WEB-015, SYN-003), collapsed cards with a flow summary (WEB-016), editing the config file as text (`/ui/yaml`, WEB-018), the read-only folder picker below `webUI.browseRoots` (ADR-0013), the status page, the help page with the setup guide in one template per language (`/ui/help`, WEB-022), and the embedded HTMX and stylesheet assets. All handlers sit behind the optional Basic-auth password (WEB-020) and Go's cross-origin protection (WEB-021). Gets job status from `main` through the small `StatusSource` interface, and applies a save through the `Apply` callback, or the edited file text through `ApplyRaw`, which writes it unchanged so comments stay (CFG-008, WEB-018).
 |===
 
 == 6. Runtime View
+
+=== Start
+
+`run` loads and validates the config (or starts setup mode without one), creates `stateDir` and checks that it can read every file below it and write in every folder of it (RUN-003). If not, it logs the folder and the uid it runs as and exits with code 1 before any job is scheduled: a `copy` job without its state would copy every file again on every run. Then it schedules the jobs and, if enabled, starts the web UI, warning when the config file cannot be replaced by a save.
 
 === Organizer Run
 
@@ -217,20 +215,27 @@ package "internal" {
 @startuml
 start
 :Cron triggers source run;
-:Load state from JSON;
+:Load state from JSON
+(unreadable file: record 1 error, transfer nothing);
 :Walk source directory recursively,\nskipping system, hidden and excluded entries;
 repeat
   :Next supported media file;
   if (Already in state?) then (yes)
     :Skip;
   else (no)
-    :Extract date (EXIF → filename → source path → mtime);
+    :Resolve date (embedded EXIF/HEIC/MP4 → filename
+→ source path → mtime unless ignoreModTime);
     if (Date found?) then (yes)
       :Resolve target path from template;
       if (Target exists?) then (yes)
-        :Handle duplicate (replace/suffix/move/skip);
+        if (Same file as the source?) then (yes)
+          :Skip, already in place;
+        else (no)
+          :Handle duplicate (replace/suffix/move/skip);
+        endif
       else (no)
-        :Atomic copy or move;
+        :Copy (temp file, verify, hard link)
+or move (link + unlink, or copy + delete);
       endif
     else (no)
       if (fallbackFolder set?) then (yes)
@@ -260,14 +265,15 @@ start
 repeat
   :Next supported file;
   if (Unchanged and in cache?) then (yes)
-    :Take pHash / EXIF date from cache;
+    :Take pHash / embedded date from cache;
   else (no)
-    :Compute pHash or EXIF date;
+    :Compute pHash or embedded date;
     :Store in cache;
   endif
 repeat while (more files?)
 :Prune vanished entries, save cache;
-:Compare all pairs (O(n²)) by pHash;
+:Build an index (metadata buckets or
+pHash chunk tables) and find each file's candidates;
 if (content mode?) then (yes)
   :Confirm each pHash candidate by its detail
 fingerprint (from cache or computed and cached);
@@ -292,7 +298,7 @@ Files skipped by the fixed list or the job's `exclude` patterns (DUP-013, ADR-00
 
 === Shutdown
 
-On SIGINT/SIGTERM, `run` returns and its deferred `Scheduler.Stop()` names the running jobs in the log, cancels the context that every job receives, stops cron from starting new runs, and waits for running jobs (logging every 10 s). The organizer and duplicate detection check the context between files (ORG-021, DUP-010). Cancelled runs are not recorded or notified. A second signal uses the OS default and terminates the process (RUN-001).
+On SIGINT/SIGTERM, `run` returns and its deferred `Scheduler.Stop()` names the running jobs in the log, cancels the context that every job receives, stops cron from starting new runs, and waits for running jobs (logging every 10 s). Jobs that wait for the job slot return without running (RUN-002). The organizer and duplicate detection check the context between files (ORG-021, DUP-010). Cancelled runs are not recorded or notified. A second signal uses the OS default and terminates the process (RUN-001).
 
 === Web UI Request
 
@@ -304,9 +310,16 @@ Browser -> main : GET /ui
 main -> webui : render page
 webui -> config : map loaded config to form/view model
 webui --> Browser : HTML page
+Browser -> main : POST /ui/form (op=addProfile, addUsers, …)
+webui -> synology : find users (op=addUsers)
+webui --> Browser : page with the changed form (nothing written)
+Browser -> main : GET/POST /ui/yaml (file as text)
+webui -> config : Parse + Validate the text
+webui -> main : ApplyRaw(text) (save: written as it is, then applied)
 Browser -> main : POST /ui/validate or /ui/save
 main -> webui : parse form
-webui -> config : validate / save
+webui -> config : validate
+webui -> main : Apply(cfg) (save to the active file, see below)
 webui --> Browser : HTML fragment (+ out-of-band field errors) or full HTML response
 Browser -> main : POST /ui/preview/structure or /ui/preview/schedule
 webui -> metadata : resolve sample path
@@ -318,6 +331,35 @@ webui --> Browser : folder list / options, or 403
 @enduml
 ----
 
+=== Applying a Saved Configuration
+
+[plantuml, runtime-apply, svg]
+----
+@startuml
+participant webui
+participant "engine (main)" as engine
+participant config
+participant scheduler
+participant runstatus
+webui -> engine : Apply(cfg) or ApplyRaw(text)
+engine -> config : Validate, write (atomic; ApplyRaw writes the edited text as it is), Load (read back)
+alt invalid or write failed
+  engine --> webui : error, nothing changed
+else
+  loop every old job
+    engine -> scheduler : Unregister(name)
+    note right : a running job finishes\nwith its old settings
+  end
+  engine -> scheduler : Register(new jobs)
+  engine -> runstatus : Forget(names that now mean another folder)
+  engine --> webui : applied config + fields that need a restart
+  webui -> webui : show applied config, take new browseRoots
+end
+@enduml
+----
+
+At startup without a config file, `run` uses a configuration with no jobs and the web UI on (setup mode, CFG-009); the first save creates the file. `stateDir`, `webUI.address` and turning the UI off only take effect after a restart (ADR-0022).
+
 === Job Status Recording
 
 [plantuml, runtime-status, svg]
@@ -327,7 +369,8 @@ participant scheduler
 participant "job (main)" as job
 participant runstatus
 actor Browser
-scheduler -> job : run (TryLock, running = true)
+scheduler -> scheduler : TryLock (job), wait for the one job slot (waiting = true)
+scheduler -> job : run (running = true)
 job -> job : organizer.Run / dedup.Run
 loop per file (WEB-014)
   job -> runstatus : Report(ctx, phase, done, total) -> SetProgress (memory only)
@@ -341,36 +384,9 @@ else
 end
 Browser -> webui : GET /ui/status/table (every 10 s)
 webui -> job : StatusSource.Jobs()
-job -> scheduler : Next(name), Running(name)
+job -> scheduler : Next(name), Running(name), Waiting(name)
 job -> runstatus : Last(name), Progress(name)
 webui --> Browser : table fragment
-@enduml
-----
-@startuml
-start
-:Cron triggers dedup job;
-:Count supported files (for progress);
-:Scan all sources recursively;
-:Take metadata or pHash from the cache, or compute and cache it;
-:Save cache, prune vanished files;
-:Compare all pairs (O(n²)) by pHash;
-if (content mode?) then (yes)
-  :Confirm each pHash candidate by its detail
-fingerprint (from cache or computed and cached);
-endif
-:Group matches; each group keeps the file with the
-most pixels (header, cached), then the larger one;
-:Collect duplicate pairs against the kept file;
-repeat
-  :Next duplicate pair;
-  if (dryRun?) then (yes)
-    :Log planned action;
-  else (no)
-    :Apply action (moveToFolder / skip);
-  endif
-repeat while (more pairs?)
-:Send ntfy notification;
-stop
 @enduml
 ----
 
@@ -384,6 +400,7 @@ node "Host / NAS" {
   node "Docker" {
     artifact "phorga\ncontainer" as app
     file "/config/config.yaml" as cfg
+    folder "/homes (= /volume1/homes, optional)" as homes
     database "/data/state/*.json" as state
   }
   folder "/mnt/photos/incoming" as src
@@ -392,8 +409,9 @@ node "Host / NAS" {
 }
 cloud "ntfy.sh" as ntfy
 
-cfg --> app
-browser --> app : HTTP 127.0.0.1:8080\n(host loopback → container 0.0.0.0:8080)
+cfg <--> app : read at startup,\nwritten by the UI
+app --> homes : finds Synology Photos users
+browser --> app : HTTPS via reverse proxy → 127.0.0.1:8080\n(host loopback → container 0.0.0.0:8080)
 app --> src : reads
 app --> tgt : writes
 app --> dup : writes
@@ -402,19 +420,21 @@ app --> ntfy : HTTP POST
 @enduml
 ----
 
-* Image: `mnrd001/phorga` on Docker Hub, multi-arch (`linux/amd64`, `linux/arm64`), tags `latest` and `sha-<commit>`. Built and pushed by `.github/workflows/docker.yml` after every merge to `main`, only after build, vet and test pass. Go cross-compiles in the build stage; QEMU is only needed for the arm64 runtime stage.
-* Base image: `alpine:3.20`
+* Image: `mnrd001/phorga` on Docker Hub, multi-arch (`linux/amd64`, `linux/arm64`). Built and pushed by `.github/workflows/docker.yml`, only after build, vet and test pass: every merge to `main` pushes `edge` and `sha-<commit>`; a release tag `vYYYY.MM.MICRO` on `main` pushes `YYYY.MM.MICRO`, `YYYY.MM` and `latest` and creates a GitHub release (ADR-0024). The version is passed as build argument `VERSION` and linked into the binary (`-X main.version`, RUN-004). Go cross-compiles in the build stage, and the runtime stage has no `RUN` steps, so no emulation is needed.
+* Base image: `gcr.io/distroless/static-debian13:nonroot` (no shell; CA certificates and time zone data included). Runs as uid 65532 unless `user:` sets the NAS user. Images before 2026-11-21 ran as root on Alpine; their state volume belongs to root (README › Docker).
 * State volume: `/data/state`
-* Config mount: `/config/config.yaml` (read-only)
+* Mount the common parent of source and target once (e.g. `/volume1/photos`) to get same-volume moves; Linux refuses hard links across mount points (ORG-025).
+* Config mount: the folder `/config`, writable by Phorga's user, so the web UI can create and replace `config.yaml` atomically. A file mounted on its own cannot be replaced (EBUSY). The file may be missing at first (setup mode, CFG-009).
+* Synology Photos users (optional): mount `/volume1/homes` at `/homes`. Phorga's user needs read access to the home folders it should list, and write access to the ones it organizes.
 * Timezone via `TZ` environment variable.
-* Web UI (optional): listens on `0.0.0.0:8080` inside the container; the port is published on the host loopback only (`127.0.0.1:8080:8080`).
+* Web UI: the image sets `PHORGA_WEB_UI_ADDR=0.0.0.0:8080`, so the UI listens on all interfaces inside the container; the port mapping decides who can reach it (`127.0.0.1:8080:8080` publishes it on the host loopback only). It always starts while there are no jobs. Other devices reach it through a reverse proxy on the host, on a Synology the DSM reverse proxy (HTTPS, e.g. port 8443 → `localhost:8080`). `PHORGA_WEB_UI_PASSWORD` turns on HTTP Basic auth for every request (WEB-020, ADR-0023).
 
 == 8. Crosscutting Concepts
 
 === Atomic File Operations
-All file writes use a temp-file in the target directory followed by `os.Rename`. Move mode deletes the source only after successful rename.
+Media copies go to a temp file in the target directory. It is flushed, its size is checked against the source (ORG-019), and it gets the source's modification time (ORG-018). It then gets its final name with a hard link, which fails if the name is taken, so an existing file is never replaced, even one written by another program in the meantime (ORG-020, ADR-0019). Without hard-link support, the code falls back to check + rename. Moves within one volume are a hard link plus unlink, without copying (ORG-025); otherwise a move is a verified copy plus delete. Only the organizer's `replace` uses rename over an existing file. A transfer onto the source file itself is refused (ORG-024).
 
-For media files, the temp file is flushed to disk and its size is compared with the source before the rename (ORG-019). It also gets the source's modification time (ORG-018). Destinations in `fallbackFolder` and `duplicateFolder` are never overwritten; a taken name gets a random suffix (ORG-020, DUP-005).
+Phorga's own files (state, cache, run status, config) are written with temp file + rename and replace their previous version.
 
 === Error Resilience
 * Single file errors are logged and skipped; the run continues.
@@ -433,13 +453,7 @@ For media files, the temp file is flushed to disk and its size is compared with 
 * All actions, skips, and errors are logged with context.
 
 === Configuration UI
-* Optional HTTP server in the main process.
-* Server-rendered templates with HTMX-compatible validation and save endpoints. HTMX and the stylesheet are embedded in the binary, so no internet access is needed. The theme follows the system light/dark setting (WEB-012); a top-bar switch can override it per browser (WEB-013).
-* Displays the currently loaded config and can save to the active file or a separate file.
-* Select fields and help texts, with allowed values taken from the validation rules. Live previews of `targetStructure` and cron schedules. Validation errors are shown next to their field.
-* Folder picker and autocomplete below `webUI.browseRoots` only. Paths are checked after symlink resolution, and the picker never writes. It is off when no roots are set.
-* Status page with the next run, running state and last result per job, refreshed every 10 s.
-* Intended for local/private use unless protected externally.
+An optional HTTP server in the main process renders templates with HTMX; all assets are embedded, so it works offline. It shows the configuration in effect, validates with the same rules as startup, and saves to the active file (applied at once, CFG-008) or a separate file (not applied). It is meant for local/private use only. The behavior is specified in link:../specs/web-ui.md[web-ui.md].
 
 == 9. Architectural Decisions
 
@@ -471,10 +485,10 @@ Decisions are recorded as ADRs in link:../decisions/README.md[docs/decisions]. T
 | Project name Phorga
 
 | link:../decisions/0008-built-in-server-rendered-web-ui.md[0008]
-| Optional built-in, server-rendered web UI with HTMX
+| Optional built-in, server-rendered web UI with HTMX (authentication part superseded by 0023)
 
 | link:../decisions/0009-ui-save-destination-and-no-hot-reload.md[0009]
-| UI saves to active or separate file; no hot reload
+| UI saves to active or separate file; no hot reload (hot reload part superseded by 0022)
 
 | link:../decisions/0010-multilingual-tokens-by-name.md[0010]
 | Multilingual tokens chosen by name; case controls rendering
@@ -502,6 +516,24 @@ Decisions are recorded as ADRs in link:../decisions/README.md[docs/decisions]. T
 
 | link:../decisions/0018-keep-highest-resolution-duplicate.md[0018]
 | Each duplicate group keeps the file with the most pixels, then the larger one, then the first found
+
+| link:../decisions/0019-no-clobber-transfers-with-hard-links.md[0019]
+| No-clobber transfers and same-volume moves with hard links
+
+| link:../decisions/0020-run-one-job-at-a-time.md[0020]
+| Run one job at a time
+
+| link:../decisions/0021-built-in-heic-and-video-date-readers.md[0021]
+| Built-in date readers for HEIC and MP4/MOV
+
+| link:../decisions/0022-live-apply-and-setup-mode.md[0022]
+| Apply UI changes live; start without a config (setup mode)
+
+| link:../decisions/0023-optional-web-ui-password.md[0023]
+| Optional web UI password from the environment (Basic auth); cross-site writes rejected
+
+| link:../decisions/0024-calendar-versions-released-by-tag.md[0024]
+| Calendar versions `YYYY.MM.MICRO`, released by a Git tag on `main`
 |===
 
 == 10. Risks and Technical Debt
@@ -510,25 +542,37 @@ Decisions are recorded as ADRs in link:../decisions/README.md[docs/decisions]. T
 |===
 | Risk | Impact | Mitigation
 
-| Large libraries (O(n²) dedup)
-| Slow on very large collections
-| The fingerprint cache avoids re-reading unchanged files (DUP-012); comparing stays O(n²), a few seconds for 8,000 files. V2: index-based matching.
+| Large libraries
+| The first content scan decodes every image
+| The fingerprint cache avoids re-reading unchanged files (DUP-012). Matching uses an index, about 0.1 s for 100,000 hashes (DUP-004).
 
 | pHash memory on NAS
 | Memory spikes when hashing many large images
 | Sequential processing, one image at a time. The detail check keeps one 4 KB thumbnail per candidate in memory during a run.
 
-| goexif RAW format gaps
-| Some RAW files may lack EXIF support
-| Graceful fallback to mtime. Log unsupported formats.
+| Date reader gaps
+| Some RAW files lack EXIF support in goexif; cameras that write local time into `mvhd` are shifted by the zone offset; Apple's `com.apple.quicktime.creationdate` is not read
+| Graceful fallback to filename, path, mtime (ORG-002). `ignoreModTime` sends undated files to `fallbackFolder`.
 
-| No file locking
-| Concurrent external writes during scan
-| Lock-file per source prevents overlapping Phorga runs.
+| Filesystems without hard links
+| On exFAT and some network mounts, publishing falls back to check + rename, so a file written by another program in that instant could be replaced
+| Documented in README › Known Limits (ADR-0019). Phorga's own jobs no longer run in parallel (RUN-002).
+
+| Jobs wait for each other
+| A long duplicate detection run delays organizer runs and the reverse
+| The status page shows waiting jobs; spread the schedules (ADR-0020).
 
 | Local/private web UI only
-| Public exposure would be unsafe without additional controls. The folder picker reveals folder names below `browseRoots`.
-| Document local/private deployment scope and rely on external protection if exposed. Keep `browseRoots` limited to the media folders.
+| Whoever reaches the UI can change what Phorga moves, with immediate effect. One shared password, no lockout; over plain HTTP it is readable on the network. The folder picker reveals folder names below `browseRoots`.
+| Optional password (WEB-020), start-up warning without one, cross-site writes rejected (WEB-021). The guide puts HTTPS in front and forbids internet exposure (ADR-0023). Keep `browseRoots` limited to the media folders.
+
+| Access to all home folders
+| Listing and organizing Synology Photos users means Phorga's user must read (and, for `move`, write) other users' home folders, a wider permission than a single photo share
+| The UI marks users it cannot read as "no access" instead of failing. Mounting `/homes` is optional; users can mount single `Photos` folders instead.
+
+| Settings change while a job runs
+| After a save, a running job keeps its old settings until it ends
+| Intended (ADR-0022): the next run uses the new settings; the save result says what needs a restart.
 
 | Duplicated token list
 | `targetStructure` tokens are defined in both `config` and `metadata`, so they can diverge
@@ -557,10 +601,13 @@ Decisions are recorded as ADRs in link:../decisions/README.md[docs/decisions]. T
 | 64×64 grayscale thumbnail of a pHash candidate. Two candidates are duplicates only when no tile of it differs in more than 12 % of its brightness steps (DUP-014).
 
 | targetStructure
-| Path template with multilingual tokens. Supports English (`{year}`, `{month}`, `{day}`), German (`{jahr}`, `{monat}`, `{tag}`), French (`{année}`, `{mois}`, `{jour}`), and Italian (`{anno}`, `{mese}`, `{giorno}`). Tokens are case-sensitive for output formatting (e.g., `{monat}` → february, `{Monat}` → Februar, `{MONAT}` → FEBRUAR).
+| Path template for the target folders, with tokens in four languages (ORG-005 to ORG-008).
+
+| Embedded date
+| The capture date stored in the file itself: EXIF in JPEG, RAW and HEIC, or the `mvhd` creation time in MP4/MOV. The only date the duplicate checks compare (ORG-011, DUP-002).
 
 | fallbackFolder
-| Destination for files where no date can be determined.
+| Destination for files where no date can be determined; reachable only with `ignoreModTime` (ORG-003).
 
 | Dry Run
 | Mode that logs planned actions without modifying files.

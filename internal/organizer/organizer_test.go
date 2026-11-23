@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/zedage/phorga/internal/config"
 	"github.com/zedage/phorga/internal/state"
@@ -178,7 +179,7 @@ func TestOrganize_Resume(t *testing.T) {
 	Run(context.Background(), profile, source, st, sp)
 
 	// Second run with same state — should skip
-	st2 := state.Load(sp)
+	st2 := loadState(t, sp)
 
 	// Re-create target dir (simulate fresh target check)
 	tgtDir2 := t.TempDir()
@@ -307,25 +308,44 @@ func TestOrganize_DuplicateReplace(t *testing.T) {
 		Path: srcDir,
 		Mode: "copy",
 		Duplicates: &config.OrganizerDuplicate{
-			DetectionMode: "filename",
+			DetectionMode: "filename+filedate",
 			Action:        config.DuplicateAction{Method: "replace"},
 		},
 		Schedule: "0 2 * * *",
 	}
-
-	// First run — place the file
-	createTestFile(t, srcDir, "photo.jpg", "original data")
-	st := state.New()
+	taken := time.Date(2019, 7, 15, 14, 30, 0, 0, time.UTC)
+	write := func(content string, mtime time.Time) {
+		p := createTestFile(t, srcDir, "photo.jpg", content)
+		if err := os.Chtimes(p, mtime, mtime); err != nil {
+			t.Fatal(err)
+		}
+	}
 	sp := filepath.Join(stateDir, "state.json")
-	Run(context.Background(), profile, source, st, sp)
+	target := filepath.Join(tgtDir, "2019", "07", "photo.jpg")
 
-	// Second run — same filename, different content → replace
-	createTestFile(t, srcDir, "photo.jpg", "updated data")
-	st2 := state.New()
-	result := Run(context.Background(), profile, source, st2, sp)
+	// First run: place the file.
+	write("original data", taken)
+	Run(context.Background(), profile, source, state.New(), sp)
 
-	if result.Processed == 0 && result.Skipped == 0 {
-		t.Error("expected file to be processed or skipped")
+	// Same name and mtime: a duplicate, so it replaces the target.
+	write("updated data", taken)
+	result := Run(context.Background(), profile, source, state.New(), sp)
+	if result.Processed != 1 || result.Errors != 0 {
+		t.Fatalf("replace run: %+v", result)
+	}
+	if got, _ := os.ReadFile(target); string(got) != "updated data" {
+		t.Errorf("target = %q, want the replacing file", got)
+	}
+
+	// Same name, other mtime: not a duplicate, so the target stays.
+	write("another photo", taken.Add(time.Hour))
+	Run(context.Background(), profile, source, state.New(), sp)
+	if got, _ := os.ReadFile(target); string(got) != "updated data" {
+		t.Errorf("a different photo replaced the target: %q", got)
+	}
+	matches, _ := filepath.Glob(filepath.Join(tgtDir, "2019", "07", "photo-*.jpg"))
+	if len(matches) != 1 {
+		t.Errorf("expected the different photo with a suffix, got %v", matches)
 	}
 }
 
@@ -420,7 +440,7 @@ func TestOrganize_DuplicateDryRun(t *testing.T) {
 		Mode: "copy",
 		Duplicates: &config.OrganizerDuplicate{
 			DetectionMode: "filename",
-			Action:        config.DuplicateAction{Method: "replace"},
+			Action:        config.DuplicateAction{Method: "addSuffix"},
 		},
 		Schedule: "0 2 * * *",
 	}
@@ -614,7 +634,7 @@ func TestHandleNoDate_WithFallback_Copy(t *testing.T) {
 	}
 	result := &RunResult{}
 
-	err := handleNoDate(profile, source, srcFile, mustStat(t, srcFile), state.New(), result)
+	err := newJob(profile, source, state.New(), result).handleNoDate(srcFile, mustStat(t, srcFile))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -643,7 +663,7 @@ func TestHandleNoDate_WithFallback_DryRun(t *testing.T) {
 	}
 	result := &RunResult{}
 
-	err := handleNoDate(profile, source, srcFile, mustStat(t, srcFile), state.New(), result)
+	err := newJob(profile, source, state.New(), result).handleNoDate(srcFile, mustStat(t, srcFile))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -669,7 +689,7 @@ func TestHandleNoDate_WithoutFallback(t *testing.T) {
 	}
 	result := &RunResult{}
 
-	err := handleNoDate(profile, source, srcFile, mustStat(t, srcFile), state.New(), result)
+	err := newJob(profile, source, state.New(), result).handleNoDate(srcFile, mustStat(t, srcFile))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -692,7 +712,7 @@ func TestHandleNoDate_WithFallback_Move(t *testing.T) {
 	}
 	result := &RunResult{}
 
-	err := handleNoDate(profile, source, srcFile, mustStat(t, srcFile), state.New(), result)
+	err := newJob(profile, source, state.New(), result).handleNoDate(srcFile, mustStat(t, srcFile))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -709,12 +729,12 @@ func TestIsDuplicate_Filename(t *testing.T) {
 	a := createTestFile(t, dir, "photo.jpg", "data1")
 	b := createTestFile(t, filepath.Join(t.TempDir()), "photo.jpg", "data2")
 
-	if !isDuplicate("filename", a, b) {
+	if !isDuplicate(parseMode("filename"), a, b) {
 		t.Error("same filename should be detected as duplicate")
 	}
 
 	c := createTestFile(t, t.TempDir(), "other.jpg", "data3")
-	if isDuplicate("filename", a, c) {
+	if isDuplicate(parseMode("filename"), a, c) {
 		t.Error("different filename should not be duplicate")
 	}
 }
@@ -727,7 +747,7 @@ func TestIsDuplicate_UnknownField(t *testing.T) {
 	b := createTestFile(t, dir2, "b.jpg", "y")
 
 	// Unknown field in AND mode → should be false
-	if isDuplicate("unknown", a, b) {
+	if isDuplicate(parseMode("unknown"), a, b) {
 		t.Error("unknown detection field should return false")
 	}
 }
@@ -737,7 +757,7 @@ func TestTransferFile_InvalidMode(t *testing.T) {
 	src := createTestFile(t, t.TempDir(), "f.jpg", "data")
 	dst := filepath.Join(t.TempDir(), "f.jpg")
 
-	err := transferFile("invalid", src, dst)
+	err := transferFile("invalid", src, dst, false)
 	if err == nil {
 		t.Error("expected error for invalid mode")
 	}
@@ -837,4 +857,20 @@ func TestOrganize_MultilingualTokens_Mixed(t *testing.T) {
 	if len(entries) == 0 {
 		t.Error("expected target directory to have subdirectories")
 	}
+}
+
+// parseMode parses a detectionMode for tests; an invalid one matches nothing.
+func parseMode(mode string) config.DetectionExpr {
+	expr, _ := config.ParseDetectionMode(mode)
+	return expr
+}
+
+// loadState reads the state file at path and fails the test on error.
+func loadState(t *testing.T, path string) *state.State {
+	t.Helper()
+	st, err := state.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return st
 }

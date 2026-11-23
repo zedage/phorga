@@ -3,14 +3,17 @@
 <!doctype html>
 <html lang="{{.Lang}}">
 {{template "head" (dict "Title" (call .T "status_title"))}}
-<body>
-  {{template "nav" (dict "T" .T "Active" "status")}}
-  <header class="page-head">
-    <h1>{{call .T "status_heading"}}</h1>
-    <p class="notice">{{call .T "status_intro"}}</p>
-  </header>
-  <main>
-    <div class="card table-wrap" id="status-table" hx-get="/ui/status/table" hx-trigger="every 10s" hx-swap="innerHTML">
+<body class="page-status">
+  {{template "nav" (dict "T" .T "Lang" .Lang "Active" "status")}}
+  <main class="content wide-content">
+    <header class="page-head page-head-row">
+      <div>
+        <h1>{{call .T "status_heading"}}</h1>
+        <p class="lead">{{call .T "status_intro"}}</p>
+      </div>
+      <span class="live" title="{{call .T "status_intro"}}"><span class="live-dot" aria-hidden="true"></span>{{call .T "status_live"}}</span>
+    </header>
+    <div id="status-table" hx-get="/ui/status/table" hx-trigger="every 10s" hx-swap="innerHTML">
       {{template "statusTable" .}}
     </div>
   </main>
@@ -21,7 +24,7 @@
 {{/* Live progress of a running job (WEB-014). Expects dict "T" and "J" (a JobStatus). */}}
 {{define "progress"}}{{with .J}}{{if .Phase}}
 <div class="progress-info">
-  <div>{{call $.T (printf "phase_%s" .Phase)}}{{if .Total}}: {{.Done}} / {{.Total}} ({{percent .Done .Total}} %){{end}}</div>
+  <div class="progress-phase">{{call $.T (printf "phase_%s" .Phase)}}{{if .Total}}: {{.Done}} / {{.Total}} ({{percent .Done .Total}} %){{end}}</div>
   {{if .Total}}<progress max="{{.Total}}" value="{{.Done}}">{{percent .Done .Total}} %</progress>{{end}}
   {{if not .Since.IsZero}}<div class="muted">{{call $.T "progress_since"}} {{fmtDuration (since .Since)}}</div>{{end}}
 </div>
@@ -29,39 +32,62 @@
 
 {{define "statusTable"}}
 {{if not .Data.Available}}
-<p class="muted">{{call .T "status_unavailable"}}</p>
+<div class="card empty">{{template "icon" "info"}}<span>{{call .T "status_unavailable"}}</span></div>
 {{else if not .Data.Jobs}}
-<p class="muted">{{call .T "status_no_jobs"}}</p>
+<div class="card empty">{{template "icon" "clock"}}<span>{{call .T "status_no_jobs"}}</span></div>
 {{else}}
-<table>
+{{with .Data.Counts}}
+<div class="stats">
+  <div class="stat"><span class="stat-value">{{.Total}}</span><span class="stat-label">{{call $.T "status_summary_total"}}</span></div>
+  <div class="stat stat-running{{if .Running}} active{{end}}"><span class="stat-value">{{.Running}}</span><span class="stat-label">{{call $.T "status_summary_running"}}</span></div>
+  <div class="stat stat-waiting{{if .Waiting}} active{{end}}"><span class="stat-value">{{.Waiting}}</span><span class="stat-label">{{call $.T "status_summary_waiting"}}</span></div>
+  <div class="stat"><span class="stat-value">{{.Idle}}</span><span class="stat-label">{{call $.T "status_summary_idle"}}</span></div>
+</div>
+{{end}}
+<div class="card table-card">
+<table class="jobs">
   <thead>
     <tr>
-      <th>{{call .T "status_job"}}</th>
-      <th>{{call .T "status_schedule"}}</th>
+      <th class="col-job">{{call .T "status_job"}} · {{call .T "status_schedule"}}</th>
       <th>{{call .T "status_next"}}</th>
-      <th>{{call .T "status_state"}}</th>
+      <th class="col-state">{{call .T "status_state"}}</th>
       <th>{{call .T "status_last"}}</th>
-      <th>{{call .T "status_duration"}}</th>
-      <th>{{call .T "status_result"}}</th>
+      <th class="col-result">{{call .T "status_result"}}</th>
     </tr>
   </thead>
   <tbody>
     {{range .Data.Jobs}}
-    <tr data-job="{{.Name}}">
-      <td><strong>{{call $.T (printf "kind_%s" .Kind)}}</strong><br><span class="muted">{{.Label}}</span></td>
-      <td><code>{{.Schedule}}</code></td>
-      <td>{{fmtTime .Next}}</td>
-      <td>{{if .Running}}<span class="badge running">{{call $.T "status_running"}}</span>{{template "progress" (dict "T" $.T "J" .)}}{{else}}<span class="badge">{{call $.T "status_idle"}}</span>{{end}}</td>
+    <tr data-job="{{.Name}}"{{if .Running}} class="is-running"{{end}}>
+      <td class="col-job">
+        <div class="job-cell">
+          <span class="job-icon kind-{{.Kind}}">{{if eq .Kind "dedup"}}{{template "icon" "copy"}}{{else}}{{template "icon" "layers"}}{{end}}</span>
+          <div class="job-text">
+            {{if .Field}}<a class="job-link" href="/ui#{{fid .Field}}" title="{{call $.T "status_open_config"}}">{{end}}
+            <strong>{{if .Title}}{{.Title}}{{else}}{{call $.T (printf "kind_%s" .Kind)}}{{end}}</strong>
+            <span class="job-label">{{.Label}}</span>
+            <span class="job-schedule" title="{{call $.T "status_schedule"}}">{{template "icon" "clock"}}<code>{{.Schedule}}</code></span>
+            {{if .Field}}</a>{{end}}
+          </div>
+        </div>
+      </td>
+      <td data-label="{{call $.T "status_next"}}" class="nowrap">{{fmtTime .Next}}</td>
+      <td data-label="{{call $.T "status_state"}}" class="col-state">{{if .Running}}<span class="badge running">{{call $.T "status_running"}}</span>{{template "progress" (dict "T" $.T "J" .)}}{{else if .Waiting}}<span class="badge waiting">{{call $.T "status_waiting"}}</span>{{else}}<span class="badge">{{call $.T "status_idle"}}</span>{{end}}</td>
       {{if .HasLast}}
-      <td>{{fmtTime .LastStart}}{{if .DryRun}} <span class="badge dry">{{call $.T "status_dry_run"}}</span>{{end}}</td>
-      <td>{{fmtDuration .LastDuration}}</td>
-      <td>{{range $k, $c := .Counters}}{{if $k}} · {{end}}{{$c.Value}} {{call $.T (printf "counter_%s" $c.Key)}}{{end}}</td>
+      <td data-label="{{call $.T "status_last"}}">
+        <div class="last-run">
+          <span class="nowrap">{{fmtTime .LastStart}}</span>
+          <span class="muted nowrap">{{call $.T "status_duration"}} {{fmtDuration .LastDuration}}</span>
+          {{if .DryRun}}<span><span class="badge dry">{{call $.T "status_dry_run"}}</span></span>{{end}}
+        </div>
+      </td>
+      <td data-label="{{call $.T "status_result"}}" class="col-result"><div class="counters">{{range .Counters}}<span class="counter{{if and (eq .Key "errors") (gt .Value 0)}} bad{{end}}"><strong>{{.Value}}</strong> {{call $.T (printf "counter_%s" .Key)}}</span>{{end}}</div></td>
       {{else}}
-      <td colspan="3" class="muted">{{call $.T "status_never"}}</td>
+      <td colspan="2" class="muted never" data-label="{{call $.T "status_last"}}">{{call $.T "status_never"}}</td>
       {{end}}
     </tr>
     {{end}}
   </tbody>
 </table>
+</div>
 {{end}}
 {{end}}

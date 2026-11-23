@@ -2,8 +2,10 @@ package fileops
 
 import (
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,13 +16,74 @@ import (
 // an incomplete copy.
 var copyData = func(dst io.Writer, src io.Reader) (int64, error) { return io.Copy(dst, src) }
 
-// AtomicCopy copies src to dst using a temp file + rename for atomicity.
-// Creates destination directories as needed. The copy keeps the source's
-// modification time (ORG-018). It is flushed to disk and its size is checked
-// against the source before it replaces dst (ORG-019).
+// linkFile and renameFile are variables so tests can simulate a target on
+// another volume or a filesystem without hard links.
+var (
+	linkFile   = os.Link
+	renameFile = os.Rename
+)
+
+// ErrDestinationExists is returned when a transfer would replace a file
+// that already exists (ORG-020, DUP-005).
+var ErrDestinationExists = errors.New("destination already exists")
+
+// ErrSameFile is returned when source and destination are the same file, so
+// a transfer would replace or delete the file with itself (ORG-024).
+var ErrSameFile = errors.New("source and destination are the same file")
+
+// AtomicCopy copies src to dst. It never replaces an existing file: if dst
+// exists, or appears while the copy is written, it returns an error wrapping
+// ErrDestinationExists and leaves dst untouched (ORG-020). The copy is
+// written to a temp file, flushed to disk and checked against the source
+// size before it becomes visible (ORG-019), and keeps the source's
+// modification time (ORG-018). Destination directories are created as
+// needed.
 func AtomicCopy(src, dst string) error {
+	return copyFile(src, dst, false)
+}
+
+// AtomicCopyReplace is AtomicCopy, but replaces an existing dst. Only the
+// organizer's duplicate action replace uses it (ORG-012).
+func AtomicCopyReplace(src, dst string) error {
+	return copyFile(src, dst, true)
+}
+
+// AtomicMove moves src to dst without ever replacing an existing file
+// (ORG-020). On the same volume, the file gets its new name through a hard
+// link and keeps its data, inode and modification time (ORG-025). Otherwise
+// it is copied as in AtomicCopy, and src is removed only after the verified
+// copy is in place (ORG-004, ORG-019).
+func AtomicMove(src, dst string) error {
+	return moveFile(src, dst, false)
+}
+
+// AtomicMoveReplace is AtomicMove, but replaces an existing dst (ORG-012).
+func AtomicMoveReplace(src, dst string) error {
+	return moveFile(src, dst, true)
+}
+
+// checkTarget creates dst's directory. It refuses a transfer onto the
+// source itself (ORG-024), and onto an existing file unless replace is set.
+func checkTarget(src, dst string, replace bool) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
 		return fmt.Errorf("creating target directory: %w", err)
+	}
+	dstInfo, err := os.Stat(dst)
+	if err != nil {
+		return nil // nothing there yet
+	}
+	if srcInfo, err := os.Stat(src); err == nil && os.SameFile(srcInfo, dstInfo) {
+		return fmt.Errorf("%w: %s", ErrSameFile, dst)
+	}
+	if !replace {
+		return fmt.Errorf("%w: %s", ErrDestinationExists, dst)
+	}
+	return nil
+}
+
+func copyFile(src, dst string, replace bool) error {
+	if err := checkTarget(src, dst, replace); err != nil {
+		return err
 	}
 
 	srcFile, err := os.Open(src)
@@ -41,13 +104,9 @@ func AtomicCopy(src, dst string) error {
 	}
 	tmpPath := tmpFile.Name()
 
-	// Cleanup temp file on error
-	success := false
-	defer func() {
-		if !success {
-			os.Remove(tmpPath)
-		}
-	}()
+	// Remove the temp name whatever happens. After a successful publish it
+	// is only a second name of dst; after a rename it is gone already.
+	defer os.Remove(tmpPath)
 
 	written, err := copyData(tmpFile, srcFile)
 	if err != nil {
@@ -84,12 +143,76 @@ func AtomicCopy(src, dst string) error {
 		return fmt.Errorf("preserving modification time: %w", err)
 	}
 
+	if replace {
+		if err := os.Rename(tmpPath, dst); err != nil {
+			return fmt.Errorf("renaming temp to destination: %w", err)
+		}
+	} else if err := publish(tmpPath, dst); err != nil {
+		return err
+	}
+
+	syncDir(filepath.Dir(dst))
+	return nil
+}
+
+// publish gives the finished temp file its final name without replacing a
+// file that exists there. Creating a hard link fails atomically when the
+// name is taken, so a file that appeared after the earlier check is never
+// lost (ORG-020). Filesystems without hard links (e.g. exFAT, some network
+// mounts) fall back to a check followed by a rename, which leaves a short
+// window for a file written by another program (ADR-0019).
+func publish(tmpPath, dst string) error {
+	err := linkFile(tmpPath, dst)
+	if err == nil {
+		return nil // the caller removes the temp name
+	}
+	if errors.Is(err, fs.ErrExist) || exists(dst) {
+		return fmt.Errorf("%w: %s", ErrDestinationExists, dst)
+	}
 	if err := os.Rename(tmpPath, dst); err != nil {
 		return fmt.Errorf("renaming temp to destination: %w", err)
 	}
-	success = true
+	return nil
+}
 
-	syncDir(filepath.Dir(dst))
+func moveFile(src, dst string, replace bool) error {
+	if err := checkTarget(src, dst, replace); err != nil {
+		return err
+	}
+
+	// Same volume: give the file its new name without copying (ORG-025).
+	// Any failure here (another volume, no hard links) falls back to a copy.
+	// A symbolic link always takes the copy: a hard link or rename would
+	// move the link itself, which may point nowhere from its new folder.
+	switch {
+	case isSymlink(src):
+	case replace:
+		if err := renameFile(src, dst); err == nil {
+			syncDir(filepath.Dir(dst))
+			syncDir(filepath.Dir(src))
+			return nil
+		}
+	default:
+		err := linkFile(src, dst)
+		if err == nil {
+			syncDir(filepath.Dir(dst))
+			if err := os.Remove(src); err != nil {
+				return fmt.Errorf("removing source after move: %w", err)
+			}
+			syncDir(filepath.Dir(src))
+			return nil
+		}
+		if errors.Is(err, fs.ErrExist) {
+			return fmt.Errorf("%w: %s", ErrDestinationExists, dst)
+		}
+	}
+
+	if err := copyFile(src, dst, replace); err != nil {
+		return err
+	}
+	if err := os.Remove(src); err != nil {
+		return fmt.Errorf("removing source after move: %w", err)
+	}
 	return nil
 }
 
@@ -104,15 +227,10 @@ func syncDir(dir string) {
 	_ = d.Sync()
 }
 
-// AtomicMove copies src to dst atomically, then removes src on success.
-func AtomicMove(src, dst string) error {
-	if err := AtomicCopy(src, dst); err != nil {
-		return err
-	}
-	if err := os.Remove(src); err != nil {
-		return fmt.Errorf("removing source after move: %w", err)
-	}
-	return nil
+// isSymlink reports whether path itself is a symbolic link.
+func isSymlink(path string) bool {
+	info, err := os.Lstat(path)
+	return err == nil && info.Mode()&os.ModeSymlink != 0
 }
 
 // GenerateSuffix returns a random 4-character alphanumeric string.
@@ -166,7 +284,8 @@ func EnsureDir(dir string) error {
 }
 
 // WriteFileAtomic writes data to path via a temp file in the same directory
-// and a rename, creating parent directories as needed.
+// and a rename, creating parent directories as needed. It is meant for
+// Phorga's own files (state, cache, config) and replaces an existing file.
 func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {

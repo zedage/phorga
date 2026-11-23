@@ -16,7 +16,7 @@ import (
 	"github.com/zedage/phorga/internal/scheduler"
 )
 
-// Spec: WEB-011
+// Spec: WEB-011, WEB-019
 func TestStatusBoardReportsRecordedRun(t *testing.T) {
 	cfg := testConfig(t)
 	cfg.DuplicateDetection = []config.DuplicateDetection{{
@@ -26,15 +26,19 @@ func TestStatusBoardReportsRecordedRun(t *testing.T) {
 	statusPath := runstatus.Path(cfg.StateDir)
 	recorder := runstatus.Load(statusPath)
 	sched := scheduler.New()
-	jobs, err := registerJobs(sched, cfg, recorder)
+	jobs, err := registerJobs(sched, cfg, recorder, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	sched.Start()
 	defer sched.Stop()
-	board := &statusBoard{sched: sched, recorder: recorder, jobs: jobs}
+	board := &statusBoard{sched: sched, recorder: recorder, jobs: func() []jobInfo { return jobs }}
 
 	before := board.Jobs()
+	// Each job links to its schedule field (WEB-019).
+	if before[0].Field != "organizer.0.sources.0.schedule" || before[1].Field != "duplicateDetection.0.schedule" {
+		t.Fatalf("schedule fields: %q, %q", before[0].Field, before[1].Field)
+	}
 	if len(before) != 2 || before[0].HasLast || before[0].Next.IsZero() {
 		t.Fatalf("unexpected initial status %+v", before)
 	}

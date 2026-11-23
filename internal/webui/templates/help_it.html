@@ -1,0 +1,86 @@
+{{/* Guida all'installazione, italiano (WEB-022). Allinearla alle altre
+     lingue e alla "Setup guide" del README. */}}
+{{define "help_it"}}
+<section class="section" id="synology">
+  <div class="section-head"><span class="section-icon">{{template "icon" "layers"}}</span><h2>{{call .T "guide_toc_synology"}}</h2></div>
+  <div class="card">
+    <p>Phorga gira direttamente sul NAS, in Container Manager. Servono DSM 7.2 o successivo e un account amministratore. Tutti i passaggi si fanno in DSM dal browser.</p>
+    <ol class="steps">
+      <li><strong>Installa Container Manager.</strong> Centro pacchetti → cerca “Container Manager” → Installa. Se usi Synology Photos, il servizio home utente è già attivo; altrimenti attivalo in Pannello di controllo → Utente e gruppo → Avanzate → Home utente.</li>
+      <li><strong>Crea un utente per Phorga.</strong> Pannello di controllo → Utente e gruppo → Crea. Chiamalo <code>phorga</code> e dagli una password lunga e casuale (non ti servirà più). Nei permessi delle cartelle condivise, dai <strong>Lettura/Scrittura</strong> a <code>docker</code> e <code>homes</code>. Nei permessi delle applicazioni nega tutto; Phorga non accede mai a DSM.</li>
+      <li><strong>Crea le cartelle.</strong> In File Station apri <code>docker</code>, crea la cartella <code>phorga</code> e al suo interno le cartelle <code>config</code> e <code>state</code>.</li>
+      <li><strong>Trova l'ID utente.</strong> Pannello di controllo → Utilità di pianificazione → Crea → Attività pianificata → Script definito dall'utente. Nome <code>phorga id</code>, utente <code>root</code>, togli la spunta da “Abilitato”; nelle impostazioni dell'attività inserisci il comando <code>id phorga &gt; /volume1/docker/phorga/id.txt</code>. Salva, seleziona l'attività, fai clic su Esegui e apri <code>docker/phorga/id.txt</code> in File Station: <code>uid=1030(phorga) gid=100(users)</code> significa <code>1030:100</code>. Poi elimina l'attività.</li>
+      <li><strong>Crea il progetto.</strong> Container Manager → Progetto → Crea. Nome del progetto <code>phorga</code>, percorso <code>/docker/phorga</code>, origine “Crea docker-compose.yml”, e incolla:
+        <pre class="code"><code>{{.Data.ComposeSynology}}</code></pre>
+        Sostituisci <code>1030:100</code> con i numeri del passaggio 4 e <code>choose-a-long-password</code> con la tua password per l'interfaccia web. Avanti, salta le impostazioni del portale web, Fine. Container Manager scarica Phorga e lo avvia.</li>
+      <li><strong>Rendilo raggiungibile in HTTPS.</strong> Pannello di controllo → Portale di accesso → Avanzate → Proxy inverso → Crea: nome <code>Phorga</code>; origine protocollo <code>HTTPS</code>, nome host <code>*</code>, porta <code>8443</code>; destinazione protocollo <code>HTTP</code>, nome host <code>localhost</code>, porta <code>8080</code>. Salva. Se il firewall di DSM è attivo, consenti la porta 8443 (Pannello di controllo → Sicurezza → Firewall).</li>
+      <li><strong>Apri Phorga.</strong> Da un dispositivo della tua rete apri <code>https://&lt;indirizzo NAS&gt;:8443/ui</code>, ad es. <code>https://192.168.1.20:8443/ui</code>. Se il NAS usa un proprio certificato, il browser avvisa una volta; in casa è normale. Accedi con un nome utente qualsiasi e la tua password, poi continua con <a href="#setup">{{call .T "guide_toc_setup"}}</a>.</li>
+    </ol>
+  </div>
+</section>
+
+<section class="section" id="other">
+  <div class="section-head"><span class="section-icon">{{template "icon" "monitor"}}</span><h2>{{call .T "guide_toc_other"}}</h2></div>
+  <div class="card">
+    <p>Phorga gira su un computer sempre acceso, come un Mac mini, un Intel NUC o un server di casa, e lavora sul NAS tramite una condivisione di rete.</p>
+    <ol class="steps">
+      <li><strong>Installa Docker.</strong> macOS e Windows: Docker Desktop, con “Start Docker Desktop when you sign in” attivo nelle impostazioni. Linux: Docker Engine con il plugin Compose.</li>
+      <li><strong>Consenti l'accesso sul NAS.</strong> In DSM crea l'utente <code>phorga</code> con Lettura/Scrittura su <code>homes</code> (passaggio 2 della guida Synology) e verifica che SMB sia attivo (Pannello di controllo → Servizi file → SMB).</li>
+      <li><strong>Collega la condivisione.</strong> macOS: Finder → Vai → Connessione al server → <code>smb://&lt;indirizzo NAS&gt;/homes</code>, accedi come <code>phorga</code>; la condivisione appare come <code>/Volumes/homes</code>. Per ricollegarla dopo un riavvio, aggiungila in Impostazioni di Sistema → Generali → Elementi login. Linux: montala, ad esempio con questa riga in <code>/etc/fstab</code> (il file delle credenziali contiene <code>username=phorga</code> e <code>password=…</code>):
+        <pre class="code"><code>//192.168.1.20/homes  /mnt/nas-homes  cifs  credentials=/etc/phorga-nas,uid=1000,gid=1000,_netdev  0  0</code></pre></li>
+      <li><strong>Crea il progetto.</strong> Crea una cartella <code>phorga</code> nella tua cartella home, con le cartelle <code>config</code> e <code>state</code> al suo interno, e salvaci questo come <code>docker-compose.yml</code>:
+        <pre class="code"><code>{{.Data.ComposeOther}}</code></pre>
+        Imposta <code>user:</code> sull'output di <code>id -u</code> e <code>id -g</code>, la password sulla tua e, su Linux, la condivisione sul tuo punto di montaggio.</li>
+      <li><strong>Avvia Phorga.</strong> Nel terminale: <code>cd ~/phorga &amp;&amp; docker compose up -d</code>. Apri <code>http://127.0.0.1:8080/ui</code> su questo computer, accedi con un nome utente qualsiasi e la tua password, e continua con <a href="#setup">{{call .T "guide_toc_setup"}}</a>.</li>
+      <li><strong>Tienilo acceso.</strong> Il computer non deve andare in stop (macOS: Impostazioni di Sistema → Energia → Impedisci lo stop automatico). Il container vede solo una condivisione collegata al suo avvio: dopo averla ricollegata, esegui <code>docker compose restart</code>.</li>
+    </ol>
+  </div>
+</section>
+
+<section class="section" id="setup">
+  <div class="section-head"><span class="section-icon">{{template "icon" "sliders"}}</span><h2>{{call .T "guide_toc_setup"}}</h2></div>
+  <div class="card">
+    <ol class="steps">
+      <li><strong>Scegli gli utenti.</strong> Nella <a href="/ui#sec-synology">pagina di configurazione</a>, “Utenti di Synology Photos” elenca chi ha una libreria Synology Photos. Spunta gli utenti i cui caricamenti dal telefono Phorga deve ordinare e fai clic su <strong>Aggiungi gli utenti selezionati</strong>.</li>
+      <li><strong>Controlla il profilo.</strong> Ogni utente riceve un profilo che ogni notte alle 03:00 sposta i nuovi file da <code>Photos/MobileBackup</code> a <code>Photos/&lt;anno&gt;/&lt;mese&gt;</code>. Parte come <strong>prova</strong> (dry run): Phorga scrive nel log solo cosa farebbe. Fai clic sul profilo per cambiare l'orario o la struttura delle cartelle.</li>
+      <li><strong>Salva.</strong> Il salvataggio scrive il file di configurazione e pianifica subito i job. Non serve riavviare.</li>
+      <li><strong>Controlla la prova.</strong> Dopo la prima esecuzione, la <a href="/ui/status">pagina di stato</a> mostra quanti file verrebbero spostati, e il log del container elenca ogni file (Container Manager → Container → phorga → Registro, oppure <code>docker compose logs phorga</code>). Per provarlo subito, imposta la pianificazione su <code>*/5 * * * *</code> (ogni 5 minuti) e poi rimettila com'era.</li>
+      <li><strong>Disattiva la prova.</strong> Se il log è corretto, apri il profilo, togli la spunta da <strong>Dry run</strong> e salva. Dalla prossima esecuzione Phorga sposta i file. Synology Photos li mostra nelle nuove cartelle dopo averli indicizzati. Dopo la prima esecuzione reale, verifica che l'app Synology Photos sul telefono non carichi di nuovo le foto spostate.</li>
+      <li><strong>Facoltativo: trova i duplicati.</strong> In “Job rilevamento duplicati” aggiungi un job che confronta cartelle e trova copie della stessa foto. Anche questo parte come prova e sposta i duplicati solo in una cartella a tua scelta; non cancella mai nulla.</li>
+    </ol>
+  </div>
+</section>
+
+<section class="section" id="remote">
+  <div class="section-head"><span class="section-icon">{{template "icon" "globe"}}</span><h2>{{call .T "guide_toc_remote"}}</h2></div>
+  <div class="card">
+    <p>Chi può aprire l'interfaccia web può cambiare quali file Phorga sposta. Proteggila così:</p>
+    <ul class="steps">
+      <li><strong>Imposta sempre una password</strong> con <code>PHORGA_WEB_UI_PASSWORD</code>, come nei file compose qui sopra. Scegline una lunga: dopo tentativi errati non viene bloccato nulla. Il browser la chiede una volta per sessione. Per cambiarla, modifica il file compose e ricrea il container (Container Manager → Progetto → phorga → Configurazioni YAML → Modifica, oppure <code>docker compose up -d</code>).</li>
+      <li><strong>Synology:</strong> il proxy inverso (passaggio 6) aggiunge HTTPS e, poiché la porta del container resta su <code>127.0.0.1</code>, il proxy è l'unico accesso. Per consentire solo la rete di casa, crea un profilo di controllo accessi (Pannello di controllo → Portale di accesso → Avanzate → Profilo di controllo accessi) che consente ad es. <code>192.168.1.0/24</code> e nega tutto il resto, e selezionalo nella regola del proxy inverso. Con un tuo dominio, usalo come nome host al posto di <code>*</code> e assegna il suo certificato in Pannello di controllo → Sicurezza → Certificato → Impostazioni.</li>
+      <li><strong>Altro computer:</strong> cambia la porta in <code>"8080:8080"</code> ed esegui <code>docker compose up -d</code>. Poi apri <code>http://&lt;indirizzo computer&gt;:8080/ui</code>. Senza HTTPS la password attraversa la rete in chiaro, accettabile solo in una rete di casa di cui ti fidi; per HTTPS metti davanti un proxy inverso come Caddy.</li>
+      <li><strong>Mai</strong> inoltrare la porta verso Internet nel router. Fuori casa collegati alla rete di casa con una VPN (ad esempio Synology VPN Server o Tailscale).</li>
+    </ul>
+  </div>
+</section>
+
+<section class="section" id="trouble">
+  <div class="section-head"><span class="section-icon">{{template "icon" "alert"}}</span><h2>{{call .T "guide_toc_trouble"}}</h2></div>
+  <div class="card">
+    <dl class="faq">
+      <dt>“cartella home non trovata”</dt>
+      <dd>Il container non vede la cartella homes. Controlla il volume <code>/volume1/homes:/homes</code>; su un altro computer, che la condivisione sia collegata. Se è montata in un altro percorso, inseriscilo come cartella homes nella sezione Synology Photos.</dd>
+      <dt>Un utente è segnato “nessun accesso”</dt>
+      <dd>L'utente di Phorga non può leggere quella cartella home. Dai all'utente <code>phorga</code> Lettura/Scrittura sulla cartella condivisa <code>homes</code> e verifica che <code>user:</code> nel file compose contenga il suo uid e gid.</dd>
+      <dt>Il salvataggio fallisce con “permission denied”</dt>
+      <dd>La cartella <code>config</code> deve essere scrivibile per l'utente in <code>user:</code>. Monta la cartella (<code>./config:/config</code>), non solo <code>config.yaml</code>.</dd>
+      <dt>La pagina non si apre</dt>
+      <dd>Controlla che il container sia in esecuzione e che il suo log non mostri errori. Synology: controlla la regola del proxy inverso (destinazione <code>localhost</code>, porta <code>8080</code>) e il firewall. Altro computer: con <code>127.0.0.1</code> nella porta, solo quel computer può aprire la pagina.</dd>
+      <dt>Il browser chiede continuamente la password</dt>
+      <dd>Va bene qualsiasi nome utente; la password deve corrispondere esattamente a <code>PHORGA_WEB_UI_PASSWORD</code>. Dopo averla cambiata, il container va ricreato.</dd>
+      <dt>Le foto spostate non compaiono in Synology Photos</dt>
+      <dd>Synology Photos deve prima indicizzare le nuove cartelle. Attendi qualche minuto; se non compaiono ancora, riavvia l'indicizzazione nelle impostazioni di Synology Photos.</dd>
+    </dl>
+  </div>
+</section>
+{{end}}

@@ -28,7 +28,7 @@ func postForm(t *testing.T, s *Server, target string, values url.Values, htmx bo
 	return resp
 }
 
-// Spec: WEB-007
+// Spec: WEB-007, WEB-017
 func TestPageRendersSelectsWithCurrentValue(t *testing.T) {
 	cfg := sampleConfig()
 	cfg.DuplicateDetection[0].Action.Method = "explode"
@@ -36,10 +36,10 @@ func TestPageRendersSelectsWithCurrentValue(t *testing.T) {
 
 	for _, want := range []string{
 		`<select id="f-organizer-0-sources-0-mode" name="organizer.0.sources.0.mode"`,
-		`<option value="copy" selected>copy</option>`,
-		`<option value="move">move</option>`,
-		`<option value="addSuffix">addSuffix</option>`,
-		`<option value="content" selected>content</option>`,
+		`<option value="copy" selected>copy – keep the original</option>`,
+		`<option value="move">move – remove the original after copying</option>`,
+		`<option value="addSuffix">addSuffix – keep both, add a suffix to the new one</option>`,
+		`<option value="content" selected>content – compare what the pictures look like</option>`,
 		`<option value="explode" selected>explode (unknown)</option>`,
 		`id="f-organizer-0-target-help"`,
 		"copy keeps the original",
@@ -239,7 +239,7 @@ func TestStatusTableShowsJobs(t *testing.T) {
 	body := get(t, s, "/ui/status/table").Body.String()
 	for _, want := range []string{
 		"/in → /out", "2026-11-12 02:00:00", "running", "2026-11-11 02:00:00", "3s",
-		"7 processed · 1 skipped · 0 errors", "dry run", "Duplicate detection", "not run yet",
+		"<strong>7</strong> processed", "<strong>1</strong> skipped", "<strong>0</strong> errors", "dry run", "Duplicate detection", "not run yet",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("status table missing %q:\n%s", want, body)
@@ -334,6 +334,70 @@ func TestThemeSwitchIsRendered(t *testing.T) {
 	for _, sel := range []string{`:root[data-theme="dark"]`, `:root:not([data-theme="light"])`, `:root[data-theme="light"]`} {
 		if !strings.Contains(css, sel) {
 			t.Errorf("stylesheet must contain selector %s", sel)
+		}
+	}
+}
+
+// Spec: RUN-002, WEB-011
+func TestStatusTableShowsWaitingJob(t *testing.T) {
+	jobs := fakeStatus{
+		{Name: "organizer-0-source-0", Kind: "organizer", Label: "/in → /out", Schedule: "0 2 * * *", Running: true},
+		{Name: "dedup-0", Kind: "dedup", Label: "/out", Schedule: "0 2 * * *", Waiting: true},
+	}
+	s, err := New(Options{Address: "127.0.0.1:0", ConfigPath: sampleConfigPath(), Config: sampleConfig(), Status: jobs})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for lang, want := range map[string]string{"en": "waiting for another job", "de": "wartet auf anderen Job"} {
+		body := get(t, s, "/ui/status/table?lang="+lang).Body.String()
+		if !strings.Contains(body, `<span class="badge waiting">`+want+`</span>`) {
+			t.Errorf("%s: status table missing the waiting badge:\n%s", lang, body)
+		}
+	}
+}
+
+// Spec: WEB-011
+func TestStatusSummaryCountsEachJobOnce(t *testing.T) {
+	jobs := fakeStatus{
+		{Name: "a", Kind: "organizer", Running: true, Waiting: true},
+		{Name: "b", Kind: "dedup", Waiting: true},
+		{Name: "c", Kind: "dedup"},
+		{Name: "d", Kind: "organizer"},
+	}
+	got := statusData{Available: true, Jobs: jobs}.Counts()
+	if want := (statusCounts{Total: 4, Running: 1, Waiting: 1, Idle: 2}); got != want {
+		t.Fatalf("Counts() = %+v, want %+v", got, want)
+	}
+
+	s, err := New(Options{Address: "127.0.0.1:0", ConfigPath: sampleConfigPath(), Config: sampleConfig(), Status: jobs})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := get(t, s, "/ui/status/table?lang=de").Body.String()
+	for _, want := range []string{
+		`<span class="stat-value">4</span><span class="stat-label">Jobs</span>`,
+		`<span class="stat-value">1</span><span class="stat-label">Laufend</span>`,
+		`<span class="stat-value">2</span><span class="stat-label">Bereit</span>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("summary missing %q", want)
+		}
+	}
+}
+
+// Spec: WEB-005
+func TestLanguagePickerOnEveryPage(t *testing.T) {
+	s := newTestServer(t)
+	for _, page := range []string{"/ui", "/ui/status"} {
+		body := get(t, s, page+"?lang=it").Body.String()
+		if !strings.Contains(body, `<select id="languageSelect"`) {
+			t.Errorf("%s: missing language picker", page)
+		}
+		if !strings.Contains(body, `<option value="it" selected>Italiano</option>`) {
+			t.Errorf("%s: current language must be selected", page)
+		}
+		if strings.Contains(body, `<option value="en" selected>`) {
+			t.Errorf("%s: only the current language may be selected", page)
 		}
 	}
 }

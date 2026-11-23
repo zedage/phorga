@@ -11,8 +11,8 @@ Short records of decisions that shaped Phorga: what was decided, why, and what i
 | [0005](0005-json-state-files.md) | JSON flat files for state, no database | 2026-05-17 | accepted |
 | [0006](0006-atomic-file-operations.md) | Atomic file operations (temp file + rename) | 2026-05-17 | accepted |
 | [0007](0007-rename-to-phorga.md) | Rename the project from Phorganizer to Phorga | 2026-05-30 | accepted |
-| [0008](0008-built-in-server-rendered-web-ui.md) | Optional built-in, server-rendered web UI with HTMX | 2026-06-06 | accepted |
-| [0009](0009-ui-save-destination-and-no-hot-reload.md) | UI saves to active or separate file, no hot reload | 2026-06-06 | accepted |
+| [0008](0008-built-in-server-rendered-web-ui.md) | Optional built-in, server-rendered web UI with HTMX | 2026-06-06 | superseded in part by 0023 |
+| [0009](0009-ui-save-destination-and-no-hot-reload.md) | UI saves to active or separate file, no hot reload | 2026-06-06 | superseded in part by 0022 |
 | [0010](0010-multilingual-tokens-by-name.md) | Language chosen by token name, case controls rendering | 2026-06-06 | accepted |
 | [0011](0011-specs-and-agents-md-instead-of-openspec.md) | Specs in `docs/specs` + `AGENTS.md` instead of openspec | 2026-11-10 | accepted |
 | [0012](0012-duplicate-checks-require-real-exif.md) | Duplicate checks on dates require real EXIF | 2026-11-10 | accepted |
@@ -22,7 +22,13 @@ Short records of decisions that shaped Phorga: what was decided, why, and what i
 | [0016](0016-fixed-skip-list-and-simple-exclude-patterns.md) | Fixed skip list for system folders, simple exclude patterns | 2026-11-15 | accepted |
 | [0017](0017-detail-check-after-phash.md) | Detail check after the pHash match in content mode | 2026-11-16 | accepted |
 | [0018](0018-keep-highest-resolution-duplicate.md) | Keep the highest-resolution file of a duplicate group | 2026-11-17 | accepted |
+| [0019](0019-no-clobber-transfers-with-hard-links.md) | No-clobber transfers and same-volume moves with hard links | 2026-11-21 | accepted |
+| [0020](0020-run-one-job-at-a-time.md) | Run one job at a time | 2026-11-21 | accepted |
+| [0021](0021-built-in-heic-and-video-date-readers.md) | Built-in date readers for HEIC and MP4/MOV | 2026-11-21 | accepted |
+| [0022](0022-live-apply-and-setup-mode.md) | Apply UI changes live, start without a config | 2026-11-21 | accepted |
+| [0023](0023-optional-web-ui-password.md) | Optional web UI password from the environment, cross-site writes rejected | 2026-11-21 | accepted |
+| [0024](0024-calendar-versions-released-by-tag.md) | Calendar versions, released by a Git tag | 2026-11-23 | accepted |
 
 ## Writing a new ADR
 
-Add an ADR when a change makes a real trade-off: something a future reader might want to undo without knowing why it was done. Copy the structure of an existing ADR, use the next number, add a row above, and link it from the affected spec requirement and from arc42 §9. Do not edit accepted ADRs in substance. If a decision changes, write a new ADR and set the old one to `superseded by NNNN`.
+Add an ADR only for a decision that is expensive to reverse or that a future reader would plausibly undo without knowing why: a format on disk, a safety rule, a dependency, a process-wide behavior. Most changes do not need one. A choice that only matters for one requirement belongs in that requirement's `**Notes:**` line, and an alternative you rejected in five minutes is not worth a record. Copy the structure of an existing ADR, use the next number, add a row above, and link it from the affected spec requirement and from arc42 §9. Do not edit accepted ADRs in substance. If a decision changes, write a new ADR and set the old one to `superseded by NNNN`.

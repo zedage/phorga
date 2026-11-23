@@ -18,6 +18,12 @@ type pageData struct {
 	FieldErrors   map[string][]string
 	BrowseEnabled bool
 	Choices       choices
+	// Synology lists the Synology Photos users that can be added (SYN-003).
+	Synology synologyView
+	// Focus is the id of the element to scroll to after an edit (WEB-015).
+	Focus string
+	// Setup is true while the running configuration has no jobs (CFG-009).
+	Setup bool
 }
 
 // choices holds the allowed values for the select fields (WEB-007). They come
@@ -27,14 +33,17 @@ type choices struct {
 	OrgMethods   []string
 	DedupMethods []string
 	DedupModes   []string
+	// DetectionFields are the organizer duplicate fields (WEB-017).
+	DetectionFields []string
 }
 
 func newChoices() choices {
 	return choices{
-		SourceModes:  config.SourceModes(),
-		OrgMethods:   config.OrganizerDuplicateMethods(),
-		DedupMethods: config.DedupMethods(),
-		DedupModes:   config.DedupModes(),
+		SourceModes:     config.SourceModes(),
+		OrgMethods:      config.OrganizerDuplicateMethods(),
+		DedupMethods:    config.DedupMethods(),
+		DedupModes:      config.DedupModes(),
+		DetectionFields: config.DetectionFields(),
 	}
 }
 
@@ -48,6 +57,7 @@ type flashMessage struct {
 type configForm struct {
 	StateDir           string
 	WebUI              webUIForm
+	SynologyHomes      string
 	Organizer          []organizerProfileForm
 	DuplicateDetection []duplicateDetectionForm
 	SaveTarget         string
@@ -61,11 +71,13 @@ type webUIForm struct {
 }
 
 type organizerProfileForm struct {
+	Name            string
 	DryRun          bool
 	NtfyURL         string
 	Target          string
 	TargetStructure string
 	FallbackFolder  string
+	IgnoreModTime   bool
 	Sources         []organizerSourceForm
 }
 
@@ -75,12 +87,19 @@ type organizerSourceForm struct {
 	Schedule          string
 	DuplicatesEnabled bool
 	DetectionMode     string
-	ActionMethod      string
-	DuplicateFolder   string
-	Exclude           []string
+	// DetectionFields and DetectionAny are DetectionMode as checkboxes and
+	// an all/any choice (WEB-017). DetectionInvalid keeps a value from the
+	// file that the checkboxes cannot show.
+	DetectionFields  []string
+	DetectionAny     bool
+	DetectionInvalid string
+	ActionMethod     string
+	DuplicateFolder  string
+	Exclude          []string
 }
 
 type duplicateDetectionForm struct {
+	Name            string
 	Enabled         bool
 	DryRun          bool
 	Schedule        string
@@ -108,55 +127,72 @@ func newFormFromConfig(cfg *config.Config) configForm {
 		}
 	}
 
+	if cfg.SynologyPhotos != nil {
+		form.SynologyHomes = cfg.SynologyPhotos.Homes
+	}
+
 	form.Organizer = make([]organizerProfileForm, 0, len(cfg.Organizer))
 	for _, profile := range cfg.Organizer {
-		item := organizerProfileForm{
-			DryRun:          profile.DryRun,
-			Target:          profile.Target,
-			TargetStructure: profile.TargetStructure,
-			FallbackFolder:  profile.FallbackFolder,
-			Sources:         make([]organizerSourceForm, 0, len(profile.Sources)),
-		}
-		if profile.Ntfy != nil {
-			item.NtfyURL = profile.Ntfy.URL
-		}
-		for _, source := range profile.Sources {
-			src := organizerSourceForm{
-				Path:     source.Path,
-				Mode:     source.Mode,
-				Schedule: source.Schedule,
-				Exclude:  append([]string(nil), source.Exclude...),
-			}
-			if source.Duplicates != nil {
-				src.DuplicatesEnabled = true
-				src.DetectionMode = source.Duplicates.DetectionMode
-				src.ActionMethod = source.Duplicates.Action.Method
-				src.DuplicateFolder = source.Duplicates.Action.DuplicateFolder
-			}
-			item.Sources = append(item.Sources, src)
-		}
-		form.Organizer = append(form.Organizer, item)
+		form.Organizer = append(form.Organizer, newProfileForm(profile))
 	}
 
 	form.DuplicateDetection = make([]duplicateDetectionForm, 0, len(cfg.DuplicateDetection))
 	for _, dd := range cfg.DuplicateDetection {
-		item := duplicateDetectionForm{
-			Enabled:         dd.Enabled,
-			DryRun:          dd.DryRun,
-			Schedule:        dd.Schedule,
-			Sources:         append([]string(nil), dd.Sources...),
-			Exclude:         append([]string(nil), dd.Exclude...),
-			DetectionMode:   dd.DetectionMode,
-			ActionMethod:    dd.Action.Method,
-			DuplicateFolder: dd.Action.DuplicateFolder,
-		}
-		if dd.Ntfy != nil {
-			item.NtfyURL = dd.Ntfy.URL
-		}
-		form.DuplicateDetection = append(form.DuplicateDetection, item)
+		form.DuplicateDetection = append(form.DuplicateDetection, newDedupForm(dd))
 	}
 
 	return form
+}
+
+// newProfileForm converts one organizer profile into its form model.
+func newProfileForm(profile config.OrganizerProfile) organizerProfileForm {
+	item := organizerProfileForm{
+		Name:            profile.Name,
+		DryRun:          profile.DryRun,
+		Target:          profile.Target,
+		TargetStructure: profile.TargetStructure,
+		FallbackFolder:  profile.FallbackFolder,
+		IgnoreModTime:   profile.IgnoreModTime,
+		Sources:         make([]organizerSourceForm, 0, len(profile.Sources)),
+	}
+	if profile.Ntfy != nil {
+		item.NtfyURL = profile.Ntfy.URL
+	}
+	for _, source := range profile.Sources {
+		src := organizerSourceForm{
+			Path:     source.Path,
+			Mode:     source.Mode,
+			Schedule: source.Schedule,
+			Exclude:  append([]string(nil), source.Exclude...),
+		}
+		if source.Duplicates != nil {
+			src.DuplicatesEnabled = true
+			src.setDetectionMode(source.Duplicates.DetectionMode)
+			src.ActionMethod = source.Duplicates.Action.Method
+			src.DuplicateFolder = source.Duplicates.Action.DuplicateFolder
+		}
+		item.Sources = append(item.Sources, src)
+	}
+	return item
+}
+
+// newDedupForm converts one duplicate detection job into its form model.
+func newDedupForm(dd config.DuplicateDetection) duplicateDetectionForm {
+	item := duplicateDetectionForm{
+		Name:            dd.Name,
+		Enabled:         dd.Enabled,
+		DryRun:          dd.DryRun,
+		Schedule:        dd.Schedule,
+		Sources:         append([]string(nil), dd.Sources...),
+		Exclude:         append([]string(nil), dd.Exclude...),
+		DetectionMode:   dd.DetectionMode,
+		ActionMethod:    dd.Action.Method,
+		DuplicateFolder: dd.Action.DuplicateFolder,
+	}
+	if dd.Ntfy != nil {
+		item.NtfyURL = dd.Ntfy.URL
+	}
+	return item
 }
 
 func parseForm(r *http.Request) (configForm, error) {
@@ -165,9 +201,10 @@ func parseForm(r *http.Request) (configForm, error) {
 	}
 
 	form := configForm{
-		StateDir:     strings.TrimSpace(r.FormValue("stateDir")),
-		SaveTarget:   strings.TrimSpace(r.FormValue("saveTarget")),
-		SeparatePath: strings.TrimSpace(r.FormValue("separatePath")),
+		StateDir:      strings.TrimSpace(r.FormValue("stateDir")),
+		SaveTarget:    strings.TrimSpace(r.FormValue("saveTarget")),
+		SeparatePath:  strings.TrimSpace(r.FormValue("separatePath")),
+		SynologyHomes: strings.TrimSpace(r.FormValue("synologyPhotos.homes")),
 		WebUI: webUIForm{
 			Enabled:     r.FormValue("webUI.enabled") != "",
 			Address:     strings.TrimSpace(r.FormValue("webUI.address")),
@@ -183,11 +220,13 @@ func parseForm(r *http.Request) (configForm, error) {
 	for i := 0; i < organizerCount; i++ {
 		prefix := fmt.Sprintf("organizer.%d", i)
 		profile := organizerProfileForm{
+			Name:            strings.TrimSpace(r.FormValue(prefix + ".name")),
 			DryRun:          r.FormValue(prefix+".dryRun") != "",
 			NtfyURL:         strings.TrimSpace(r.FormValue(prefix + ".ntfyURL")),
 			Target:          strings.TrimSpace(r.FormValue(prefix + ".target")),
 			TargetStructure: strings.TrimSpace(r.FormValue(prefix + ".targetStructure")),
 			FallbackFolder:  strings.TrimSpace(r.FormValue(prefix + ".fallbackFolder")),
+			IgnoreModTime:   r.FormValue(prefix+".ignoreModTime") != "",
 		}
 		sourceCount := parseCount(r.FormValue(prefix + ".sourceCount"))
 		profile.Sources = make([]organizerSourceForm, 0, sourceCount)
@@ -198,10 +237,16 @@ func parseForm(r *http.Request) (configForm, error) {
 				Mode:              strings.TrimSpace(r.FormValue(srcPrefix + ".mode")),
 				Schedule:          strings.TrimSpace(r.FormValue(srcPrefix + ".schedule")),
 				DuplicatesEnabled: r.FormValue(srcPrefix+".duplicatesEnabled") != "",
-				DetectionMode:     strings.TrimSpace(r.FormValue(srcPrefix + ".detectionMode")),
-				ActionMethod:      strings.TrimSpace(r.FormValue(srcPrefix + ".actionMethod")),
-				DuplicateFolder:   strings.TrimSpace(r.FormValue(srcPrefix + ".duplicateFolder")),
-				Exclude:           splitLines(r.FormValue(srcPrefix + ".exclude")),
+
+				ActionMethod:    strings.TrimSpace(r.FormValue(srcPrefix + ".actionMethod")),
+				DuplicateFolder: strings.TrimSpace(r.FormValue(srcPrefix + ".duplicateFolder")),
+				Exclude:         splitLines(r.FormValue(srcPrefix + ".exclude")),
+			}
+			if r.FormValue(srcPrefix+".detectionUI") != "" {
+				// Checkboxes (WEB-017); no box ticked gives an empty mode.
+				source.setDetectionFields(r.Form[srcPrefix+".detectionFields"], r.FormValue(srcPrefix+".detectionJoin") == "any")
+			} else {
+				source.setDetectionMode(strings.TrimSpace(r.FormValue(srcPrefix + ".detectionMode")))
 			}
 			profile.Sources = append(profile.Sources, source)
 		}
@@ -218,6 +263,7 @@ func parseForm(r *http.Request) (configForm, error) {
 			sources = append(sources, strings.TrimSpace(r.FormValue(fmt.Sprintf("%s.sources.%d", prefix, j))))
 		}
 		item := duplicateDetectionForm{
+			Name:            strings.TrimSpace(r.FormValue(prefix + ".name")),
 			Enabled:         r.FormValue(prefix+".enabled") != "",
 			DryRun:          r.FormValue(prefix+".dryRun") != "",
 			Schedule:        strings.TrimSpace(r.FormValue(prefix + ".schedule")),
@@ -246,13 +292,18 @@ func (f configForm) toConfig() *config.Config {
 			cfg.WebUI.BrowseRoots = append(cfg.WebUI.BrowseRoots, root)
 		}
 	}
+	if homes := strings.TrimSpace(f.SynologyHomes); homes != "" {
+		cfg.SynologyPhotos = &config.SynologyPhotos{Homes: homes}
+	}
 
 	for _, profile := range f.Organizer {
 		item := config.OrganizerProfile{
+			Name:            strings.TrimSpace(profile.Name),
 			DryRun:          profile.DryRun,
 			Target:          strings.TrimSpace(profile.Target),
 			TargetStructure: strings.TrimSpace(profile.TargetStructure),
 			FallbackFolder:  strings.TrimSpace(profile.FallbackFolder),
+			IgnoreModTime:   profile.IgnoreModTime,
 			Sources:         make([]config.OrganizerSource, 0, len(profile.Sources)),
 		}
 		if profile.NtfyURL != "" {
@@ -281,6 +332,7 @@ func (f configForm) toConfig() *config.Config {
 
 	for _, dd := range f.DuplicateDetection {
 		item := config.DuplicateDetection{
+			Name:          strings.TrimSpace(dd.Name),
 			Enabled:       dd.Enabled,
 			DryRun:        dd.DryRun,
 			Schedule:      strings.TrimSpace(dd.Schedule),
@@ -382,4 +434,78 @@ func fieldErrors(problems []string) map[string][]string {
 		}
 	}
 	return out
+}
+
+// setDetectionMode fills the checkbox view of an organizer detectionMode
+// such as "filename+exif" (WEB-017). A value the checkboxes cannot show is
+// kept in DetectionInvalid, with the known fields ticked, so validation can
+// report it and the user can fix it by ticking boxes.
+func (s *organizerSourceForm) setDetectionMode(mode string) {
+	s.DetectionMode, s.DetectionFields, s.DetectionAny, s.DetectionInvalid = mode, nil, false, ""
+	if mode == "" {
+		return
+	}
+	expr, err := config.ParseDetectionMode(mode)
+	if err != nil {
+		s.DetectionInvalid = mode
+		for _, f := range config.DetectionFields() {
+			if strings.Contains(mode, f) {
+				s.DetectionFields = append(s.DetectionFields, f)
+			}
+		}
+		return
+	}
+	s.DetectionFields = orderedFields(expr.Fields)
+	s.DetectionAny = expr.Any && len(expr.Fields) > 1
+}
+
+// setDetectionFields builds detectionMode from ticked fields and the
+// all/any choice, e.g. filename and exif with "all" give "filename+exif".
+func (s *organizerSourceForm) setDetectionFields(fields []string, any bool) {
+	s.DetectionFields = orderedFields(fields)
+	s.DetectionAny = any && len(s.DetectionFields) > 1
+	s.DetectionInvalid = ""
+	sep := "+"
+	if s.DetectionAny {
+		sep = "|"
+	}
+	s.DetectionMode = strings.Join(s.DetectionFields, sep)
+}
+
+// orderedFields keeps the known detection fields of list, in their
+// canonical order, without duplicates.
+func orderedFields(list []string) []string {
+	var out []string
+	for _, f := range config.DetectionFields() {
+		for _, v := range list {
+			if strings.TrimSpace(v) == f {
+				out = append(out, f)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// HasErrors reports whether any of the named form fields, or a field below
+// one of them (a name ending in "."), has a validation problem.
+func (d pageData) HasErrors(names ...string) bool {
+	for field := range d.FieldErrors {
+		for _, n := range names {
+			if field == n || (strings.HasSuffix(n, ".") && strings.HasPrefix(field, n)) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// Open reports whether a collapsible card starts open (WEB-016): when it
+// was just added or changed (Focus), or when one of its fields has a
+// problem. prefix is the form name prefix of its fields, e.g. "organizer.0.".
+func (d pageData) Open(id, prefix string) bool {
+	if d.Focus == id || strings.HasPrefix(d.Focus, id+"-") {
+		return true
+	}
+	return d.HasErrors(prefix)
 }

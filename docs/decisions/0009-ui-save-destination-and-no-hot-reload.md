@@ -1,6 +1,6 @@
 # ADR-0009: UI saves to active or separate file, no hot reload
 
-- **Status:** accepted
+- **Status:** superseded in part by [ADR-0022](0022-live-apply-and-setup-mode.md) (hot reload)
 - **Date:** 2026-06-06
 - **Specs:** WEB-004, CFG-004, CFG-005
 

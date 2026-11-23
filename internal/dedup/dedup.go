@@ -188,7 +188,7 @@ func (sc *scanner) scan(srcPath string) {
 		// System, hidden and excluded entries (DUP-013).
 		if d != nil && sc.exclude.Skip(srcPath, path, d.IsDir()) {
 			if d.IsDir() {
-				slog.Info("skipping folder", "path", path)
+				slog.Debug("skipping folder", "path", path)
 				return filepath.SkipDir
 			}
 			return nil
@@ -256,7 +256,8 @@ func (sc *scanner) fromCache(fi *fileInfo, mtime time.Time) bool {
 			fi.ExifDate = *e.ExifDate
 			return true
 		}
-		return e.NoExif
+		// A "no date" from an older reader may be wrong now (DUP-012).
+		return e.NoExif && e.DateReader >= dateReaderVersion
 	}
 	return false
 }
@@ -267,8 +268,9 @@ func (sc *scanner) fromCache(fi *fileInfo, mtime time.Time) bool {
 func (sc *scanner) compute(fi *fileInfo, mtime time.Time) bool {
 	switch sc.mode {
 	case "metadata":
-		// Only real EXIF dates count; files without EXIF never match (DUP-002).
-		date, err := metadata.ExtractEXIFDate(fi.Path)
+		// Only embedded capture dates count; files without one never match
+		// (DUP-002).
+		date, err := metadata.ExtractEmbeddedDate(fi.Path)
 		var pathErr *fs.PathError
 		if errors.As(err, &pathErr) {
 			slog.Debug("unable to read file", "path", fi.Path, "error", err)
@@ -279,9 +281,9 @@ func (sc *scanner) compute(fi *fileInfo, mtime time.Time) bool {
 		}
 		sc.cache.update(fi.Path, fi.Size, mtime, func(e *cacheEntry) {
 			if err == nil {
-				e.ExifDate, e.NoExif = &date, false
+				e.ExifDate, e.NoExif, e.DateReader = &date, false, 0
 			} else {
-				e.ExifDate, e.NoExif = nil, true
+				e.ExifDate, e.NoExif, e.DateReader = nil, true, dateReaderVersion
 			}
 		})
 		return true
@@ -329,11 +331,13 @@ func computePHash(path string) (*goimagehash.ImageHash, error) {
 	return hash, nil
 }
 
-// findDuplicates compares all files pairwise. In content mode, v confirms
-// each pHash match with the detail check (DUP-014); v may be nil in other
-// modes. k chooses the file each group keeps.
+// findDuplicates groups matching files. An index finds the candidates of
+// each file, so the run does not compare every pair (DUP-004). In content
+// mode, v confirms each pHash match with the detail check (DUP-014); v may
+// be nil in other modes. k chooses the file each group keeps.
 func findDuplicates(ctx context.Context, files []fileInfo, detectionMode string, v *verifier, k *keeper) []duplicatePair {
 	var pairs []duplicatePair
+	idx := newMatchIndex(files, detectionMode)
 
 	// The first file not yet in a group starts one; every later file not
 	// yet in a group that matches it joins. Each group keeps its best file
@@ -348,11 +352,8 @@ func findDuplicates(ctx context.Context, files []fileInfo, detectionMode string,
 			continue
 		}
 		group := []int{i}
-		for j := i + 1; j < len(files); j++ {
-			if inGroup[j] {
-				continue
-			}
-			if !isDuplicate(files[i], files[j], detectionMode) {
+		for _, j := range idx.candidates(i) {
+			if inGroup[j] || !isDuplicate(files[i], files[j], detectionMode) {
 				continue
 			}
 			if detectionMode == "content" {

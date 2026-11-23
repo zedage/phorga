@@ -1,48 +1,57 @@
 {{/*
   Form field partials (WEB-007, WEB-008, WEB-010). Each expects a dict with
   R (the root template data), Name (form field name), Label (i18n key),
-  Value, Help (help_* key suffix, optional) and, for "field", Kind:
-  text | path | structure | schedule.
+  Value, Help (help_* key suffix, optional), Wide (optional, spans the whole
+  row of the field grid) and, for "field", Kind: text | path | structure | schedule.
 */}}
 
 {{define "field"}}
-<div>
+<div class="field{{if .Wide}} wide{{end}}">
   <label for="{{fid .Name}}">{{call .R.T .Label}}</label>
   {{if eq .Kind "path"}}
   <div class="input-row">
-    <input type="text" id="{{fid .Name}}" name="{{.Name}}" value="{{.Value}}"{{if .Help}} aria-describedby="{{fid .Name}}-help"{{end}}{{if .R.Data.BrowseEnabled}} list="{{fid .Name}}-dl" autocomplete="off" hx-get="/ui/fs/suggest?field={{urlquery .Name}}" hx-trigger="input changed delay:300ms, focus once" hx-target="#{{fid .Name}}-dl"{{end}}>
-    {{if .R.Data.BrowseEnabled}}<button type="button" class="small secondary browse" data-target="{{fid .Name}}" onclick="phorgaBrowse(this.dataset.target)">{{call .R.T "browse"}}</button>{{end}}
+    <span class="input-icon">{{template "icon" "folder"}}</span>
+    <input type="text" class="mono" id="{{fid .Name}}" name="{{.Name}}" value="{{.Value}}" spellcheck="false"{{if .Help}} aria-describedby="{{fid .Name}}-help"{{end}}{{if .R.Data.BrowseEnabled}} list="{{fid .Name}}-dl" autocomplete="off" hx-get="/ui/fs/suggest?field={{urlquery .Name}}" hx-trigger="input changed delay:300ms, focus once" hx-target="#{{fid .Name}}-dl"{{end}}>
+    {{if .R.Data.BrowseEnabled}}<button type="button" class="secondary browse" data-target="{{fid .Name}}" onclick="phorgaBrowse(this.dataset.target)">{{call .R.T "browse"}}</button>{{end}}
   </div>
   {{if .R.Data.BrowseEnabled}}<datalist id="{{fid .Name}}-dl"></datalist>{{end}}
   {{else if eq .Kind "structure"}}
-  <input type="text" id="{{fid .Name}}" name="{{.Name}}" value="{{.Value}}"{{if .Help}} aria-describedby="{{fid .Name}}-help"{{end}} hx-post="/ui/preview/structure?field={{urlquery .Name}}" hx-trigger="input changed delay:300ms, load" hx-target="#{{fid .Name}}-preview">
+  <input type="text" class="mono" id="{{fid .Name}}" name="{{.Name}}" value="{{.Value}}" spellcheck="false"{{if .Help}} aria-describedby="{{fid .Name}}-help"{{end}} hx-post="/ui/preview/structure?field={{urlquery .Name}}" hx-trigger="input changed delay:300ms, load" hx-target="#{{fid .Name}}-preview">
   <div class="preview" id="{{fid .Name}}-preview" aria-live="polite"></div>
   {{else if eq .Kind "schedule"}}
-  <input type="text" id="{{fid .Name}}" name="{{.Name}}" value="{{.Value}}"{{if .Help}} aria-describedby="{{fid .Name}}-help"{{end}} hx-post="/ui/preview/schedule?field={{urlquery .Name}}" hx-trigger="input changed delay:300ms, load" hx-target="#{{fid .Name}}-preview">
+  <input type="text" class="mono" id="{{fid .Name}}" name="{{.Name}}" value="{{.Value}}" spellcheck="false"{{if .Help}} aria-describedby="{{fid .Name}}-help"{{end}} hx-post="/ui/preview/schedule?field={{urlquery .Name}}" hx-trigger="input changed delay:300ms, load" hx-target="#{{fid .Name}}-preview">
   <div class="preview" id="{{fid .Name}}-preview" aria-live="polite"></div>
   {{else}}
-  <input type="text" id="{{fid .Name}}" name="{{.Name}}" value="{{.Value}}"{{if .Help}} aria-describedby="{{fid .Name}}-help"{{end}}>
+  <input type="text" id="{{fid .Name}}" name="{{.Name}}" value="{{.Value}}" spellcheck="false"{{if .Placeholder}} placeholder="{{.Placeholder}}"{{end}}{{if .Help}} aria-describedby="{{fid .Name}}-help"{{end}}>
   {{end}}
   {{if .Help}}<small class="help" id="{{fid .Name}}-help">{{call .R.T (printf "help_%s" .Help)}}</small>{{end}}
   <div class="field-error" id="err-{{fid .Name}}">{{call .R.FErr .Name}}</div>
 </div>
 {{end}}
 
+{{/* Boolean field, drawn as a switch. */}}
 {{define "checkbox"}}
-<div>
-  <label class="checkbox"><input type="checkbox" id="{{fid .Name}}" name="{{.Name}}"{{if .Value}} checked{{end}}{{if .Help}} aria-describedby="{{fid .Name}}-help"{{end}}> {{call .R.T .Label}}</label>
+<div class="field toggle{{if .Wide}} wide{{end}}">
+  <label class="switch-row" for="{{fid .Name}}">
+    <span class="switch-text">{{call .R.T .Label}}</span>
+    <input type="checkbox" class="switch" role="switch" id="{{fid .Name}}" name="{{.Name}}"{{if .Value}} checked{{end}}{{if .Help}} aria-describedby="{{fid .Name}}-help"{{end}}>
+  </label>
   {{if .Help}}<small class="help" id="{{fid .Name}}-help">{{call .R.T (printf "help_%s" .Help)}}</small>{{end}}
   <div class="field-error" id="err-{{fid .Name}}">{{call .R.FErr .Name}}</div>
 </div>
 {{end}}
 
+{{/*
+  Select (WEB-007). Each option shows a plain-language label from the
+  catalog key <OptPrefix><value> (default "opt_"), WEB-017.
+*/}}
 {{define "select"}}
-<div>
+<div class="field{{if .Wide}} wide{{end}}">
   <label for="{{fid .Name}}">{{call .R.T .Label}}</label>
-  {{$v := .Value}}
+  {{$v := .Value}}{{$r := .R}}{{$op := or .OptPrefix "opt_"}}
   <select id="{{fid .Name}}" name="{{.Name}}"{{if .Help}} aria-describedby="{{fid .Name}}-help"{{end}}>
     <option value=""{{if eq $v ""}} selected{{end}}>{{call .R.T "not_set"}}</option>
-    {{range .Options}}<option value="{{.}}"{{if eq . $v}} selected{{end}}>{{.}}</option>{{end}}
+    {{range .Options}}<option value="{{.}}"{{if eq . $v}} selected{{end}}>{{call $r.T (printf "%s%s" $op .)}}</option>{{end}}
     {{if and $v (not (has .Options $v))}}<option value="{{$v}}" selected>{{$v}} ({{call .R.T "unknown_value"}})</option>{{end}}
   </select>
   {{if .Help}}<small class="help" id="{{fid .Name}}-help">{{call .R.T (printf "help_%s" .Help)}}</small>{{end}}
@@ -52,9 +61,9 @@
 
 {{/* Exclude patterns, one per line (ORG-023, DUP-013, CFG-007). Expects R, Name and Value ([]string). */}}
 {{define "exclude"}}
-<div>
+<div class="field wide">
   <label for="{{fid .Name}}">{{call .R.T "exclude_label"}}</label>
-  <textarea id="{{fid .Name}}" name="{{.Name}}" rows="3" aria-describedby="{{fid .Name}}-help">{{lines .Value}}</textarea>
+  <textarea id="{{fid .Name}}" name="{{.Name}}" rows="3" spellcheck="false" aria-describedby="{{fid .Name}}-help">{{lines .Value}}</textarea>
   <small class="help" id="{{fid .Name}}-help">{{call .R.T "help_exclude"}}</small>
   <div class="field-error" id="err-{{fid .Name}}">{{call .R.FErr .Name}}</div>
 </div>
@@ -66,22 +75,70 @@
 {{end}}
 
 {{/* Preview fragment (WEB-008). Data is a previewData. */}}
-{{define "preview"}}{{with .Data}}<span class="{{if .OK}}ok{{else}}bad{{end}}">{{.Label}}: {{if .OK}}{{range $i, $l := .Lines}}{{if $i}}, {{end}}<code>{{$l}}</code>{{end}}{{else}}{{.Message}}{{end}}</span>{{end}}{{end}}
+{{define "preview"}}{{with .Data}}<span class="{{if .OK}}ok{{else}}bad{{end}}"><span class="preview-label">{{.Label}}</span> {{if .OK}}{{range $i, $l := .Lines}}<code>{{$l}}</code>{{end}}{{else}}<span class="preview-msg">{{.Message}}</span>{{end}}</span>{{end}}{{end}}
 
 {{/* Folder picker dialog body (WEB-010). Data is a pickerData. */}}
 {{define "picker"}}{{with .Data}}
-<h3 id="picker-title">{{call $.T "browse_title"}}</h3>
-<p class="muted"><code>{{if .Path}}{{.Path}}{{else}}{{call $.T "browse_roots"}}{{end}}</code></p>
-{{if .Path}}<button type="button" class="small secondary" hx-get="/ui/fs/list?path={{urlquery .Parent}}" hx-target="#picker-body">↑ {{call $.T "browse_up"}}</button>{{end}}
-<ul>
-  {{range .Dirs}}<li><button type="button" class="link" hx-get="/ui/fs/list?path={{urlquery .Path}}" hx-target="#picker-body">📁 {{.Name}}</button></li>
+<div class="dialog-head">
+  <h3 id="picker-title">{{call $.T "browse_title"}}</h3>
+  <button type="button" class="ghost icon-only" aria-label="{{call $.T "browse_cancel"}}" onclick="document.getElementById('picker').close()"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+</div>
+<div class="picker-path">
+  {{if .Path}}<button type="button" class="secondary icon-only" title="{{call $.T "browse_up"}}" aria-label="{{call $.T "browse_up"}}" hx-get="/ui/fs/list?path={{urlquery .Parent}}" hx-target="#picker-body">{{template "icon" "up"}}</button>{{end}}
+  <code>{{if .Path}}{{.Path}}{{else}}{{call $.T "browse_roots"}}{{end}}</code>
+</div>
+<ul class="picker-list">
+  {{range .Dirs}}<li><button type="button" class="link" hx-get="/ui/fs/list?path={{urlquery .Path}}" hx-target="#picker-body">{{template "icon" "folder"}}<span>{{.Name}}</span></button></li>
   {{else}}<li class="muted">{{call $.T "browse_empty"}}</li>{{end}}
 </ul>
-<div class="actions">
-  {{if .Path}}<button type="button" data-path="{{.Path}}" onclick="phorgaPick(this.dataset.path)">{{call $.T "browse_select"}}</button>{{end}}
+<div class="dialog-actions">
   <button type="button" class="secondary" onclick="document.getElementById('picker').close()">{{call $.T "browse_cancel"}}</button>
+  {{if .Path}}<button type="button" data-path="{{.Path}}" onclick="phorgaPick(this.dataset.path)">{{template "icon" "check"}}{{call $.T "browse_select"}}</button>{{end}}
 </div>
 {{end}}{{end}}
 
 {{/* Autocomplete options (WEB-010). Data is a []dirEntry. */}}
 {{define "suggest"}}{{range .Data}}<option value="{{.Path}}"></option>{{end}}{{end}}
+
+{{/*
+  Edit button (WEB-015): posts the whole form to /ui/form with op=<Op> and
+  swaps in the page that comes back. Without JavaScript it is a plain POST.
+  Expects R, Op, Label (i18n key), Icon and optionally Class.
+*/}}
+{{define "opButton"}}<button type="submit" name="op" value="{{.Op}}" formaction="/ui/form" hx-post="/ui/form" hx-target=".shell" hx-select=".shell" hx-swap="outerHTML" class="{{if .Class}}{{.Class}}{{else}}secondary{{end}}">{{template "icon" .Icon}}<span>{{call .R.T .Label}}</span></button>{{end}}
+
+{{/* Remove button: icon only, labelled for screen readers. Expects R, Op, Label. */}}
+{{define "removeButton"}}<button type="submit" name="op" value="{{.Op}}" formaction="/ui/form" hx-post="/ui/form" hx-target=".shell" hx-select=".shell" hx-swap="outerHTML" class="ghost icon-only remove" title="{{call .R.T .Label}}" aria-label="{{call .R.T .Label}}">{{template "icon" "trash"}}</button>{{end}}
+
+{{/*
+  Organizer duplicate detection as checkboxes (WEB-017). Expects R, Prefix
+  (e.g. "organizer.0.sources.1") and Src (an organizerSourceForm). The
+  server builds detectionMode from the ticked fields and the all/any choice.
+*/}}
+{{define "detection"}}{{$n := printf "%s.detectionMode" .Prefix}}{{$src := .Src}}{{$r := .R}}
+<div class="field wide detection" data-detection role="group" aria-labelledby="{{fid $n}}-label" aria-describedby="{{fid $n}}-help">
+  <input type="hidden" name="{{.Prefix}}.detectionUI" value="1">
+  <span class="label" id="{{fid $n}}-label">{{call .R.T "detection_mode"}}</span>
+  <small class="help" id="{{fid $n}}-help">{{call .R.T "help_detection"}}</small>
+  <div class="check-list">
+    {{range $.R.Data.Choices.DetectionFields}}
+    <label class="check">
+      <input type="checkbox" class="detection-field" name="{{$.Prefix}}.detectionFields" value="{{.}}"{{if has $src.DetectionFields .}} checked{{end}}>
+      <span><strong>{{call $r.T (printf "det_%s" .)}}</strong><small class="muted">{{call $r.T (printf "det_%s_help" .)}}</small></span>
+    </label>
+    {{end}}
+  </div>
+  <div class="detection-join" role="radiogroup" aria-label="{{call .R.T "det_join"}}"{{if lt (len $src.DetectionFields) 2}} hidden{{end}}>
+    <label class="check inline"><input type="radio" name="{{.Prefix}}.detectionJoin" value="all"{{if not $src.DetectionAny}} checked{{end}}><span>{{call .R.T "det_all"}}</span></label>
+    <label class="check inline"><input type="radio" name="{{.Prefix}}.detectionJoin" value="any"{{if $src.DetectionAny}} checked{{end}}><span>{{call .R.T "det_any"}}</span></label>
+  </div>
+  {{if $src.DetectionInvalid}}<p class="field-note">{{call .R.T "det_invalid"}} <code>{{$src.DetectionInvalid}}</code></p>{{end}}
+  <div class="field-error" id="err-{{fid $n}}">{{call .R.FErr $n}}</div>
+</div>
+{{end}}
+
+{{/* Name of a profile or job, or "<Key> <n>" when it has none (CFG-011). Expects T, Name, I, Key. */}}
+{{define "profileName"}}{{if .Name}}{{.Name}}{{else}}{{call .T .Key}} {{inc .I}}{{end}}{{end}}
+
+{{/* "Edit settings" / "Hide settings" at the end of a card summary (WEB-016). Expects the root data. */}}
+{{define "toggleHint"}}<span class="summary-toggle"><span class="when-closed">{{call .T "show_settings"}}</span><span class="when-open">{{call .T "hide_settings"}}</span>{{template "icon" "chevron"}}</span>{{end}}

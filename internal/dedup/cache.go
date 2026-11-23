@@ -41,10 +41,18 @@ type cacheEntry struct {
 	Width  int `json:"width,omitempty"`
 	Height int `json:"height,omitempty"`
 
-	// metadata mode: the EXIF capture date, or NoExif when there is none.
-	ExifDate *time.Time `json:"exifDate,omitempty"`
-	NoExif   bool       `json:"noExif,omitempty"`
+	// metadata mode: the embedded capture date, or NoExif when there is
+	// none. DateReader is the dateReaderVersion that found no date; a "no
+	// date" from an older reader is not trusted (DUP-012).
+	ExifDate   *time.Time `json:"exifDate,omitempty"`
+	NoExif     bool       `json:"noExif,omitempty"`
+	DateReader int        `json:"dateReader,omitempty"`
 }
+
+// dateReaderVersion is the version of the embedded date reader. Raise it
+// when the reader learns new formats, so cached "no date" results are
+// computed again. Version 1 added HEIC and MP4/MOV (ADR-0021).
+const dateReaderVersion = 1
 
 func (e cacheEntry) matches(size int64, mtime time.Time) bool {
 	return e.Size == size && e.Mtime.Equal(mtime)

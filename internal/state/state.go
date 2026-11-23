@@ -2,7 +2,9 @@ package state
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -47,28 +49,31 @@ func (s *State) MarkProcessed(path string, size int64, mtime time.Time) {
 	}
 }
 
-// Load reads state from a JSON file. If the file is missing or corrupt,
-// returns a fresh state and logs a warning.
-func Load(path string) *State {
+// Load reads state from a JSON file. A missing file gives a fresh state; a
+// corrupt one too, with a warning (ORG-015). A file that exists but cannot
+// be read (e.g. it belongs to another user) is an error: starting fresh
+// would transfer every file of the source again, and in copy mode on
+// every run (ORG-015).
+func Load(path string) (*State, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		if !os.IsNotExist(err) {
-			slog.Warn("state file unreadable, starting fresh", "path", path, "error", err)
+		if errors.Is(err, fs.ErrNotExist) {
+			return New(), nil
 		}
-		return New()
+		return nil, fmt.Errorf("reading state file: %w", err)
 	}
 
 	s := New()
 	if err := json.Unmarshal(data, s); err != nil {
 		slog.Warn("state file corrupt, starting fresh scan", "path", path, "error", err)
-		return New()
+		return New(), nil
 	}
 
 	if s.ProcessedFiles == nil {
 		s.ProcessedFiles = make(map[string]FileEntry)
 	}
 
-	return s
+	return s, nil
 }
 
 // Save writes state to a JSON file atomically (temp file + rename).
@@ -96,4 +101,3 @@ func Save(s *State, path string) error {
 
 	return nil
 }
-

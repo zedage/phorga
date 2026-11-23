@@ -76,6 +76,26 @@ func (r *Recorder) Finish(name string, rec Record) {
 		return
 	}
 	r.persisted[name] = rec
+	r.write()
+}
+
+// Forget drops the records of a job, for example because the configuration
+// changed and the name now stands for another job (CFG-008).
+func (r *Recorder) Forget(name string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.last, name)
+	if _, ok := r.persisted[name]; !ok {
+		return
+	}
+	delete(r.persisted, name)
+	if r.path != "" {
+		r.write()
+	}
+}
+
+// write stores the persisted records atomically. The caller holds r.mu.
+func (r *Recorder) write() {
 	data, err := json.MarshalIndent(r.persisted, "", "  ")
 	if err != nil {
 		slog.Error("encoding run status failed", "error", err)

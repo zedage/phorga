@@ -7,12 +7,20 @@ import (
 
 // JobStatus describes one scheduled job for the status page (WEB-011).
 type JobStatus struct {
-	Name     string
-	Kind     string // "organizer" or "dedup"
-	Label    string
+	Name  string
+	Kind  string // "organizer" or "dedup"
+	Label string
+	// Title is the name of the profile or job (CFG-011); empty if unnamed.
+	Title string
+	// Field is the form field of the job's schedule on the configuration
+	// page, e.g. "organizer.0.sources.1.schedule" (WEB-019).
+	Field    string
 	Schedule string
 	Next     time.Time
 	Running  bool
+	// Waiting is true while the job is due but waits for another job to
+	// finish (RUN-002).
+	Waiting bool
 
 	// Progress of the current run (WEB-014); Phase is empty when unknown.
 	Phase string
@@ -41,6 +49,28 @@ type StatusSource interface {
 type statusData struct {
 	Available bool
 	Jobs      []JobStatus
+}
+
+// statusCounts summarizes the job states for the tiles above the table.
+type statusCounts struct {
+	Total, Running, Waiting, Idle int
+}
+
+// Counts sorts each job into exactly one state, with the same precedence as
+// the table's state badge (running before waiting).
+func (d statusData) Counts() statusCounts {
+	c := statusCounts{Total: len(d.Jobs)}
+	for _, j := range d.Jobs {
+		switch {
+		case j.Running:
+			c.Running++
+		case j.Waiting:
+			c.Waiting++
+		default:
+			c.Idle++
+		}
+	}
+	return c
 }
 
 func (s *Server) statusData() statusData {

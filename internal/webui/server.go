@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/zedage/phorga/internal/config"
@@ -26,16 +27,45 @@ type Options struct {
 	Config     *config.Config
 	// Status provides job status for the status page (WEB-011). Optional.
 	Status StatusSource
+	// Apply saves a valid configuration to the active config file and puts
+	// it into effect without a restart (CFG-008, WEB-004). It returns the
+	// configuration as applied and the fields that still need a restart.
+	// Optional: without it, saving only writes the file.
+	Apply ApplyFunc
+	// ApplyRaw does the same for the edited text of the config file, which
+	// it writes as it is (WEB-018). Optional: without it, the text is only
+	// written.
+	ApplyRaw ApplyRawFunc
+	// Password, if not empty, protects every page with HTTP Basic auth
+	// (WEB-020). It comes from PHORGA_WEB_UI_PASSWORD, never from the config.
+	Password string
+	// Version is shown next to the name in the top bar (RUN-004). Optional.
+	Version string
 }
 
+// ApplyRawFunc saves and applies the text of a config file, see Options.ApplyRaw.
+type ApplyRawFunc func(data []byte) (applied *config.Config, restartNeeded []string, err error)
+
+// ApplyFunc saves and applies a configuration, see Options.Apply.
+type ApplyFunc func(cfg *config.Config) (applied *config.Config, restartNeeded []string, err error)
+
 type Server struct {
-	address     string
-	configPath  string
+	address    string
+	configPath string
+	status     StatusSource
+	apply      ApplyFunc
+	applyRaw   ApplyRawFunc
+	// passwordSet is shown on the help page (WEB-022).
+	passwordSet bool
+
+	// mu guards the configuration shown in the UI and the picker roots,
+	// which change when a save is applied (CFG-008).
+	mu          sync.RWMutex
 	config      *config.Config
 	browseRoots []string
-	status      StatusSource
-	templates   *template.Template
-	httpServer  *http.Server
+
+	templates  *template.Template
+	httpServer *http.Server
 }
 
 func New(opts Options) (*Server, error) {
@@ -51,21 +81,23 @@ func New(opts Options) (*Server, error) {
 		}
 	}
 
-	tmpl, err := template.New("").Funcs(templateFuncs).ParseFS(templateFS, "templates/*.html")
+	tmpl, err := template.New("").Funcs(templateFuncs).
+		Funcs(template.FuncMap{"version": func() string { return opts.Version }}).
+		ParseFS(templateFS, "templates/*.html")
 	if err != nil {
 		return nil, fmt.Errorf("parsing web UI templates: %w", err)
 	}
 
 	s := &Server{
-		address:    address,
-		configPath: opts.ConfigPath,
-		config:     opts.Config,
-		status:     opts.Status,
-		templates:  tmpl,
+		address:     address,
+		configPath:  opts.ConfigPath,
+		status:      opts.Status,
+		apply:       opts.Apply,
+		applyRaw:    opts.ApplyRaw,
+		templates:   tmpl,
+		passwordSet: opts.Password != "",
 	}
-	if opts.Config.WebUI != nil {
-		s.browseRoots = append([]string(nil), opts.Config.WebUI.BrowseRoots...)
-	}
+	s.setConfig(opts.Config)
 
 	static, err := fs.Sub(staticFS, "static")
 	if err != nil {
@@ -77,21 +109,50 @@ func New(opts Options) (*Server, error) {
 	mux.HandleFunc("/ui", s.handlePage)
 	mux.HandleFunc("/ui/validate", s.handleValidate)
 	mux.HandleFunc("/ui/save", s.handleSave)
+	mux.HandleFunc("/ui/form", s.handleFormOp)
+	mux.HandleFunc("/ui/yaml", s.handleRaw)
 	mux.HandleFunc("/ui/preview/structure", s.handlePreviewStructure)
 	mux.HandleFunc("/ui/preview/schedule", s.handlePreviewSchedule)
 	mux.HandleFunc("/ui/fs/list", s.handleFSList)
 	mux.HandleFunc("/ui/fs/suggest", s.handleFSSuggest)
 	mux.HandleFunc("/ui/status", s.handleStatusPage)
 	mux.HandleFunc("/ui/status/table", s.handleStatusTable)
+	mux.HandleFunc("/ui/help", s.handleHelp)
 	mux.Handle("/ui/static/", http.StripPrefix("/ui/static/", cacheStatic(http.FileServer(http.FS(static)))))
 
 	s.httpServer = &http.Server{
 		Addr:              address,
-		Handler:           mux,
+		Handler:           requirePassword(opts.Password, rejectCrossSite(mux)),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	return s, nil
+}
+
+// setConfig makes cfg the configuration shown in the UI and takes its
+// folder picker roots (WEB-010).
+func (s *Server) setConfig(cfg *config.Config) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.config = cfg
+	s.browseRoots = nil
+	if cfg.WebUI != nil {
+		s.browseRoots = append([]string(nil), cfg.WebUI.BrowseRoots...)
+	}
+}
+
+// currentConfig returns the configuration in effect.
+func (s *Server) currentConfig() *config.Config {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.config
+}
+
+// roots returns the folder picker roots in effect.
+func (s *Server) roots() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.browseRoots
 }
 
 func (s *Server) Address() string {
@@ -129,7 +190,7 @@ func (s *Server) handlePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	lang := s.resolveLanguage(w, r)
-	data := s.newPageData(lang, newFormFromConfig(s.config))
+	data := s.newPageData(lang, newFormFromConfig(s.currentConfig()))
 	s.renderPage(w, data)
 }
 
@@ -150,7 +211,7 @@ func (s *Server) processForm(w http.ResponseWriter, r *http.Request, persist boo
 	lang := s.resolveLanguage(w, r)
 	form, err := parseForm(r)
 	if err != nil {
-		data := s.newPageData(lang, newFormFromConfig(s.config))
+		data := s.newPageData(lang, newFormFromConfig(s.currentConfig()))
 		data.Flash = flashMessage{
 			Level:   "error",
 			Title:   t(lang, "validation_failed"),
@@ -190,7 +251,19 @@ func (s *Server) processForm(w http.ResponseWriter, r *http.Request, persist boo
 	}
 
 	targetPath := s.targetPath(form)
-	if err := config.Save(targetPath, cfg); err != nil {
+	applyNow := s.apply != nil && targetPath == s.configPath
+	var restartNeeded []string
+	if applyNow {
+		var applied *config.Config
+		applied, restartNeeded, err = s.apply(cfg)
+		if err == nil {
+			s.setConfig(applied)
+			data = s.newPageData(lang, newFormFromConfig(applied))
+		}
+	} else {
+		err = config.Save(targetPath, cfg)
+	}
+	if err != nil {
 		data.Flash = flashMessage{
 			Level:   "error",
 			Title:   t(lang, "save_failed"),
@@ -205,6 +278,17 @@ func (s *Server) processForm(w http.ResponseWriter, r *http.Request, persist boo
 		Level:   "success",
 		Title:   t(lang, "save"),
 		Message: fmt.Sprintf("%s %s", t(lang, "success_prefix"), targetPath),
+	}
+	switch {
+	case applyNow:
+		data.Flash.Title = t(lang, "applied_title")
+		data.Flash.Message = fmt.Sprintf("%s %s. %s", t(lang, "success_prefix"), targetPath, t(lang, "applied_message"))
+		if len(restartNeeded) > 0 {
+			data.Flash.Level = "warning"
+			data.Flash.Errors = []string{t(lang, "restart_needed") + " " + strings.Join(restartNeeded, ", ")}
+		}
+	case targetPath != s.configPath:
+		data.Flash.Message += ". " + t(lang, "saved_not_applied")
 	}
 	w.Header().Set("HX-Trigger", `{"configSaved":true}`)
 	s.renderResult(w, r, data)
@@ -248,8 +332,10 @@ func (s *Server) newPageData(lang string, form configForm) pageData {
 		Lang:          lang,
 		ConfigPath:    s.configPath,
 		Form:          form,
-		BrowseEnabled: len(s.browseRoots) > 0,
+		BrowseEnabled: len(s.roots()) > 0,
+		Setup:         !s.currentConfig().HasJobs(),
 		Choices:       newChoices(),
+		Synology:      discoverUsers(form),
 	}
 }
 

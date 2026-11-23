@@ -20,7 +20,7 @@ A duplicate detection job MUST have its own `sources`, `schedule`, `detectionMod
 ### DUP-002 Metadata mode
 **Status:** implemented
 
-With `detectionMode: metadata`, two files MUST count as duplicates when they have the same file size **and** the same **EXIF** capture date (`DateTimeOriginal`). Files without EXIF MUST never match in this mode. Dates from the filename, path or mtime are not used.
+With `detectionMode: metadata`, two files MUST count as duplicates when they have the same file size **and** the same **embedded** capture date (step 1 of ORG-002: EXIF in JPEG, RAW and HEIC; the creation time in MP4/MOV). Files without one MUST never match in this mode. Dates from the filename, path or mtime are not used.
 
 - **WHEN** two files have the same size and the same capture date `2024-07-15 10:00:00`
   **THEN** they are duplicates
@@ -28,9 +28,11 @@ With `detectionMode: metadata`, two files MUST count as duplicates when they hav
   **THEN** they are not duplicates
 - **WHEN** two files have the same size and mtime but no EXIF
   **THEN** they are not duplicates
+- **WHEN** two HEIC files have the same size and the same EXIF date
+  **THEN** they are duplicates
 
 **Code:** `internal/dedup/dedup.go`
-**Tests:** `internal/dedup/dedup_test.go#TestDedup_MetadataMode_SameSize`, `internal/dedup/metadata_mode_test.go#TestDedup_MetadataMode_SameSizeAndEXIFDate`, `internal/dedup/metadata_mode_test.go#TestDedup_MetadataMode_DifferentEXIFDate`, `internal/dedup/metadata_mode_test.go#TestDedup_MetadataMode_NoEXIFNeverMatches`
+**Tests:** `internal/dedup/dedup_test.go#TestDedup_MetadataMode_SameSize`, `internal/dedup/metadata_mode_test.go#TestDedup_MetadataMode_SameSizeAndEXIFDate`, `internal/dedup/metadata_mode_test.go#TestDedup_MetadataMode_DifferentEXIFDate`, `internal/dedup/metadata_mode_test.go#TestDedup_MetadataMode_NoEXIFNeverMatches`, `internal/dedup/index_test.go#TestCache_OldNoDateEntriesAreRecomputed`, `internal/metadata/embedded_test.go#TestExtractEmbeddedDate_HEICAndVideo`
 **Notes:** Until 2026-11, the code used the resolved date (incl. mtime), so files without EXIF could match. It now requires real EXIF, see [ADR-0012](../decisions/0012-duplicate-checks-require-real-exif.md).
 
 ### DUP-003 Content mode (perceptual hash)
@@ -52,7 +54,7 @@ With `detectionMode: content`, the system MUST compute a perceptual hash (pHash)
 ### DUP-004 Cross-source matching
 **Status:** implemented
 
-Every file of every source in a job MUST be compared with every other file. Matches form groups: the first file found (in source order, then walk order) that is not yet in a group starts one, and every later file not yet in a group that matches it joins. Each file MUST belong to at most one group.
+Every file of every source in a job MUST be matched against every other file. Matches form groups: the first file found (in source order, then walk order) that is not yet in a group starts one, and every later file not yet in a group that matches it joins. Each file MUST belong to at most one group.
 
 From each group, exactly one file is kept as the original, chosen in this order:
 
@@ -74,13 +76,19 @@ A file whose resolution cannot be read counts as 0 pixels. Every other file of t
   **THEN** 2 pairs are reported, both against the file in the second source, which stays in place
 
 **Code:** `internal/dedup/dedup.go`, `internal/dedup/keep.go`
-**Tests:** `internal/dedup/dedup_test.go#TestDedup_CrossSource`, `internal/dedup/actions_test.go#TestDedup_GroupOfThree_MovesTwoWithoutErrors`, `internal/dedup/keep_test.go#TestDedup_KeepsCameraOriginalOverWhatsAppCopy`, `internal/dedup/keep_test.go#TestDedup_SameResolutionKeepsLargerFile`, `internal/dedup/keep_test.go#TestDedup_GroupOfThree_KeepsHighestResolution`
-**Notes:** Comparison is pairwise O(n²), see arc42 §10. Until 2026-11, groups of 3+ produced every pair (A-B, A-C, B-C), and moving the already-moved file counted as an error. That is now fixed. Until 2026-11, the file found first was always kept. Because `IMG-2022…` sorts before `IMG2022…`, a real run moved 740 camera originals and kept their WhatsApp copies. See [ADR-0018](../decisions/0018-keep-highest-resolution-duplicate.md). In content mode, the kept file and a duplicate were each matched against the file that started the group, not necessarily against each other.
+**Tests:** `internal/dedup/dedup_test.go#TestDedup_CrossSource`, `internal/dedup/actions_test.go#TestDedup_GroupOfThree_MovesTwoWithoutErrors`, `internal/dedup/keep_test.go#TestDedup_KeepsCameraOriginalOverWhatsAppCopy`, `internal/dedup/keep_test.go#TestDedup_SameResolutionKeepsLargerFile`, `internal/dedup/keep_test.go#TestDedup_GroupOfThree_KeepsHighestResolution`, `internal/dedup/index_test.go#TestHashIndex_FindsExactlyThePairwiseMatches`, `internal/dedup/index_test.go#TestMetadataIndex_FindsExactlyThePairwiseMatches`
+
+The matching MUST NOT compare every pair: an index MUST find each file's candidates, and it MUST find exactly the files a pairwise comparison would find, so the groups do not change. Metadata mode groups files by (size, capture date). Content mode uses multi-index hashing: the 64-bit hash is split into 6 chunks, and since two hashes within distance 5 share at least one unchanged chunk, only files that share a chunk are compared.
+
+- **WHEN** 100,000 pHashes are matched
+  **THEN** it takes well under a second (benchmark `BenchmarkFindDuplicates_Content100k`: about 0.1 s on an Apple M-series laptop, against roughly 5 billion comparisons pairwise)
+
+**Notes:** Until 2026-11, comparison was pairwise O(n²). A BK-tree was tried first and was slower than pairwise at this distance limit. Until 2026-11, groups of 3+ produced every pair (A-B, A-C, B-C), and moving the already-moved file counted as an error. That is now fixed. Until 2026-11, the file found first was always kept. Because `IMG-2022…` sorts before `IMG2022…`, a real run moved 740 camera originals and kept their WhatsApp copies. See [ADR-0018](../decisions/0018-keep-highest-resolution-duplicate.md). In content mode, the kept file and a duplicate were each matched against the file that started the group, not necessarily against each other.
 
 ### DUP-005 Action `moveToFolder`
 **Status:** implemented
 
-With `action.method: moveToFolder`, the duplicate MUST be moved into `action.duplicateFolder`. That field is required for this method (CFG-002). A file that is already in `duplicateFolder` MUST NOT be overwritten; the duplicate is then written with a random suffix (as in ORG-020). The move keeps the modification time and is verified (ORG-018, ORG-019).
+With `action.method: moveToFolder`, the duplicate MUST be moved into `action.duplicateFolder`. That field is required for this method (CFG-002). A file that is already in `duplicateFolder` MUST NOT be overwritten, also not one that appears while the move runs; the duplicate is then written with a random suffix (as in ORG-020). Within one volume, the move does not copy (ORG-025); a duplicate that is a symbolic link is moved as its content, like in ORG-025. The move keeps the modification time and is verified (ORG-018, ORG-019).
 
 - **WHEN** a duplicate is found and the method is `moveToFolder`
   **THEN** the duplicate is moved into `duplicateFolder` and the original stays in place
@@ -88,7 +96,7 @@ With `action.method: moveToFolder`, the duplicate MUST be moved into `action.dup
   **THEN** both files are in `duplicateFolder` afterwards
 
 **Code:** `internal/dedup/dedup.go`, `internal/config/validate.go`
-**Tests:** `internal/dedup/dedup_test.go#TestDedup_MoveToFolder`, `internal/config/config_test.go#TestValidateMoveToFolderRequiresDuplicateFolder`, `internal/dedup/actions_test.go#TestDedup_GroupOfThree_MovesTwoWithoutErrors`, `internal/dedup/actions_test.go#TestDedup_MoveToFolderNeverOverwrites`
+**Tests:** `internal/dedup/dedup_test.go#TestDedup_MoveToFolder`, `internal/config/config_test.go#TestValidateMoveToFolderRequiresDuplicateFolder`, `internal/dedup/actions_test.go#TestDedup_GroupOfThree_MovesTwoWithoutErrors`, `internal/dedup/actions_test.go#TestDedup_MoveToFolderNeverOverwrites`, `internal/fileops/noclobber_test.go#TestAtomicMove_SymlinkIsMovedAsItsContent`
 
 ### DUP-006 Action `skip`
 **Status:** implemented
@@ -110,7 +118,7 @@ With `dryRun: true`, the system MUST log every detected pair and the action it w
 ### DUP-008 Own schedule
 **Status:** implemented
 
-Each enabled job MUST run on its own 5-field cron `schedule`, independent of organizer schedules. Overlap prevention from ORG-010 applies as well.
+Each enabled job MUST run on its own 5-field cron `schedule`, independent of organizer schedules. Overlap prevention from ORG-010 applies as well, and a job that is due while another job runs waits for it (RUN-002).
 
 - **WHEN** `schedule` is `0 4 * * *`
   **THEN** the job runs daily at 04:00
@@ -161,7 +169,7 @@ The system MUST remember what a scan computed for each file, so later runs do no
 
 - The cache is one file, `<stateDir>/dedup-cache.json`, shared by all duplicate detection jobs. It is separate from the organizer's state files.
 - An entry is keyed by path and is valid only while the file's size and modification time are unchanged. A changed file MUST be computed again.
-- `content` mode stores the perceptual hash, or the fact that the file cannot be decoded (e.g. videos, HEIC), and the detail fingerprint of files that were a pHash candidate (DUP-014). Both modes store the image resolution of files that were in a duplicate group (DUP-004). `metadata` mode stores the EXIF date, or the fact that there is none. Read errors MUST NOT be cached.
+- `content` mode stores the perceptual hash, or the fact that the file cannot be decoded (e.g. videos, HEIC), and the detail fingerprint of files that were a pHash candidate (DUP-014). Both modes store the image resolution of files that were in a duplicate group (DUP-004). `metadata` mode stores the embedded capture date, or the fact that there is none together with the version of the date reader. A "none" from an older reader version MUST be computed again, so files become comparable once the reader learns their format. Read errors MUST NOT be cached.
 - The cache MUST be saved atomically every 500 newly computed files and at the end of each scan, also when the run was stopped (DUP-010), and also in dry runs (DUP-007).
 - After a complete scan, entries below the job's own sources whose files are gone MUST be removed. Entries of other folders MUST be kept.
 - Jobs running at the same time MUST NOT lose each other's entries.
@@ -177,9 +185,11 @@ The system MUST remember what a scan computed for each file, so later runs do no
   **THEN** the saved cache holds those 2 entries
 - **WHEN** a file of job A is deleted and job A runs again
   **THEN** its entry is removed, and the entries of job B's folders stay
+- **WHEN** a cache written before HEIC dates could be read says a HEIC file has no date
+  **THEN** the next metadata run reads the file again and finds its date
 
 **Code:** `internal/dedup/cache.go`, `internal/dedup/dedup.go`, `internal/dedup/keep.go`, `cmd/phorga/main.go`
-**Tests:** `internal/dedup/cache_test.go#TestCache_SecondRunUsesCache`, `internal/dedup/detail_test.go#TestCache_DetailFingerprintsAreCached`, `internal/dedup/cache_test.go#TestCache_MetadataModeUsesCache`, `internal/dedup/cache_test.go#TestCache_ChangedFileIsRecomputed`, `internal/dedup/cache_test.go#TestCache_PersistsAndReloads`, `internal/dedup/cache_test.go#TestCache_DryRunWritesCacheButNoPhoto`, `internal/dedup/cache_test.go#TestCache_RemembersUndecodableFiles`, `internal/dedup/cache_test.go#TestCache_PruneKeepsOtherJobsEntries`, `internal/dedup/cache_test.go#TestCache_CorruptFileStartsFresh`, `internal/dedup/cache_test.go#TestCache_InterruptedRunKeepsComputedFingerprints`, `internal/dedup/cache_test.go#TestCache_SharedByConcurrentJobs`, `internal/dedup/keep_test.go#TestCache_StoresResolutionOfGroupFiles`
+**Tests:** `internal/dedup/cache_test.go#TestCache_SecondRunUsesCache`, `internal/dedup/detail_test.go#TestCache_DetailFingerprintsAreCached`, `internal/dedup/cache_test.go#TestCache_MetadataModeUsesCache`, `internal/dedup/cache_test.go#TestCache_ChangedFileIsRecomputed`, `internal/dedup/cache_test.go#TestCache_PersistsAndReloads`, `internal/dedup/cache_test.go#TestCache_DryRunWritesCacheButNoPhoto`, `internal/dedup/cache_test.go#TestCache_RemembersUndecodableFiles`, `internal/dedup/cache_test.go#TestCache_PruneKeepsOtherJobsEntries`, `internal/dedup/cache_test.go#TestCache_CorruptFileStartsFresh`, `internal/dedup/cache_test.go#TestCache_InterruptedRunKeepsComputedFingerprints`, `internal/dedup/cache_test.go#TestCache_SharedByConcurrentJobs`, `internal/dedup/keep_test.go#TestCache_StoresResolutionOfGroupFiles`, `internal/dedup/index_test.go#TestCache_OldNoDateEntriesAreRecomputed`
 **Notes:** See [ADR-0015](../decisions/0015-dedup-fingerprint-cache-written-in-dry-runs.md). Deleting `dedup-cache.json` forces a full scan, e.g. after editing photos with a tool that keeps the modification time.
 
 ### DUP-013 Skipped folders and exclude list
@@ -193,7 +203,7 @@ The scan MUST skip the fixed system and hidden entries of ORG-022, and the entri
   **THEN** the thumbnail's cache entry is removed
 
 **Code:** `internal/dedup/dedup.go`, `internal/exclude/exclude.go`, `internal/metadata/metadata.go`
-**Tests:** `internal/dedup/exclude_test.go#TestDedup_SynologyThumbnailIsNotADuplicate`, `internal/dedup/exclude_test.go#TestDedup_ExcludePatternsSkipFiles`, `internal/dedup/exclude_test.go#TestDedup_ExcludedFilesLeaveTheCache`
+**Tests:** `internal/dedup/exclude_test.go#TestDedup_SynologyThumbnailIsNotADuplicate`, `internal/dedup/exclude_test.go#TestDedup_ExcludePatternsSkipFiles`, `internal/dedup/exclude_test.go#TestDedup_ExcludedFilesLeaveTheCache`, `internal/dedup/exclude_test.go#TestDedup_SkippedFolderIsLoggedAtDebugOnly`
 **Notes:** Without this, a thumbnail is found before its original (`@` sorts before letters), becomes the kept file, and the real photo is moved as the duplicate (DUP-004). See [ADR-0016](../decisions/0016-fixed-skip-list-and-simple-exclude-patterns.md). The cache test removes the entry through an `exclude` pattern; the fixed list uses the same pruning path.
 
 ### DUP-014 Detail check for content candidates

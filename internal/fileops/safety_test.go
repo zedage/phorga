@@ -68,6 +68,8 @@ func TestAtomicMove_IncompleteCopyKeepsSource(t *testing.T) {
 	dst := filepath.Join(dstDir, "photo.jpg")
 	os.WriteFile(src, []byte("0123456789"), 0644)
 
+	// A move on the same volume does not copy (ORG-025); force the copy.
+	forceCrossVolume(t)
 	// Simulate a copy that silently stops halfway.
 	orig := copyData
 	copyData = func(w io.Writer, r io.Reader) (int64, error) { return io.CopyN(w, r, 5) }

@@ -1,14 +1,16 @@
 {{define "flash"}}
 {{with .Data.Flash}}{{if .Title}}
-<div class="flash {{.Level}}">
-  <strong>{{.Title}}</strong>
-  {{if .Message}}<div>{{.Message}}</div>{{end}}
-  {{if .Errors}}
-  <ul>
-    {{range .Errors}}<li>{{.}}</li>{{end}}
-  </ul>
-  {{end}}
+<div class="flash {{.Level}}" role="{{if eq .Level "error"}}alert{{else}}status{{end}}">
+  <span class="flash-icon">{{if ne .Level "success"}}{{template "icon" "alert"}}{{else}}{{template "icon" "check"}}{{end}}</span>
+  <div class="flash-body">
+    <strong>{{.Title}}</strong>
+    {{if and .Message (ne .Message .Title)}}<div>{{.Message}}</div>{{end}}
+    {{if .Errors}}
+    <ul>
+      {{range .Errors}}<li>{{.}}</li>{{end}}
+    </ul>
+    {{end}}
+  </div>
 </div>
 {{end}}{{end}}
 {{end}}
-

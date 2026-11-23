@@ -41,7 +41,7 @@ func TestOrganize_StopsWhenCancelled(t *testing.T) {
 	if len(left) != 4 {
 		t.Errorf("source has %d files, want the 4 untouched files", len(left))
 	}
-	if got := len(state.Load(sp).ProcessedFiles); got != 1 {
+	if got := len(loadState(t, sp).ProcessedFiles); got != 1 {
 		t.Errorf("saved state has %d files, want 1", got)
 	}
 }

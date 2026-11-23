@@ -73,7 +73,6 @@ func TestOverlapPrevention(t *testing.T) {
 	lock.Unlock()
 }
 
-
 // Spec: WEB-011
 func TestNextAndRunning(t *testing.T) {
 	s := New()
