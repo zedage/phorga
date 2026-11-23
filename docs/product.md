@@ -41,7 +41,7 @@ The organizer takes files from one or more **source** folders and sorts them int
 
 **Schedules.** Every source has its own schedule in cron format, for example "every night at 2:00". A run never overlaps with itself. If a job is due while another one is still running, it waits for it and the status page says so ([ADR-0020](decisions/0020-run-one-job-at-a-time.md)).
 
-**Folders that are not photos.** A NAS keeps hidden folders inside your photo shares: Synology stores thumbnails in `@eaDir`, deleted files in `#recycle` and snapshots in `#snapshot`. Phorga always skips these, and every file or folder whose name starts with a dot. You can leave out more with an `exclude` list per source, e.g. `Screenshots` or `2019/Scans`. Each skipped folder appears once in the log ([ADR-0016](decisions/0016-fixed-skip-list-and-simple-exclude-patterns.md)).
+**Folders that are not photos.** A NAS keeps hidden folders inside your photo shares: Synology stores thumbnails in `@eaDir`, deleted files in `#recycle` and snapshots in `#snapshot`. Phorga always skips these, and every file or folder whose name starts with a dot. You can leave out more with an `exclude` list per source, e.g. `Screenshots` or `2019/Scans`. Skipped folders are logged only at debug level, so they do not fill the normal log ([ADR-0016](decisions/0016-fixed-skip-list-and-simple-exclude-patterns.md)).
 
 Exact rules: [specs/organizer.md](specs/organizer.md)
 

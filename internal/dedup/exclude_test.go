@@ -1,9 +1,12 @@
 package dedup
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -70,5 +73,31 @@ func TestDedup_ExcludedFilesLeaveTheCache(t *testing.T) {
 	RunWithCache(context.Background(), job, cache)
 	if cache.Len() != 1 {
 		t.Errorf("cached = %d after excluding Export, want 1", cache.Len())
+	}
+}
+
+// Spec: DUP-013
+func TestDedup_SkippedFolderIsLoggedAtDebugOnly(t *testing.T) {
+	for _, tc := range []struct {
+		level slog.Level
+		want  int
+	}{{slog.LevelInfo, 0}, {slog.LevelDebug, 1}} {
+		t.Run(tc.level.String(), func(t *testing.T) {
+			var buf bytes.Buffer
+			orig := slog.Default()
+			slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: tc.level})))
+			t.Cleanup(func() { slog.SetDefault(orig) })
+
+			src := t.TempDir()
+			createTestImage(t, src, "IMG_1234.JPG", 100, 100, 100)
+			if err := os.MkdirAll(filepath.Join(src, "@eaDir"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			Run(context.Background(), contentJob("skip", "", src))
+
+			if got := strings.Count(buf.String(), `"msg":"skipping folder"`); got != tc.want {
+				t.Errorf("at level %s: %d skipping folder lines, want %d:\n%s", tc.level, got, tc.want, buf.String())
+			}
+		})
 	}
 }

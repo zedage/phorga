@@ -1,10 +1,13 @@
 package organizer
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/zedage/phorga/internal/config"
@@ -84,5 +87,26 @@ func TestOrganize_ExcludePatterns(t *testing.T) {
 		if len(organized) != len(tt.want) || (len(organized) > 0 && organized[0] != tt.want[0]) {
 			t.Errorf("exclude %v: organized = %v, want %v", tt.exclude, organized, tt.want)
 		}
+	}
+}
+
+// Spec: ORG-022
+func TestOrganize_SkippedFolderIsLoggedAtDebugOnly(t *testing.T) {
+	for _, tc := range []struct {
+		level slog.Level
+		want  int
+	}{{slog.LevelInfo, 0}, {slog.LevelDebug, 1}} {
+		t.Run(tc.level.String(), func(t *testing.T) {
+			var buf bytes.Buffer
+			orig := slog.Default()
+			slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: tc.level})))
+			t.Cleanup(func() { slog.SetDefault(orig) })
+
+			runWithExclude(t, t.TempDir(), nil, "IMG_1234.JPG", "@eaDir/IMG_1234.JPG/SYNO_PHOTO_THUMB_SM.jpg")
+
+			if got := strings.Count(buf.String(), `"msg":"skipping folder"`); got != tc.want {
+				t.Errorf("at level %s: %d skipping folder lines, want %d:\n%s", tc.level, got, tc.want, buf.String())
+			}
+		})
 	}
 }

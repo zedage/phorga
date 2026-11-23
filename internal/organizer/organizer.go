@@ -92,7 +92,7 @@ func Run(ctx context.Context, profile config.OrganizerProfile, source config.Org
 		// System, hidden and excluded entries (ORG-022, ORG-023).
 		if d != nil && ex.Skip(source.Path, path, d.IsDir()) {
 			if d.IsDir() {
-				slog.Info("skipping folder", "path", path)
+				slog.Debug("skipping folder", "path", path)
 				return filepath.SkipDir
 			}
 			return nil

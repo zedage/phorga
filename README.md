@@ -275,7 +275,7 @@ This cannot be turned off. A source path that itself contains such a name (e.g. 
 | `*/WhatsApp` | `WhatsApp` one level below the source |
 | `Export/` | folders named `Export` only (trailing `/`) |
 
-Wildcards: `*` (any characters except `/`), `?` (one character), `[abc]`. There is no `**` and no way to re-include something. Each skipped folder is logged once as `skipping folder`.
+Wildcards: `*` (any characters except `/`), `?` (one character), `[abc]`. There is no `**` and no way to re-include something. Each skipped folder is logged once as `skipping folder` at debug level, so it does not appear in the normal (info) log.
 
 ### Schedules
 

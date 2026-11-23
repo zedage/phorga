@@ -203,7 +203,7 @@ The scan MUST skip the fixed system and hidden entries of ORG-022, and the entri
   **THEN** the thumbnail's cache entry is removed
 
 **Code:** `internal/dedup/dedup.go`, `internal/exclude/exclude.go`, `internal/metadata/metadata.go`
-**Tests:** `internal/dedup/exclude_test.go#TestDedup_SynologyThumbnailIsNotADuplicate`, `internal/dedup/exclude_test.go#TestDedup_ExcludePatternsSkipFiles`, `internal/dedup/exclude_test.go#TestDedup_ExcludedFilesLeaveTheCache`
+**Tests:** `internal/dedup/exclude_test.go#TestDedup_SynologyThumbnailIsNotADuplicate`, `internal/dedup/exclude_test.go#TestDedup_ExcludePatternsSkipFiles`, `internal/dedup/exclude_test.go#TestDedup_ExcludedFilesLeaveTheCache`, `internal/dedup/exclude_test.go#TestDedup_SkippedFolderIsLoggedAtDebugOnly`
 **Notes:** Without this, a thumbnail is found before its original (`@` sorts before letters), becomes the kept file, and the real photo is moved as the duplicate (DUP-004). See [ADR-0016](../decisions/0016-fixed-skip-list-and-simple-exclude-patterns.md). The cache test removes the entry through an `exclude` pattern; the fixed list uses the same pruning path.
 
 ### DUP-014 Detail check for content candidates

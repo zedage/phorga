@@ -352,7 +352,7 @@ While walking a source, the system MUST skip these entries and everything below 
 - folders named exactly `@eaDir` (Synology thumbnails and index data), `#recycle` (share recycle bin) and `#snapshot` (Btrfs snapshots), as DSM writes them
 - every file or folder whose name starts with `.` (e.g. `.thumbnails`, `.Trash-1000`, macOS `._IMG_1234.jpg`)
 
-The rule applies only to entries **below** the source path. A source path that itself is or contains such a name (e.g. `/photos/.import`) is still walked. The list is fixed and cannot be turned off. Skipped entries are not errors. Each skipped folder MUST be logged once at info level (`skipping folder`, with its path). The count for the progress display (WEB-014) skips the same entries, so they never appear in "x of y".
+The rule applies only to entries **below** the source path. A source path that itself is or contains such a name (e.g. `/photos/.import`) is still walked. The list is fixed and cannot be turned off. Skipped entries are not errors. Each skipped folder MUST be logged once at debug level (`skipping folder`, with its path), not at info level: a Synology library has one `@eaDir` per photo folder, and an info line for each buried the useful log lines. The count for the progress display (WEB-014) skips the same entries, so they never appear in "x of y".
 
 - **WHEN** a source holds `IMG_1234.JPG` and `@eaDir/IMG_1234.JPG/SYNO_PHOTO_THUMB_SM.jpg`
   **THEN** only `IMG_1234.JPG` is organized, and the run reports 1 file and 0 errors
@@ -362,7 +362,7 @@ The rule applies only to entries **below** the source path. A source path that i
   **THEN** `a.jpg` is organized
 
 **Code:** `internal/exclude/exclude.go`, `internal/organizer/organizer.go`, `internal/metadata/metadata.go`
-**Tests:** `internal/exclude/exclude_test.go#TestSkip_FixedEntries`, `internal/exclude/exclude_test.go#TestSkip_RootIsNeverSkipped`, `internal/organizer/exclude_test.go#TestOrganize_SkipsSystemAndHiddenEntries`, `internal/organizer/exclude_test.go#TestOrganize_HiddenSourceRootIsWalked`, `internal/metadata/count_test.go#TestCountSupported_SkipsExcludedEntries`
+**Tests:** `internal/exclude/exclude_test.go#TestSkip_FixedEntries`, `internal/exclude/exclude_test.go#TestSkip_RootIsNeverSkipped`, `internal/organizer/exclude_test.go#TestOrganize_SkipsSystemAndHiddenEntries`, `internal/organizer/exclude_test.go#TestOrganize_HiddenSourceRootIsWalked`, `internal/organizer/exclude_test.go#TestOrganize_SkippedFolderIsLoggedAtDebugOnly`, `internal/metadata/count_test.go#TestCountSupported_SkipsExcludedEntries`
 **Notes:** Found in a dry run on a Synology: `@eaDir` thumbnails were organized like photos. Duplicate detection uses the same rule (DUP-013). See [ADR-0016](../decisions/0016-fixed-skip-list-and-simple-exclude-patterns.md). The log line is not covered by a test.
 
 ### ORG-023 Exclude list per source
