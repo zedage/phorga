@@ -484,12 +484,17 @@ internal/
 
 ## Docker
 
-A ready-made image for **amd64 and arm64** is published on Docker Hub as [`mnrd001/phorga`](https://hub.docker.com/r/mnrd001/phorga). It is built automatically after every merge to `main` ([`.github/workflows/docker.yml`](.github/workflows/docker.yml)).
+A ready-made image for **amd64 and arm64** is published on Docker Hub as [`mnrd001/phorga`](https://hub.docker.com/r/mnrd001/phorga) ([`.github/workflows/docker.yml`](.github/workflows/docker.yml)). Releases have calendar versions `YYYY.MM.MICRO`: `2026.11.0` is the first release in November 2026, `2026.11.1` the next one that month ([ADR-0024](docs/decisions/0024-calendar-versions-released-by-tag.md)).
 
 | Tag | Meaning |
 |---|---|
-| `latest` | The current state of `main` |
-| `sha-<commit>` | A fixed build, e.g. `sha-60d4bc4`, to pin a version or go back |
+| `latest` | The newest release |
+| `2026.11` | The newest release of that month, e.g. with fixes |
+| `2026.11.0` | Exactly this release, to pin a version or go back |
+| `edge` | The current state of `main`, built after every merge; not a release |
+| `sha-<commit>` | A fixed build of `main`, e.g. `sha-60d4bc4` |
+
+Before releases existed, `latest` followed every merge to `main`; that is what `edge` does now. `docker run --rm mnrd001/phorga --version` prints the version, and the start log and the web UI's top bar show it too.
 
 ```bash
 docker pull mnrd001/phorga:latest

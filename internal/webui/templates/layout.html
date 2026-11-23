@@ -53,7 +53,7 @@
   <div class="topbar-inner">
     <a class="brand" href="/ui">
       <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="15" rx="3"/><circle cx="12" cy="12.5" r="3.5"/><path d="M8 5l1.5-2h5L16 5"/></svg></span>
-      <span>Phorga</span>
+      <span>Phorga{{with version}} <small class="brand-version">{{.}}</small>{{end}}</span>
     </a>
     <nav class="mainnav" aria-label="Phorga">
       <a href="/ui" {{if eq .Active "config"}}class="active" aria-current="page"{{end}}>{{template "icon" "sliders"}}<span>{{call .T "nav_config"}}</span></a>

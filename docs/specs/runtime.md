@@ -67,3 +67,20 @@ When the web UI starts, Phorga SHOULD also check that a save can replace the con
 **Code:** `cmd/phorga/access.go`, `cmd/phorga/main.go`
 **Tests:** `cmd/phorga/access_test.go#TestCheckStateAccess_AccessibleDirLeavesNothingBehind`, `cmd/phorga/access_test.go#TestRun_StateDirNotWritableExitsNonZero`, `cmd/phorga/access_test.go#TestRun_UnreadableStateFileExitsNonZero`, `cmd/phorga/access_test.go#TestCheckConfigWritable`, `cmd/phorga/access_test.go#TestOrganizerJob_UnreadableStateTransfersNothing`
 **Notes:** Prompted by the switch to a non-root image (`gcr.io/distroless/static-debian13:nonroot`): state written by the old root image could not be saved any more, so every `copy` run copied all files again, with `addSuffix` as new copies every day. The check creates and removes one probe file per folder; that is not a state file, so it also runs before dry runs (ORG-014).
+
+### RUN-004 Version information
+**Status:** implemented
+
+Phorga MUST know its version and show it in three places: `phorga --version` prints `phorga <version>` and exits with code 0 without loading a config; the start log line `phorga starting` has the attribute `version`; the web UI shows the version next to the name in the top bar of every page. A release build has the calendar version of its tag, `YYYY.MM.MICRO` (ADR-0024), set at build time with `-ldflags "-X main.version=…"` (Docker build argument `VERSION`). A build without it reports `dev`, plus the commit from the Go build info if there is one (`dev+1a2b3c4`, `.dirty` with uncommitted changes).
+
+- **WHEN** the image built from tag `v2026.11.0` runs with `--version`
+  **THEN** it prints `phorga 2026.11.0`
+- **WHEN** Phorga is started with `go run ./cmd/phorga`
+  **THEN** the start log shows `"version":"dev+<commit>"` or `"dev"`
+- **WHEN** the web UI is opened
+  **THEN** the top bar shows the version next to `Phorga`
+
+**Code:** `cmd/phorga/version.go`, `cmd/phorga/main.go`, `internal/webui/server.go`, `internal/webui/templates/layout.html`, `Dockerfile`, `.github/workflows/docker.yml`
+**Tests:** `cmd/phorga/version_test.go#TestRun_VersionFlagPrintsVersion`, `cmd/phorga/version_test.go#TestRun_StartLogNamesVersion`, `cmd/phorga/version_test.go#TestCurrentVersionWithoutLdflags`, `internal/webui/version_test.go#TestTopBarShowsVersion`, `internal/webui/version_test.go#TestTopBarWithoutVersion`
+**Gap:** The image tags and the GitHub release of the Docker workflow run only on a real tag push and have no automated test.
+**Notes:** See [ADR-0024](../decisions/0024-calendar-versions-released-by-tag.md).

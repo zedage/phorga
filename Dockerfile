@@ -4,6 +4,8 @@ FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
+# Calendar version of a release (YYYY.MM.MICRO, ADR-0024); "dev" otherwise.
+ARG VERSION=dev
 
 WORKDIR /build
 
@@ -12,7 +14,7 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -ldflags="-s -w" -o /out/phorga ./cmd/phorga \
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -ldflags="-s -w -X main.version=${VERSION}" -o /out/phorga ./cmd/phorga \
     && mkdir -p /out/data/state /out/config
 
 # Runtime stage: distroless static image, no shell or package manager. It

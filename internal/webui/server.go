@@ -39,6 +39,8 @@ type Options struct {
 	// Password, if not empty, protects every page with HTTP Basic auth
 	// (WEB-020). It comes from PHORGA_WEB_UI_PASSWORD, never from the config.
 	Password string
+	// Version is shown next to the name in the top bar (RUN-004). Optional.
+	Version string
 }
 
 // ApplyRawFunc saves and applies the text of a config file, see Options.ApplyRaw.
@@ -79,7 +81,9 @@ func New(opts Options) (*Server, error) {
 		}
 	}
 
-	tmpl, err := template.New("").Funcs(templateFuncs).ParseFS(templateFS, "templates/*.html")
+	tmpl, err := template.New("").Funcs(templateFuncs).
+		Funcs(template.FuncMap{"version": func() string { return opts.Version }}).
+		ParseFS(templateFS, "templates/*.html")
 	if err != nil {
 		return nil, fmt.Errorf("parsing web UI templates: %w", err)
 	}

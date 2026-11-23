@@ -56,15 +56,20 @@ func run(ctx context.Context, args []string, logOut io.Writer) int {
 	configPath := flags.String("config", "", "Path to config file (YAML or JSON)")
 	webUIFlag := flags.Bool("web-ui", false, "Enable the built-in configuration web UI (overrides config)")
 	webUIAddr := flags.String("web-ui-addr", "", "Listen address for the web UI (overrides config, e.g. 127.0.0.1:8080)")
+	showVersion := flags.Bool("version", false, "Print the version and exit")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return exitOK
 		}
 		return exitUsage
 	}
+	if *showVersion {
+		fmt.Fprintln(logOut, "phorga", currentVersion())
+		return exitOK
+	}
 
 	slog.SetDefault(slog.New(slog.NewJSONHandler(logOut, &slog.HandlerOptions{Level: slog.LevelInfo})))
-	slog.Info("phorga starting")
+	slog.Info("phorga starting", "version", currentVersion())
 
 	cfgPath, cfg, exists, err := loadConfig(*configPath)
 	if err != nil {
@@ -124,6 +129,7 @@ func run(ctx context.Context, args []string, logOut io.Writer) int {
 			Apply:      eng.Apply,
 			ApplyRaw:   eng.ApplyRaw,
 			Password:   webUIPassword(),
+			Version:    currentVersion(),
 		})
 		if err != nil {
 			slog.Error("web UI setup failed", "error", err)

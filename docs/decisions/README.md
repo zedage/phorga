@@ -27,6 +27,7 @@ Short records of decisions that shaped Phorga: what was decided, why, and what i
 | [0021](0021-built-in-heic-and-video-date-readers.md) | Built-in date readers for HEIC and MP4/MOV | 2026-11-21 | accepted |
 | [0022](0022-live-apply-and-setup-mode.md) | Apply UI changes live, start without a config | 2026-11-21 | accepted |
 | [0023](0023-optional-web-ui-password.md) | Optional web UI password from the environment, cross-site writes rejected | 2026-11-21 | accepted |
+| [0024](0024-calendar-versions-released-by-tag.md) | Calendar versions, released by a Git tag | 2026-11-23 | accepted |
 
 ## Writing a new ADR
 

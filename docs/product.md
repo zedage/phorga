@@ -114,7 +114,7 @@ Exact rules: [specs/notifications.md](specs/notifications.md)
 
 ## Platforms
 
-Phorga is a single Go binary without external dependencies. It runs on Linux, macOS and Windows, and as a multi-arch Docker image (amd64/arm64), for example on a Synology NAS. A ready-made image is published on Docker Hub as `mnrd001/phorga` after every change. It has no shell and runs as an unprivileged user; you tell it which NAS user to run as. Supported file types: JPEG, PNG, HEIC, RAW (raw, cr2, nef, arw), MP4 and MOV.
+Phorga is a single Go binary without external dependencies. It runs on Linux, macOS and Windows, and as a multi-arch Docker image (amd64/arm64), for example on a Synology NAS. A ready-made image is published on Docker Hub as `mnrd001/phorga`. Releases are named by date, e.g. `2026.11.0`, and `latest` is always the newest release, so a NAS only gets a new Phorga when it was released; the version shows in the web UI. It has no shell and runs as an unprivileged user; you tell it which NAS user to run as. Supported file types: JPEG, PNG, HEIC, RAW (raw, cr2, nef, arw), MP4 and MOV.
 
 ## Non-goals
 
