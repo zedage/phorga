@@ -19,7 +19,7 @@ Users also want to leave out their own folders, such as screenshots or exports.
 ## Consequences
 - Thumbnails, recycle bins, snapshots and macOS `._` files no longer reach the organizer or duplicate detection. Cache entries for them disappear after the next complete duplicate detection scan.
 - A user who keeps real photos in a dot-folder below a source cannot include them; they must point a source at that folder directly.
-- On a library with many photo folders, each run logs one `skipping folder` line per `@eaDir` folder.
+- On a library with many photo folders, each run logs one `skipping folder` line per `@eaDir` folder. These lines are at debug level (ORG-022), so the normal info log stays readable.
 - The syntax cannot express "this folder at any depth below 2019" (`2019/**/Scans`) or exceptions. Those can be added later without breaking existing patterns.
 
 ## Alternatives considered

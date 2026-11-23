@@ -275,7 +275,7 @@ This cannot be turned off. A source path that itself contains such a name (e.g. 
 | `*/WhatsApp` | `WhatsApp` one level below the source |
 | `Export/` | folders named `Export` only (trailing `/`) |
 
-Wildcards: `*` (any characters except `/`), `?` (one character), `[abc]`. There is no `**` and no way to re-include something. Each skipped folder is logged once as `skipping folder`.
+Wildcards: `*` (any characters except `/`), `?` (one character), `[abc]`. There is no `**` and no way to re-include something. Each skipped folder is logged once as `skipping folder` at debug level, so it does not appear in the normal (info) log.
 
 ### Schedules
 
@@ -484,12 +484,17 @@ internal/
 
 ## Docker
 
-A ready-made image for **amd64 and arm64** is published on Docker Hub as [`mnrd001/phorga`](https://hub.docker.com/r/mnrd001/phorga). It is built automatically after every merge to `main` ([`.github/workflows/docker.yml`](.github/workflows/docker.yml)).
+A ready-made image for **amd64 and arm64** is published on Docker Hub as [`mnrd001/phorga`](https://hub.docker.com/r/mnrd001/phorga) ([`.github/workflows/docker.yml`](.github/workflows/docker.yml)). Releases have calendar versions `YYYY.MM.MICRO`: `2026.11.0` is the first release in November 2026, `2026.11.1` the next one that month ([ADR-0024](docs/decisions/0024-calendar-versions-released-by-tag.md)).
 
 | Tag | Meaning |
 |---|---|
-| `latest` | The current state of `main` |
-| `sha-<commit>` | A fixed build, e.g. `sha-60d4bc4`, to pin a version or go back |
+| `latest` | The newest release |
+| `2026.11` | The newest release of that month, e.g. with fixes |
+| `2026.11.0` | Exactly this release, to pin a version or go back |
+| `edge` | The current state of `main`, built after every merge; not a release |
+| `sha-<commit>` | A fixed build of `main`, e.g. `sha-60d4bc4` |
+
+Before releases existed, `latest` followed every merge to `main`; that is what `edge` does now. `docker run --rm mnrd001/phorga --version` prints the version, and the start log and the web UI's top bar show it too.
 
 ```bash
 docker pull mnrd001/phorga:latest
@@ -502,7 +507,7 @@ The image is based on distroless (no shell) and runs as the unprivileged user `6
 
 **Fast moves:** a move within one volume renames the file instead of copying it, but Linux only allows that within one mount. Mount the common parent once (e.g. `/volume1/photos:/photos`) instead of `incoming` and `organized` separately.
 
-**Upgrading from an image before 2026-11-21:** older images ran as root, so an existing state volume belongs to root and the new user cannot write it. Either set `user: "0:0"` to keep running as root, or hand the volume to the user you set in `user:` once, on the NAS host: `sudo chown -R <uid>:<gid> "$(docker volume inspect -f '{{.Mountpoint}}' phorga-state)"` (with Compose, the volume name usually starts with the project name; `docker volume ls` shows it).
+**Upgrading from an image before 2026-11-21:** older images ran as root, so an existing state volume belongs to root and the new user cannot write it. Either set `user: "0:0"` to keep running as root, or hand the volume to the user you set in `user:` once, on the NAS host: `sudo chown -R <uid>:<gid> "$(docker volume inspect -f '{{.Mountpoint}}' phorga-state)"` (with Compose, the volume name usually starts with the project name; `docker volume ls` shows it). If Phorga cannot read or write its state folder, it does not start and logs `state directory not accessible` with the folder and the uid it runs as, instead of copying everything again.
 
 **Synology:** see the [Setup guide](#a-on-a-synology-nas-container-manager), which creates a project in Container Manager with a dedicated user and `/volume1/homes:/homes` mounted, so the web UI can list the Synology Photos users.
 

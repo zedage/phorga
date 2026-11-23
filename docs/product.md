@@ -41,7 +41,7 @@ The organizer takes files from one or more **source** folders and sorts them int
 
 **Schedules.** Every source has its own schedule in cron format, for example "every night at 2:00". A run never overlaps with itself. If a job is due while another one is still running, it waits for it and the status page says so ([ADR-0020](decisions/0020-run-one-job-at-a-time.md)).
 
-**Folders that are not photos.** A NAS keeps hidden folders inside your photo shares: Synology stores thumbnails in `@eaDir`, deleted files in `#recycle` and snapshots in `#snapshot`. Phorga always skips these, and every file or folder whose name starts with a dot. You can leave out more with an `exclude` list per source, e.g. `Screenshots` or `2019/Scans`. Each skipped folder appears once in the log ([ADR-0016](decisions/0016-fixed-skip-list-and-simple-exclude-patterns.md)).
+**Folders that are not photos.** A NAS keeps hidden folders inside your photo shares: Synology stores thumbnails in `@eaDir`, deleted files in `#recycle` and snapshots in `#snapshot`. Phorga always skips these, and every file or folder whose name starts with a dot. You can leave out more with an `exclude` list per source, e.g. `Screenshots` or `2019/Scans`. Skipped folders are logged only at debug level, so they do not fill the normal log ([ADR-0016](decisions/0016-fixed-skip-list-and-simple-exclude-patterns.md)).
 
 Exact rules: [specs/organizer.md](specs/organizer.md)
 
@@ -114,7 +114,7 @@ Exact rules: [specs/notifications.md](specs/notifications.md)
 
 ## Platforms
 
-Phorga is a single Go binary without external dependencies. It runs on Linux, macOS and Windows, and as a multi-arch Docker image (amd64/arm64), for example on a Synology NAS. A ready-made image is published on Docker Hub as `mnrd001/phorga` after every change. It has no shell and runs as an unprivileged user; you tell it which NAS user to run as. Supported file types: JPEG, PNG, HEIC, RAW (raw, cr2, nef, arw), MP4 and MOV.
+Phorga is a single Go binary without external dependencies. It runs on Linux, macOS and Windows, and as a multi-arch Docker image (amd64/arm64), for example on a Synology NAS. A ready-made image is published on Docker Hub as `mnrd001/phorga`. Releases are named by date, e.g. `2026.11.0`, and `latest` is always the newest release, so a NAS only gets a new Phorga when it was released; the version shows in the web UI. It has no shell and runs as an unprivileged user; you tell it which NAS user to run as. Supported file types: JPEG, PNG, HEIC, RAW (raw, cr2, nef, arw), MP4 and MOV.
 
 ## Non-goals
 

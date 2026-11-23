@@ -165,6 +165,7 @@ code {
   box-shadow: 0 2px 8px rgba(109, 94, 252, .35), inset 0 1px 0 rgba(255, 255, 255, .25);
 }
 .brand-mark svg { width: 18px; height: 18px; }
+.brand-version { font-weight: 500; font-size: .75rem; letter-spacing: 0; color: var(--muted); }
 
 .mainnav { display: flex; gap: .25rem; }
 .mainnav a {

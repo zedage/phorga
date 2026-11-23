@@ -188,7 +188,7 @@ func (sc *scanner) scan(srcPath string) {
 		// System, hidden and excluded entries (DUP-013).
 		if d != nil && sc.exclude.Skip(srcPath, path, d.IsDir()) {
 			if d.IsDir() {
-				slog.Info("skipping folder", "path", path)
+				slog.Debug("skipping folder", "path", path)
 				return filepath.SkipDir
 			}
 			return nil

@@ -182,13 +182,17 @@ func moveFile(src, dst string, replace bool) error {
 
 	// Same volume: give the file its new name without copying (ORG-025).
 	// Any failure here (another volume, no hard links) falls back to a copy.
-	if replace {
+	// A symbolic link always takes the copy: a hard link or rename would
+	// move the link itself, which may point nowhere from its new folder.
+	switch {
+	case isSymlink(src):
+	case replace:
 		if err := renameFile(src, dst); err == nil {
 			syncDir(filepath.Dir(dst))
 			syncDir(filepath.Dir(src))
 			return nil
 		}
-	} else {
+	default:
 		err := linkFile(src, dst)
 		if err == nil {
 			syncDir(filepath.Dir(dst))
@@ -221,6 +225,12 @@ func syncDir(dir string) {
 	}
 	defer d.Close()
 	_ = d.Sync()
+}
+
+// isSymlink reports whether path itself is a symbolic link.
+func isSymlink(path string) bool {
+	info, err := os.Lstat(path)
+	return err == nil && info.Mode()&os.ModeSymlink != 0
 }
 
 // GenerateSuffix returns a random 4-character alphanumeric string.

@@ -1,6 +1,8 @@
 services:
   phorga:
-    # Image from Docker Hub (amd64 + arm64, built after every merge to main).
+    # Image from Docker Hub (amd64 + arm64). latest is the newest release;
+    # pin a month (:2026.11) or a release (:2026.11.0) to update on your
+    # terms, or use :edge for every merge to main (README, Docker).
     # To build from source instead, replace this line with: build: .
     image: mnrd001/phorga:latest
     container_name: phorga

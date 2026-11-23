@@ -250,7 +250,7 @@ With `dryRun: true`, the organizer MUST log every planned action (transfer, fall
 ### ORG-015 State persistence and resume
 **Status:** implemented
 
-The organizer MUST store which files it has processed (keyed by path, size and mtime) in a JSON state file per profile target and source under `stateDir`. On later runs it MUST skip files that are unchanged. A missing or corrupt state file MUST lead to a warning and a full re-scan, not a failure.
+The organizer MUST store which files it has processed (keyed by path, size and mtime) in a JSON state file per profile target and source under `stateDir`. On later runs it MUST skip files that are unchanged. A missing or corrupt state file MUST lead to a full re-scan, not a failure; a corrupt one with a warning. A state file that exists but cannot be read (e.g. it belongs to another user) MUST NOT lead to a re-scan, because every file would count as new: the run MUST NOT transfer anything, log an error and count one error (ORG-017, WEB-011, ntfy summary).
 
 The state MUST be saved at the end of every run and also during the run, after every 200 processed files, so a crash or power cut loses at most that much progress. A dry run MUST never save the state (ORG-014).
 
@@ -260,9 +260,11 @@ The state MUST be saved at the end of every run and also during the run, after e
   **THEN** the state file already lists those 1,000 files
 - **WHEN** the state file is corrupt
   **THEN** a warning is logged and the run starts fresh
+- **WHEN** the state file of a `copy` source belongs to another user and cannot be read
+  **THEN** the run copies nothing and reports 1 error
 
-**Code:** `internal/state/state.go`, `internal/organizer/organizer.go`
-**Tests:** `internal/organizer/organizer_test.go#TestOrganize_Resume`, `internal/organizer/organizer_test.go#TestStatePath`, `internal/state/state_test.go#TestMarkAndCheck`, `internal/state/state_test.go#TestSaveAndLoad`, `internal/state/state_test.go#TestLoadMissing`, `internal/state/state_test.go#TestLoadCorrupt`, `internal/state/state_test.go#TestSaveAtomicity`, `internal/organizer/safety_test.go#TestOrganize_SavesStateDuringRun`, `internal/organizer/safety_test.go#TestOrganize_DryRunNeverSavesState`, `internal/organizer/safety_test.go#TestHandleNoDate_CopyIsRemembered`
+**Code:** `internal/state/state.go`, `internal/organizer/organizer.go`, `cmd/phorga/main.go`
+**Tests:** `internal/organizer/organizer_test.go#TestOrganize_Resume`, `internal/organizer/organizer_test.go#TestStatePath`, `internal/state/state_test.go#TestMarkAndCheck`, `internal/state/state_test.go#TestSaveAndLoad`, `internal/state/state_test.go#TestLoadMissing`, `internal/state/state_test.go#TestLoadCorrupt`, `internal/state/state_test.go#TestLoadUnreadableIsAnError`, `cmd/phorga/access_test.go#TestOrganizerJob_UnreadableStateTransfersNothing`, `internal/state/state_test.go#TestSaveAtomicity`, `internal/organizer/safety_test.go#TestOrganize_SavesStateDuringRun`, `internal/organizer/safety_test.go#TestOrganize_DryRunNeverSavesState`, `internal/organizer/safety_test.go#TestHandleNoDate_CopyIsRemembered`
 **Notes:** Without the saves during a run, a crash in `copy` mode made the next run process the same files again. Files without EXIF then failed an `exif` duplicate check and got a second copy with a suffix.
 
 ### ORG-016 Supported file formats
@@ -350,7 +352,7 @@ While walking a source, the system MUST skip these entries and everything below 
 - folders named exactly `@eaDir` (Synology thumbnails and index data), `#recycle` (share recycle bin) and `#snapshot` (Btrfs snapshots), as DSM writes them
 - every file or folder whose name starts with `.` (e.g. `.thumbnails`, `.Trash-1000`, macOS `._IMG_1234.jpg`)
 
-The rule applies only to entries **below** the source path. A source path that itself is or contains such a name (e.g. `/photos/.import`) is still walked. The list is fixed and cannot be turned off. Skipped entries are not errors. Each skipped folder MUST be logged once at info level (`skipping folder`, with its path). The count for the progress display (WEB-014) skips the same entries, so they never appear in "x of y".
+The rule applies only to entries **below** the source path. A source path that itself is or contains such a name (e.g. `/photos/.import`) is still walked. The list is fixed and cannot be turned off. Skipped entries are not errors. Each skipped folder MUST be logged once at debug level (`skipping folder`, with its path), not at info level: a Synology library has one `@eaDir` per photo folder, and an info line for each buried the useful log lines. The count for the progress display (WEB-014) skips the same entries, so they never appear in "x of y".
 
 - **WHEN** a source holds `IMG_1234.JPG` and `@eaDir/IMG_1234.JPG/SYNO_PHOTO_THUMB_SM.jpg`
   **THEN** only `IMG_1234.JPG` is organized, and the run reports 1 file and 0 errors
@@ -360,7 +362,7 @@ The rule applies only to entries **below** the source path. A source path that i
   **THEN** `a.jpg` is organized
 
 **Code:** `internal/exclude/exclude.go`, `internal/organizer/organizer.go`, `internal/metadata/metadata.go`
-**Tests:** `internal/exclude/exclude_test.go#TestSkip_FixedEntries`, `internal/exclude/exclude_test.go#TestSkip_RootIsNeverSkipped`, `internal/organizer/exclude_test.go#TestOrganize_SkipsSystemAndHiddenEntries`, `internal/organizer/exclude_test.go#TestOrganize_HiddenSourceRootIsWalked`, `internal/metadata/count_test.go#TestCountSupported_SkipsExcludedEntries`
+**Tests:** `internal/exclude/exclude_test.go#TestSkip_FixedEntries`, `internal/exclude/exclude_test.go#TestSkip_RootIsNeverSkipped`, `internal/organizer/exclude_test.go#TestOrganize_SkipsSystemAndHiddenEntries`, `internal/organizer/exclude_test.go#TestOrganize_HiddenSourceRootIsWalked`, `internal/organizer/exclude_test.go#TestOrganize_SkippedFolderIsLoggedAtDebugOnly`, `internal/metadata/count_test.go#TestCountSupported_SkipsExcludedEntries`
 **Notes:** Found in a dry run on a Synology: `@eaDir` thumbnails were organized like photos. Duplicate detection uses the same rule (DUP-013). See [ADR-0016](../decisions/0016-fixed-skip-list-and-simple-exclude-patterns.md). The log line is not covered by a test.
 
 ### ORG-023 Exclude list per source
@@ -404,13 +406,15 @@ When the target path of a file is the file itself (same file on disk, e.g. becau
 ### ORG-025 Moves within one volume keep the file
 **Status:** implemented
 
-In `move` mode, when source and destination are on the same volume, the file MUST get its new name without copying its data: a hard link at the destination, then the source name is removed. The moved file is the same file (inode), so its content, permissions and modification time are unchanged (ORG-018) and no size check is needed (ORG-019). When that is not possible (another volume, which includes separate Docker bind mounts, or a filesystem without hard links), the move MUST fall back to the verified copy of ORG-004 and ORG-019. With `replace`, a rename is used instead of the hard link.
+In `move` mode, when source and destination are on the same volume, the file MUST get its new name without copying its data: a hard link at the destination, then the source name is removed. The moved file is the same file (inode), so its content, permissions and modification time are unchanged (ORG-018) and no size check is needed (ORG-019). When that is not possible (another volume, which includes separate Docker bind mounts, or a filesystem without hard links), the move MUST fall back to the verified copy of ORG-004 and ORG-019. With `replace`, a rename is used instead of the hard link. A source that is a symbolic link MUST NOT take this shortcut, because the hard link or rename would move the link itself, which may point nowhere from its new folder: its content is copied as in ORG-004 and ORG-019, and then only the link is removed. The file it points to stays untouched.
 
 - **WHEN** a 4 GB video is moved from `/volume1/photos/incoming` to `/volume1/photos/organized` on the same volume and mount
   **THEN** no data is copied and the file is the same inode afterwards
 - **WHEN** the target is on another volume
   **THEN** the file is copied, verified, and only then removed from the source
+- **WHEN** the source holds `IMG_1.jpg`, a relative symbolic link to `../shared/IMG_1.jpg`, and it is moved to `2024/05/`
+  **THEN** `2024/05/IMG_1.jpg` is a regular file with the photo's content, the link is gone, and `shared/IMG_1.jpg` is unchanged
 
 **Code:** `internal/fileops/fileops.go`
-**Tests:** `internal/fileops/noclobber_test.go#TestAtomicMove_SameVolumeKeepsTheFileWithoutCopying`, `internal/fileops/noclobber_test.go#TestAtomicMove_OtherVolumeCopiesAndRemovesSource`, `internal/fileops/noclobber_test.go#TestReplace_OverwritesExistingFile`
+**Tests:** `internal/fileops/noclobber_test.go#TestAtomicMove_SameVolumeKeepsTheFileWithoutCopying`, `internal/fileops/noclobber_test.go#TestAtomicMove_OtherVolumeCopiesAndRemovesSource`, `internal/fileops/noclobber_test.go#TestReplace_OverwritesExistingFile`, `internal/fileops/noclobber_test.go#TestAtomicMove_SymlinkIsMovedAsItsContent`
 **Notes:** In Docker, source and target are only "the same volume" when they come from the same bind mount, e.g. mount `/volume1/photos` once instead of `incoming` and `organized` separately. See [ADR-0019](../decisions/0019-no-clobber-transfers-with-hard-links.md).

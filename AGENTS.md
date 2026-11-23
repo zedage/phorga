@@ -56,7 +56,7 @@ go vet ./...
 go run ./cmd/phorga --config data/config.yaml   # run the demo (from repo root)
 go run ./cmd/phorga --config data/config.yaml --web-ui --web-ui-addr 127.0.0.1:8080
 go run testdata/tools/generate.go               # (re)generate demo images in data/
-docker build -t phorga .                        # container image (CI pushes mnrd001/phorga after every merge to main)
+docker build -t phorga .                        # container image (CI pushes mnrd001/phorga:edge after every merge to main)
 ```
 
 The demo config uses repo-relative paths and schedules every minute. Stop it with Ctrl+C.
@@ -78,6 +78,18 @@ The demo config uses repo-relative paths and schedules every minute. Stop it wit
 - **Naming:** `Phorga` / `phorga` / `PHORGA_`, never the old name ([ADR-0007](docs/decisions/0007-rename-to-phorga.md)).
 - **Git:** conventional commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`). Use a feature branch and open a PR to `main`. Direct pushes to `main` are blocked by a ruleset, and only @zedage (repo admin) can merge. CI ([ci.yml](.github/workflows/ci.yml)) runs build, vet and test on every PR and must be green. Code owners are requested as reviewers automatically ([.github/CODEOWNERS](.github/CODEOWNERS)).
 - **Docs language:** English.
+
+## Releases
+
+Releases have calendar versions `YYYY.MM.MICRO` ([ADR-0024](docs/decisions/0024-calendar-versions-released-by-tag.md)). A merge to `main` is not a release; it only updates the `edge` image. To release, tag a commit on `main` and push the tag:
+
+```bash
+git switch main && git pull
+git tag v2026.12.0        # next MICRO in the same month, else .0
+git push origin v2026.12.0
+```
+
+The Docker workflow checks the tag, pushes `2026.12.0`, `2026.12` and `latest`, and creates the GitHub release with generated notes. The version shows in `phorga --version`, the start log and the web UI ([RUN-004](docs/specs/runtime.md)).
 
 ## Change workflow
 

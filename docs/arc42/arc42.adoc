@@ -204,6 +204,10 @@ package "internal" {
 
 == 6. Runtime View
 
+=== Start
+
+`run` loads and validates the config (or starts setup mode without one), creates `stateDir` and checks that it can read every file below it and write in every folder of it (RUN-003). If not, it logs the folder and the uid it runs as and exits with code 1 before any job is scheduled: a `copy` job without its state would copy every file again on every run. Then it schedules the jobs and, if enabled, starts the web UI, warning when the config file cannot be replaced by a save.
+
 === Organizer Run
 
 [plantuml, runtime-organizer, svg]
@@ -211,7 +215,8 @@ package "internal" {
 @startuml
 start
 :Cron triggers source run;
-:Load state from JSON;
+:Load state from JSON
+(unreadable file: record 1 error, transfer nothing);
 :Walk source directory recursively,\nskipping system, hidden and excluded entries;
 repeat
   :Next supported media file;
@@ -415,7 +420,7 @@ app --> ntfy : HTTP POST
 @enduml
 ----
 
-* Image: `mnrd001/phorga` on Docker Hub, multi-arch (`linux/amd64`, `linux/arm64`), tags `latest` and `sha-<commit>`. Built and pushed by `.github/workflows/docker.yml` after every merge to `main`, only after build, vet and test pass. Go cross-compiles in the build stage, and the runtime stage has no `RUN` steps, so no emulation is needed.
+* Image: `mnrd001/phorga` on Docker Hub, multi-arch (`linux/amd64`, `linux/arm64`). Built and pushed by `.github/workflows/docker.yml`, only after build, vet and test pass: every merge to `main` pushes `edge` and `sha-<commit>`; a release tag `vYYYY.MM.MICRO` on `main` pushes `YYYY.MM.MICRO`, `YYYY.MM` and `latest` and creates a GitHub release (ADR-0024). The version is passed as build argument `VERSION` and linked into the binary (`-X main.version`, RUN-004). Go cross-compiles in the build stage, and the runtime stage has no `RUN` steps, so no emulation is needed.
 * Base image: `gcr.io/distroless/static-debian13:nonroot` (no shell; CA certificates and time zone data included). Runs as uid 65532 unless `user:` sets the NAS user. Images before 2026-11-21 ran as root on Alpine; their state volume belongs to root (README › Docker).
 * State volume: `/data/state`
 * Mount the common parent of source and target once (e.g. `/volume1/photos`) to get same-volume moves; Linux refuses hard links across mount points (ORG-025).
@@ -526,6 +531,9 @@ Decisions are recorded as ADRs in link:../decisions/README.md[docs/decisions]. T
 
 | link:../decisions/0023-optional-web-ui-password.md[0023]
 | Optional web UI password from the environment (Basic auth); cross-site writes rejected
+
+| link:../decisions/0024-calendar-versions-released-by-tag.md[0024]
+| Calendar versions `YYYY.MM.MICRO`, released by a Git tag on `main`
 |===
 
 == 10. Risks and Technical Debt

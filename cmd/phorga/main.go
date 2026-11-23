@@ -56,15 +56,20 @@ func run(ctx context.Context, args []string, logOut io.Writer) int {
 	configPath := flags.String("config", "", "Path to config file (YAML or JSON)")
 	webUIFlag := flags.Bool("web-ui", false, "Enable the built-in configuration web UI (overrides config)")
 	webUIAddr := flags.String("web-ui-addr", "", "Listen address for the web UI (overrides config, e.g. 127.0.0.1:8080)")
+	showVersion := flags.Bool("version", false, "Print the version and exit")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return exitOK
 		}
 		return exitUsage
 	}
+	if *showVersion {
+		fmt.Fprintln(logOut, "phorga", currentVersion())
+		return exitOK
+	}
 
 	slog.SetDefault(slog.New(slog.NewJSONHandler(logOut, &slog.HandlerOptions{Level: slog.LevelInfo})))
-	slog.Info("phorga starting")
+	slog.Info("phorga starting", "version", currentVersion())
 
 	cfgPath, cfg, exists, err := loadConfig(*configPath)
 	if err != nil {
@@ -88,6 +93,13 @@ func run(ctx context.Context, args []string, logOut io.Writer) int {
 
 	if err := os.MkdirAll(cfg.StateDir, 0755); err != nil {
 		slog.Error("failed to create state directory", "path", cfg.StateDir, "error", err)
+		return exitError
+	}
+	// Without access to its state, a copy job would copy every file again
+	// on every run (RUN-003).
+	if err := checkStateAccess(cfg.StateDir); err != nil {
+		slog.Error("state directory not accessible; give the user Phorga runs as read and write access, e.g. with chown (README, Docker, Upgrading)",
+			append([]any{"error", err}, processUser()...)...)
 		return exitError
 	}
 
@@ -117,10 +129,15 @@ func run(ctx context.Context, args []string, logOut io.Writer) int {
 			Apply:      eng.Apply,
 			ApplyRaw:   eng.ApplyRaw,
 			Password:   webUIPassword(),
+			Version:    currentVersion(),
 		})
 		if err != nil {
 			slog.Error("web UI setup failed", "error", err)
 			return exitError
+		}
+		if err := checkConfigWritable(cfgPath); err != nil {
+			slog.Warn("saving in the web UI will fail: the config file or its folder is not writable; mount the folder writable, not the file alone (RUN-003)",
+				append([]any{"path", cfgPath, "error", err}, processUser()...)...)
 		}
 		if openWithoutPassword(ui.Address(), webUIPassword()) {
 			slog.Warn("the web UI has no password and listens on more than loopback; anyone who can reach its port can change the configuration. Set "+envWebUIPassword+", or publish the port on 127.0.0.1 only (WEB-020)", "address", ui.Address())
@@ -291,7 +308,21 @@ func organizerJob(name string, p config.OrganizerProfile, s config.OrganizerSour
 		start := time.Now()
 		ctx = withProgress(ctx, recorder, name, start)
 		defer recorder.ClearProgress(name)
-		st := state.Load(statePath)
+		st, err := state.Load(statePath)
+		if err != nil {
+			// Without its state the run would treat every file as new
+			// (ORG-015), so it does not run at all.
+			slog.Error("organizer run skipped: its state file cannot be read", "job", name, "path", statePath, "error", err)
+			recorder.Finish(name, runstatus.Record{
+				Start: start, Duration: time.Since(start), DryRun: p.DryRun,
+				Counters: map[string]int{"processed": 0, "skipped": 0, "errors": 1},
+			})
+			if p.Ntfy != nil {
+				title, msg := notify.FormatOrganizerSummary(s.Path, 0, 0, 1, time.Since(start))
+				notify.New(p.Ntfy.URL).SendSummary(title, msg)
+			}
+			return
+		}
 		result, duration := organizer.RunWithTime(ctx, p, s, st, statePath)
 		if result.Canceled {
 			return
