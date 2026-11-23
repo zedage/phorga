@@ -204,6 +204,10 @@ package "internal" {
 
 == 6. Runtime View
 
+=== Start
+
+`run` loads and validates the config (or starts setup mode without one), creates `stateDir` and checks that it can read every file below it and write in every folder of it (RUN-003). If not, it logs the folder and the uid it runs as and exits with code 1 before any job is scheduled: a `copy` job without its state would copy every file again on every run. Then it schedules the jobs and, if enabled, starts the web UI, warning when the config file cannot be replaced by a save.
+
 === Organizer Run
 
 [plantuml, runtime-organizer, svg]
@@ -211,7 +215,8 @@ package "internal" {
 @startuml
 start
 :Cron triggers source run;
-:Load state from JSON;
+:Load state from JSON
+(unreadable file: record 1 error, transfer nothing);
 :Walk source directory recursively,\nskipping system, hidden and excluded entries;
 repeat
   :Next supported media file;

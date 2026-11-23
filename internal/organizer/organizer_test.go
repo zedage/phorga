@@ -179,7 +179,7 @@ func TestOrganize_Resume(t *testing.T) {
 	Run(context.Background(), profile, source, st, sp)
 
 	// Second run with same state — should skip
-	st2 := state.Load(sp)
+	st2 := loadState(t, sp)
 
 	// Re-create target dir (simulate fresh target check)
 	tgtDir2 := t.TempDir()
@@ -863,4 +863,14 @@ func TestOrganize_MultilingualTokens_Mixed(t *testing.T) {
 func parseMode(mode string) config.DetectionExpr {
 	expr, _ := config.ParseDetectionMode(mode)
 	return expr
+}
+
+// loadState reads the state file at path and fails the test on error.
+func loadState(t *testing.T, path string) *state.State {
+	t.Helper()
+	st, err := state.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return st
 }

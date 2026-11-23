@@ -502,7 +502,7 @@ The image is based on distroless (no shell) and runs as the unprivileged user `6
 
 **Fast moves:** a move within one volume renames the file instead of copying it, but Linux only allows that within one mount. Mount the common parent once (e.g. `/volume1/photos:/photos`) instead of `incoming` and `organized` separately.
 
-**Upgrading from an image before 2026-11-21:** older images ran as root, so an existing state volume belongs to root and the new user cannot write it. Either set `user: "0:0"` to keep running as root, or hand the volume to the user you set in `user:` once, on the NAS host: `sudo chown -R <uid>:<gid> "$(docker volume inspect -f '{{.Mountpoint}}' phorga-state)"` (with Compose, the volume name usually starts with the project name; `docker volume ls` shows it).
+**Upgrading from an image before 2026-11-21:** older images ran as root, so an existing state volume belongs to root and the new user cannot write it. Either set `user: "0:0"` to keep running as root, or hand the volume to the user you set in `user:` once, on the NAS host: `sudo chown -R <uid>:<gid> "$(docker volume inspect -f '{{.Mountpoint}}' phorga-state)"` (with Compose, the volume name usually starts with the project name; `docker volume ls` shows it). If Phorga cannot read or write its state folder, it does not start and logs `state directory not accessible` with the folder and the uid it runs as, instead of copying everything again.
 
 **Synology:** see the [Setup guide](#a-on-a-synology-nas-container-manager), which creates a project in Container Manager with a dedicated user and `/volume1/homes:/homes` mounted, so the web UI can list the Synology Photos users.
 

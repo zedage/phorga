@@ -250,7 +250,7 @@ With `dryRun: true`, the organizer MUST log every planned action (transfer, fall
 ### ORG-015 State persistence and resume
 **Status:** implemented
 
-The organizer MUST store which files it has processed (keyed by path, size and mtime) in a JSON state file per profile target and source under `stateDir`. On later runs it MUST skip files that are unchanged. A missing or corrupt state file MUST lead to a warning and a full re-scan, not a failure.
+The organizer MUST store which files it has processed (keyed by path, size and mtime) in a JSON state file per profile target and source under `stateDir`. On later runs it MUST skip files that are unchanged. A missing or corrupt state file MUST lead to a full re-scan, not a failure; a corrupt one with a warning. A state file that exists but cannot be read (e.g. it belongs to another user) MUST NOT lead to a re-scan, because every file would count as new: the run MUST NOT transfer anything, log an error and count one error (ORG-017, WEB-011, ntfy summary).
 
 The state MUST be saved at the end of every run and also during the run, after every 200 processed files, so a crash or power cut loses at most that much progress. A dry run MUST never save the state (ORG-014).
 
@@ -260,9 +260,11 @@ The state MUST be saved at the end of every run and also during the run, after e
   **THEN** the state file already lists those 1,000 files
 - **WHEN** the state file is corrupt
   **THEN** a warning is logged and the run starts fresh
+- **WHEN** the state file of a `copy` source belongs to another user and cannot be read
+  **THEN** the run copies nothing and reports 1 error
 
-**Code:** `internal/state/state.go`, `internal/organizer/organizer.go`
-**Tests:** `internal/organizer/organizer_test.go#TestOrganize_Resume`, `internal/organizer/organizer_test.go#TestStatePath`, `internal/state/state_test.go#TestMarkAndCheck`, `internal/state/state_test.go#TestSaveAndLoad`, `internal/state/state_test.go#TestLoadMissing`, `internal/state/state_test.go#TestLoadCorrupt`, `internal/state/state_test.go#TestSaveAtomicity`, `internal/organizer/safety_test.go#TestOrganize_SavesStateDuringRun`, `internal/organizer/safety_test.go#TestOrganize_DryRunNeverSavesState`, `internal/organizer/safety_test.go#TestHandleNoDate_CopyIsRemembered`
+**Code:** `internal/state/state.go`, `internal/organizer/organizer.go`, `cmd/phorga/main.go`
+**Tests:** `internal/organizer/organizer_test.go#TestOrganize_Resume`, `internal/organizer/organizer_test.go#TestStatePath`, `internal/state/state_test.go#TestMarkAndCheck`, `internal/state/state_test.go#TestSaveAndLoad`, `internal/state/state_test.go#TestLoadMissing`, `internal/state/state_test.go#TestLoadCorrupt`, `internal/state/state_test.go#TestLoadUnreadableIsAnError`, `cmd/phorga/access_test.go#TestOrganizerJob_UnreadableStateTransfersNothing`, `internal/state/state_test.go#TestSaveAtomicity`, `internal/organizer/safety_test.go#TestOrganize_SavesStateDuringRun`, `internal/organizer/safety_test.go#TestOrganize_DryRunNeverSavesState`, `internal/organizer/safety_test.go#TestHandleNoDate_CopyIsRemembered`
 **Notes:** Without the saves during a run, a crash in `copy` mode made the next run process the same files again. Files without EXIF then failed an `exif` duplicate check and got a second copy with a suffix.
 
 ### ORG-016 Supported file formats

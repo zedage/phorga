@@ -90,6 +90,13 @@ func run(ctx context.Context, args []string, logOut io.Writer) int {
 		slog.Error("failed to create state directory", "path", cfg.StateDir, "error", err)
 		return exitError
 	}
+	// Without access to its state, a copy job would copy every file again
+	// on every run (RUN-003).
+	if err := checkStateAccess(cfg.StateDir); err != nil {
+		slog.Error("state directory not accessible; give the user Phorga runs as read and write access, e.g. with chown (README, Docker, Upgrading)",
+			append([]any{"error", err}, processUser()...)...)
+		return exitError
+	}
 
 	sched := scheduler.New()
 	recorder := runstatus.Load(runstatus.Path(cfg.StateDir))
@@ -121,6 +128,10 @@ func run(ctx context.Context, args []string, logOut io.Writer) int {
 		if err != nil {
 			slog.Error("web UI setup failed", "error", err)
 			return exitError
+		}
+		if err := checkConfigWritable(cfgPath); err != nil {
+			slog.Warn("saving in the web UI will fail: the config file or its folder is not writable; mount the folder writable, not the file alone (RUN-003)",
+				append([]any{"path", cfgPath, "error", err}, processUser()...)...)
 		}
 		if openWithoutPassword(ui.Address(), webUIPassword()) {
 			slog.Warn("the web UI has no password and listens on more than loopback; anyone who can reach its port can change the configuration. Set "+envWebUIPassword+", or publish the port on 127.0.0.1 only (WEB-020)", "address", ui.Address())
@@ -291,7 +302,21 @@ func organizerJob(name string, p config.OrganizerProfile, s config.OrganizerSour
 		start := time.Now()
 		ctx = withProgress(ctx, recorder, name, start)
 		defer recorder.ClearProgress(name)
-		st := state.Load(statePath)
+		st, err := state.Load(statePath)
+		if err != nil {
+			// Without its state the run would treat every file as new
+			// (ORG-015), so it does not run at all.
+			slog.Error("organizer run skipped: its state file cannot be read", "job", name, "path", statePath, "error", err)
+			recorder.Finish(name, runstatus.Record{
+				Start: start, Duration: time.Since(start), DryRun: p.DryRun,
+				Counters: map[string]int{"processed": 0, "skipped": 0, "errors": 1},
+			})
+			if p.Ntfy != nil {
+				title, msg := notify.FormatOrganizerSummary(s.Path, 0, 0, 1, time.Since(start))
+				notify.New(p.Ntfy.URL).SendSummary(title, msg)
+			}
+			return
+		}
 		result, duration := organizer.RunWithTime(ctx, p, s, st, statePath)
 		if result.Canceled {
 			return

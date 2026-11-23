@@ -170,7 +170,7 @@ func TestOrganize_SavesStateDuringRun(t *testing.T) {
 	if *calls != 3 {
 		t.Errorf("state saved %d times, want 3", *calls)
 	}
-	if got := len(state.Load(sp).ProcessedFiles); got != 5 {
+	if got := len(loadState(t, sp).ProcessedFiles); got != 5 {
 		t.Errorf("saved state has %d files, want 5", got)
 	}
 }
