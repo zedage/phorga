@@ -113,7 +113,6 @@ func TestSaveAtomicity(t *testing.T) {
 	}
 }
 
-
 // Spec: ORG-015
 func TestLoadUnreadableIsAnError(t *testing.T) {
 	skipWithoutPermissions(t)

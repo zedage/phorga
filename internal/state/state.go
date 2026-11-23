@@ -101,4 +101,3 @@ func Save(s *State, path string) error {
 
 	return nil
 }
-
